@@ -23,13 +23,14 @@ const DEFAULT_LOOK = {
   pattern: 1, color: { mode: 'orig', rgb: [255, 255, 255] }, colorCycle: false, colorCycleSpeed: 0.3,
   move: 'none', moveAmt: 0.4, moveSpeed: 0.3, size: 0.8, rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, fps: 0.5, posX: 0, posY: 0, freeze: false,
 };
-const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
+const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, sizeFlip: true, quadFix: true, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
 Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
 const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 if (!cfg.mig1810) { cfg.posScaled = false; cfg.mig1810 = true; }
-if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; } // målt: størrelses-kanalen vender modsat af hvad jeg antog
+if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; }
+if (!cfg.mig1810c) { cfg.sizeFlip = true; cfg.mig1810c = true; } // 19/10: faderen var vendt (0 % = størst) – vend den // målt: størrelses-kanalen vender modsat af hvad jeg antog
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
 cfg.calib = Object.assign({ T: 0.9, B: -0.9, L: -0.9, R: 0.9 }, cfg.calib || {});
@@ -43,7 +44,20 @@ if (!(cfg.scan >= 0 && cfg.scan <= 3)) cfg.scan = 0;
 let master = store.get('master', 0.5);
 let blackout = true; // laseren starter altid SLUKKET
 let patNames = store.get('patNames', {});   // { "12": "Tunnel" }
-let patFlip = new Set(store.get('patFlip', [])); // mønstre der skal vendes 180°
+let patFlip = new Set(store.get('patFlip', [])); // mønstre der skal vendes 180° (kun laseren – appen viser filen som den er)
+let patMirror = store.get('patMirror', {}); if (Array.isArray(patMirror)) patMirror = {};
+// laseren spejler mønsteret når positionen skifter fortegn (målt 19/10): kompensation pr. kvadrant.
+// Begge akser negative → 180° via rotations-kanalen. Én akse negativ → spejlet kopi af mønsteret på kortet (cfg.mirrorSlots[n] = {x, y}).
+let mirrorSlots = store.get('mirrorSlots', {});
+function quadrantFix(n, sx, sy) { // → { pat, rot180 }
+  if (!cfg.quadFix) return { pat: n, rot180: false };
+  const negX = sx < -0.002, negY = sy < -0.002; const sl = mirrorSlots[n] || {};
+  if (negX && negY) return sl.xy && patAvail.has(sl.xy) ? { pat: sl.xy, rot180: false } : { pat: n, rot180: true };
+  if (negX) return sl.x && patAvail.has(sl.x) ? { pat: sl.x, rot180: false } : { pat: n, rot180: false };
+  if (negY) return sl.y && patAvail.has(sl.y) ? { pat: sl.y, rot180: false } : { pat: n, rot180: false };
+  return { pat: n, rot180: false };
+} // {n: {x, y}} – filen på kortet er spejlet; appens visning spejles tilbage, så den ser ud som før
+const mirrorOpts = (n) => { const m = patMirror[n]; return m ? { mx: m.x ? -1 : 1, my: m.y ? -1 : 1 } : {}; };
 let favs = new Set(store.get('favs', []));
 let scenes = store.get('scenes', new Array(16).fill(null));
 let activeScene = -1;
@@ -91,6 +105,7 @@ const YF = () => (cfg.yFlip ? -1 : 1); // laserens Y-akse vender modsat skærmen
 // ---------- særlige billeder: test-streg og zonegrænse tegnet af laseren ----------
 // Et mønster fra SD-kortet klemmes helt fladt (Y-størrelse = min) → en lang streg.
 let special = null; // null | 'line' | 'zone'
+let selVb = null; // den parameter der er valgt til piletaster (klik på navnet)
 // laserens midte (sendt 0,0) i app-koordinater – og flyt den (brugeren trækker markøren i LIVE)
 function laserCenterApp() { return cfg.camMap ? hApply(cfg.camMap.Hi, 0, 0) : rawToApp(0, 0); }
 function setLaserCenterApp(ax, ay) {
@@ -581,6 +596,7 @@ function sizeCh4(size) {
   // målt med kameraet: ønsket virkelig størrelse (andel af den største målte) → DMX-værdi, lineært mellem målepunkter
   const sm_ = cfg.sizeMap; if (sm_ && sm_.length >= 3) {
     const pts = [...sm_].filter((p) => p.ext).sort((a, b) => a.ext - b.ext); if (pts.length < 3) return 64; const mn = pts[0].ext, mx = pts[pts.length - 1].ext;
+    if (cfg.sizeFlip) size = clamp(1.15 - clamp(size, 0.15, 1), 0.15, 1); // vend faderen hvis kurven er målt omvendt
     const want = mn + (clamp(size, 0.15, 1) - 0.15) / 0.85 * (mx - mn); // 15 % = mindste synlige, 100 % = størst målt
     if (want <= pts[0].ext) return pts[0].ch4;
     for (let i = 1; i < pts.length; i++) if (want <= pts[i].ext) { const a = pts[i - 1], b = pts[i], t = (want - a.ext) / Math.max(1e-6, b.ext - a.ext); return clamp(Math.round(a.ch4 + (b.ch4 - a.ch4) * t), 0, 127); }
@@ -644,15 +660,16 @@ function setSpecial(v) {
 // DJ-tilstand (19 kanaler) – laserens standard
 function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   const show = on && st.pattern > 0 && (cfg.calibDone || camCal.active); // intet mønster = helt slukket (nogle kort har en 000.ild); ingen mønstre før området er kalibreret
+  const qf = quadrantFix(st.pattern, out.sendX, out.sendY);
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
-  setCh(2, show ? st.pattern : 0);
+  setCh(2, show ? qf.pat : 0);
   // 3: 0–15 = 50 fps standard, 16–255 = 0…100 fps (16 ≈ 0 fps = frosset billede)
   setCh(3, st.freeze ? 16 : 16 + fpsFrac(st.fps) * 239); // 16–255 = 0–100 fps; kurven giver fin kontrol i den langsomme ende
   // 4: størrelse 0–127 (0 = størst)
   setCh(4, sizeCh4(size));
   setCh(5, 0);
   // 6: rotation – 0–192 manuel vinkel (-180…+180°, 96 = 0°), 193–224 auto mod uret, 225–255 auto med uret
-  const flip180 = patFlip.has(st.pattern) ? 180 : 0;
+  const flip180 = (patFlip.has(st.pattern) ? 180 : 0) + (qf.rot180 ? 180 : 0);
   if (st.rotSpeed > 0.02 && !flip180) setCh(6, 225 + st.rotSpeed * 30);
   else if (st.rotSpeed < -0.02 && !flip180) setCh(6, 193 + -st.rotSpeed * 31);
   else { let a = (ang + flip180) % 360; if (a > 180) a -= 360; if (a < -180) a += 360; setCh(6, (a + 180) / 360 * 192); }
@@ -848,7 +865,8 @@ function drawIlda(g, W, H, f, o = {}) {
   let cx, cy;
   if (o.box) { [cx, cy] = boxPt(o.box, o.ox || 0, o.oy || 0); } else { const L = (Math.min(W, H) / 2) * 0.9; cx = W / 2 + (o.ox || 0) * L; cy = H / 2 - (o.oy || 0) * L; }
   const a = ((o.ang || 0) * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
-  const P = (i) => { const x = f.xy[i * 2], y = f.xy[i * 2 + 1]; return [cx + (x * cs - y * sn) * R, cy - (x * sn + y * cs) * R]; };
+  const mx = o.mx || 1, my = o.my || 1;
+  const P = (i) => { const x = f.xy[i * 2] * mx, y = f.xy[i * 2 + 1] * my; return [cx + (x * cs - y * sn) * R, cy - (x * sn + y * cs) * R]; };
   g.save(); g.globalCompositeOperation = 'lighter'; g.lineCap = 'round'; g.globalAlpha = o.alpha ?? 1;
   const passes = o.glow ? [[o.glow * 3, 0.18], [Math.max(1, o.glow), 1]] : [[1.3, 1]];
   for (const [lw, al] of passes) {
@@ -891,7 +909,7 @@ async function drawThumb(tile, n, frameIdx = null) {
   let cv = tile.querySelector('canvas');
   if (!cv) { cv = document.createElement('canvas'); tile.prepend(cv); tile.classList.add('has'); }
   const [g, W, H] = sizeCanvas(cv); g.clearRect(0, 0, W, H);
-  drawIlda(g, W, H, frameIdx == null ? firstVisible(fr) : fr[frameIdx % fr.length], { glow: 1.1, ang: patFlip.has(n) ? 180 : 0 });
+  drawIlda(g, W, H, frameIdx == null ? firstVisible(fr) : fr[frameIdx % fr.length], { glow: 1.1, ...mirrorOpts(n) });
 }
 let hoverAnim = null;
 function startHover(tile, n) {
@@ -1371,9 +1389,12 @@ function previewTick(now) {
       const strobeOff = st.strobe > 0 && Math.floor(now / (220 - st.strobe * 190)) % 2;
       let frame = fr[Math.floor(pvFrame) % fr.length], extra = {};
       if (autoMode === 'laser') { const k = Math.floor(now / 500); const alt = [...patAvail]; const n = alt.length ? alt[k % alt.length] : st.pattern; const f2 = patData.get(n); if (f2 && f2.length) frame = f2[Math.floor(pvFrame) % f2.length]; else if (!patData.has(n) && patAvail.has(n)) loadPat(n); }
-      if (!strobeOff) drawIlda(g, W, H, frame, { scale: out.size * out.calScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: B, ...extra });
+      // LIVE-størrelse: med kamera-kalibrering tegnes mønsteret så stort som kameraet har målt det ved denne fader-værdi
+      let drawScale = out.size * out.calScale;
+      { const half = camPatHalfSent(out.laserSize); if (half != null) { const [ax1, ay1] = camAppToSend(0.02, 0), [ax0, ay0] = camAppToSend(-0.02, 0), [bx1, by1] = camAppToSend(0, 0.02), [bx0, by0] = camAppToSend(0, -0.02); const d = (Math.hypot(ax1 - ax0, ay1 - ay0) + Math.hypot(bx1 - bx0, by1 - by0)) / 2 / 0.04; const e = patExtent(st.pattern, out.ang); if (d > 1e-6) drawScale = (half / 1.08) / d / Math.max(0.05, Math.max(e.x, e.y)) * cfg.cal.sx; } }
+      if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: B, ...extra });
       if (moveMode) {
-        const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * out.size * out.calScale; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]);
+        const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * drawScale; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]);
         // område hvor mønsterets MIDTE kan stå ved denne størrelse (laseren ganger positionen med størrelsen)
         if (out.reach) {
           const back = (rx, ry) => (cfg.camMap ? hApply(cfg.camMap.Hi, rx, ry) : rawToApp(rx, ry)); const [a1, b1] = back(-out.reach.x, out.reach.y), [a2, b2] = back(out.reach.x, -out.reach.y);
@@ -1406,16 +1427,16 @@ function setPattern(n, keepLook = false) {
   renderScenes();
 }
 // ---------- mønster-indstillinger (højreklik): navn, favorit, vend, spejl, tast, slet ----------
-let ppN = 0, patMirror = new Set(store.get('patMirror', [])); // patMirror: mønstre der spejles lodret i appen (vises som i filen – laseren kan kun vende 180°)
+let ppN = 0;
 function openPatPop(n, anchor) {
   ppN = n; const pop = $('#patPop'); pop.hidden = false;
   $('#ppTitle').textContent = t('pat.name', { n }); $('#ppSub').textContent = patAvail.has(n) ? t('pp.onCard') : t('pp.notLoaded');
   $('#ppName').value = patNames[n] || '';
-  $('#ppFav').classList.toggle('on', favs.has(n)); $('#ppFlip').classList.toggle('on', patFlip.has(n)); $('#ppMirror').classList.remove('on'); $('#ppMirrorX').classList.remove('on');
-  $('#ppMirror').disabled = !patAvail.has(n); $('#ppMirrorX').disabled = !patAvail.has(n); $('#ppDelete').disabled = !patAvail.has(n);
+  $('#ppFav').classList.toggle('on', favs.has(n)); $('#ppFlip').classList.toggle('on', patFlip.has(n)); $('#ppMirror').classList.toggle('on', !!(patMirror[n] && patMirror[n].y)); $('#ppMirrorX').classList.toggle('on', !!(patMirror[n] && patMirror[n].x));
+  $('#ppMirror').disabled = !patAvail.has(n); $('#ppMirrorX').disabled = !patAvail.has(n); $('#ppDelete').disabled = !patAvail.has(n); $('#ppQuad').disabled = !patAvail.has(n); $('#ppQuad').classList.toggle('on', !!mirrorSlots[n]);
   const key = Object.keys(keymap).find((k) => keymap[k] === n); $('#ppKey').value = key ? key.toUpperCase() : '';
   $('#ppLine').classList.toggle('on', cfg.linePattern === n);
-  const cv = $('#ppThumb'); const [g, W, H] = sizeCanvas(cv); g.clearRect(0, 0, W, H); const fr = patData.get(n); if (fr && fr.length) drawIlda(g, W, H, firstVisible(fr), { glow: 1.1, ang: patFlip.has(n) ? 180 : 0 });
+  const cv = $('#ppThumb'); const [g, W, H] = sizeCanvas(cv); g.clearRect(0, 0, W, H); const fr = patData.get(n); if (fr && fr.length) drawIlda(g, W, H, firstVisible(fr), { glow: 1.1, ...mirrorOpts(n) });
   // placér ved siden af flisen, inden for vinduet
   const r = anchor.getBoundingClientRect(); const pw = 300, ph = 330;
   let x = r.right + 10, y = r.top; if (x + pw > innerWidth - 8) x = r.left - pw - 10; if (x < 8) x = 8; if (y + ph > innerHeight - 8) y = innerHeight - ph - 8;
@@ -1431,6 +1452,7 @@ $('#ppFav').onclick = () => { favs.has(ppN) ? favs.delete(ppN) : favs.add(ppN); 
 $('#ppFlip').onclick = () => { patFlip.has(ppN) ? patFlip.delete(ppN) : patFlip.add(ppN); store.set('patFlip', [...patFlip]); $('#ppFlip').classList.toggle('on', patFlip.has(ppN)); renderPatterns(); renderKeyboard(); openPatPop(ppN, $(`.pat[data-n="${ppN}"]`) || document.body); };
 $('#ppMirror').onclick = () => mirrorPatternFile(ppN, 'y');
 $('#ppMirrorX').onclick = () => mirrorPatternFile(ppN, 'x');
+$('#ppQuad').onclick = () => makeMirrorCopies(ppN);
 $('#ppKey').addEventListener('input', (e) => { const k = e.target.value.trim().toLowerCase(); for (const kk of Object.keys(keymap)) if (keymap[kk] === ppN) delete keymap[kk]; if (k) keymap[k] = ppN; store.set('keymap', keymap); renderKeyboard(); e.target.value = k.toUpperCase(); });
 $('#ppLine').onclick = () => { cfg.linePattern = ppN; $('#linePattern').value = ppN; saveCfg(); $('#ppLine').classList.add('on'); };
 $('#ppShow').onclick = () => { setPattern(ppN); closePatPop(); };
@@ -1504,9 +1526,16 @@ $$('#moveSeg button').forEach((b) => b.onclick = () => { st.move = b.dataset.mov
 // ---------- værdi-bjælker (erstatter de almindelige skydere i Bevægelse) ----------
 (() => {
   const bars = $$('.vb');
+  window.selectVb = (vb) => { selVb = vb; bars.forEach((b) => b.classList.toggle('sel', b === vb)); };
   const upd = () => { for (const vb of bars) { const inp = vb.querySelector('input'), mn = +inp.min, mx = +inp.max, v = +inp.value, f = (v - mn) / (mx - mn); const fill = vb.querySelector('.vb-fill'), knob = vb.querySelector('.vb-knob'); if (mn < 0) { const z = -mn / (mx - mn); fill.style.left = Math.min(z, f) * 100 + '%'; fill.style.width = Math.abs(f - z) * 100 + '%'; } else { fill.style.left = 0; fill.style.width = f * 100 + '%'; } knob.style.left = f * 100 + '%'; const d = SL[inp.id]; vb.querySelector('.vb-v').textContent = d && d.o ? d.o(v) : v; vb.classList.toggle('zero', v === +vb.dataset.def); } requestAnimationFrame(upd); };
   for (const vb of bars) {
     const inp = vb.querySelector('input'), bar = vb.querySelector('.vb-bar');
+    if (!vb.querySelector('.vb-p')) { // trin-knapper + klikbart navn (piletaster)
+      const m = document.createElement('button'); m.className = 'vb-m ghost small'; m.textContent = '−'; const pl = document.createElement('button'); pl.className = 'vb-p ghost small'; pl.textContent = '+';
+      const stepv = (d) => { const stp = (+inp.max - +inp.min) >= 200 ? 5 : 1; inp.value = clamp(+inp.value + d * stp, +inp.min, +inp.max); inp.dispatchEvent(new Event('input')); selectVb(vb); };
+      m.onclick = () => stepv(-1); pl.onclick = () => stepv(1); vb.insertBefore(m, bar); vb.insertBefore(pl, bar);
+      vb.querySelector('.vb-l').onclick = () => selectVb(vb === selVb ? null : vb);
+    }
     const setFrom = (clientX) => { const r = bar.getBoundingClientRect(); const f = clamp((clientX - r.left) / r.width, 0, 1); inp.value = Math.round(+inp.min + f * (+inp.max - +inp.min)); inp.dispatchEvent(new Event('input')); };
     bar.addEventListener('pointerdown', (e) => { bar.setPointerCapture(e.pointerId); vb.classList.add('drag'); setFrom(e.clientX); });
     bar.addEventListener('pointermove', (e) => { if (bar.hasPointerCapture(e.pointerId)) setFrom(e.clientX); });
@@ -2011,7 +2040,7 @@ bindSetting('startLow', 'startLow');
 bindSetting('invX', 'invX'); bindSetting('invY', 'invY');
 bindSetting('posFmt', 'posFmt'); bindSetting('posScaled', 'posScaled');
 bindSetting('zoneLo', 'zoneLo', (v) => +v, (v) => String(v)); bindSetting('zoneHi', 'zoneHi', (v) => +v, (v) => String(v));
-bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');
+bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeFlip', 'sizeFlip'); bindSetting('quadFix', 'quadFix'); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');
 bindSetting('scan', 'scan', (v) => +v);
 bindSetting('patCount', 'patCount', (v) => clamp(+v | 0, 1, 255));
 $('#testBtn').onclick = () => setSpecial('line');
@@ -2087,24 +2116,42 @@ document.addEventListener('keydown', (e) => {
   else if (e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey) {
     e.preventDefault(); const d = e.shiftKey ? 0.05 : 0.01;
     const zoneFocus = document.activeElement === $('#zoneLive') || special === 'zone' || zoneDrag;
-    if (zoneFocus) { // sikkerhedszone: op/ned (eller venstre/højre) = 1 % ad gangen
+    if (selVb && selVb.offsetParent) { // valgt parameter (klik på navnet): ↑/→ op, ↓/← ned – 1 trin, ⇧ = 5
+      const inp = selVb.querySelector('input'); const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1; const stp = ((+inp.max - +inp.min) >= 200 ? 5 : 1) * (e.shiftKey ? 5 : 1);
+      inp.value = clamp(+inp.value + dir * stp, +inp.min, +inp.max); inp.dispatchEvent(new Event('input'));
+    } else if (zoneFocus) { // sikkerhedszone: op/ned (eller venstre/højre) = 1 % ad gangen
       const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1; cfg.zone = clamp(Math.round((cfg.zone + dir * d) * 100) / 100, 0, 0.9); saveCfg(); syncZoneUI(); sendNow();
     } else { if (e.key === 'ArrowLeft') setPos('posX', st.posX - d); if (e.key === 'ArrowRight') setPos('posX', st.posX + d); if (e.key === 'ArrowUp') setPos('posY', st.posY + d); if (e.key === 'ArrowDown') setPos('posY', st.posY - d); }
   }
   else if (e.key === 'b' || e.key === 'B') requestArm();
-  else if (e.key === 'Escape') setBlackout(true);
+  else if (e.key === 'Escape') { if (selVb) selectVb(null); else setBlackout(true); }
   else if (/^[1-9]$/.test(e.key) && scenes[+e.key - 1]) { recallScene(+e.key - 1); recordHook(scenes[+e.key - 1].name); }
 });
 
 let modalResolve;
 // spejl et mønster lodret og gem en rettet .ild (til SD-kortet) – til mønstre der står på hovedet
+// spejlede kopier (X, Y, XY) til kvadrant-kompensation – lægges i ledige numre og kopieres til SD-kortet
+async function makeMirrorCopies(n) {
+  const fr = await loadPat(n); if (!fr || !fr.length) { toast(t('pat.noData')); return; }
+  const used = new Set([...patAvail, ...Object.values(mirrorSlots).flatMap((o) => Object.values(o))]);
+  const free = []; for (let k = 249; k >= 100 && free.length < 3; k--) if (!used.has(k)) free.push(k);
+  if (free.length < 3) { toast(t('pat.noSlots')); return; }
+  const mk = (fx, fy) => fr.map((f) => ({ n: f.n, xy: f.xy.map((v, i) => (i % 2 === 0 ? v * fx : v * fy)), col: f.col, bl: f.bl }));
+  const files = [{ num: free[0], bytes: encodeFramesIld(mk(-1, 1), 'MX' + n) }, { num: free[1], bytes: encodeFramesIld(mk(1, -1), 'MY' + n) }, { num: free[2], bytes: encodeFramesIld(mk(-1, -1), 'MXY' + n) }];
+  const r = await window.laser.saveIldBatch(t('pat.mirrorDirTitle', { n }), files); if (!r) return;
+  mirrorSlots[n] = { x: free[0], y: free[1], xy: free[2] }; store.set('mirrorSlots', mirrorSlots);
+  patNames[free[0]] = patNames[free[0]] || `#${n} ↔`; patNames[free[1]] = patNames[free[1]] || `#${n} ↕`; patNames[free[2]] = patNames[free[2]] || `#${n} ⟲`; store.set('patNames', patNames);
+  if (r.list) { for (const k of r.list) patAvail.add(+k); } renderPatterns();
+  modal(t('pat.mirrorCopies', { n, a: free[0], b: free[1], c: free[2], d: r.dir }), null);
+}
 async function mirrorPatternFile(n, axis = 'y') {
   const fr = await loadPat(n); if (!fr || !fr.length) return;
   const frames = fr.map((f) => ({ n: f.n, xy: f.xy.map((v, i) => ((i % 2 === 1) === (axis === 'y') ? -v : v)), col: f.col, bl: f.bl }));
   const bytes = encodeFramesIld(frames, 'FLIP' + n);
   const r = await window.laser.saveIld(String(n).padStart(3, '0'), bytes, true);
   if (!r) return;
-  patData.delete(n); renderPatterns(); renderKeyboard();
+  patMirror[n] = Object.assign({}, patMirror[n]); patMirror[n][axis] = !patMirror[n][axis]; store.set('patMirror', patMirror);
+  patData.delete(n); extCache.delete(n); renderPatterns(); renderKeyboard();
   modal(t('pat.mirrored', { n, p: (r.path || '').split('/').pop() }), null);
 }
 function encodeFramesIld(frames, name = 'LIGHTLNK') {
