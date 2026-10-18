@@ -88,6 +88,17 @@ const YF = () => (cfg.yFlip ? -1 : 1); // laserens Y-akse vender modsat skærmen
 // ---------- særlige billeder: test-streg og zonegrænse tegnet af laseren ----------
 // Et mønster fra SD-kortet klemmes helt fladt (Y-størrelse = min) → en lang streg.
 let special = null; // null | 'line' | 'zone'
+// laserens midte (sendt 0,0) i app-koordinater – og flyt den (brugeren trækker markøren i LIVE)
+function laserCenterApp() { return cfg.camMap ? hApply(cfg.camMap.Hi, 0, 0) : rawToApp(0, 0); }
+function setLaserCenterApp(ax, ay) {
+  if (cfg.camMap) { // flyt hele omsætningen i app-rummet så (ax,ay) → sendt (0,0): H' = H · T(-d)
+    const [x0, y0] = hApply(cfg.camMap.Hi, 0, 0), dx = ax - x0, dy = ay - y0, H = cfg.camMap.H;
+    const Hn = [H[0], H[1], H[2] - H[0] * dx - H[1] * dy, H[3], H[4], H[5] - H[3] * dx - H[4] * dy, H[6], H[7], H[8] - H[6] * dx - H[7] * dy];
+    const Hi = hInv(Hn); if (!Hi) return; cfg.camMap.H = Hn; cfg.camMap.Hi = Hi;
+  } else { cfg.cal.ox = clamp(-ax * cfg.cal.sx, -1, 1); cfg.cal.oy = clamp(-ay * cfg.cal.sy, -1, 1); }
+  saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
+}
+let centerDrag = false;
 // ---- kamera-kalibrering: Mac-kamera (eller iPhone via Continuity Camera) ser væggen, laseren viser mønsteret
 // på et gitter af kendte sendte værdier, appen finder lyspletten i billedet og regner en homografi sendt→kamera.
 // Brugeren markerer derefter det ønskede område i kamerabilledet → homografi app→sendt (cfg.camMap).
@@ -150,20 +161,24 @@ function camGrab() { // nedskaleret gråtone-lignende (max-kanal) billede
   for (let i = 0; i < out.length; i++) out[i] = Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
   return out;
 }
-function camBlob(img, dark) { // lysplet = størst forskel fra mørkt billede; vægtet tyngdepunkt
-  let mx = 0; const diff = new Float32Array(img.length); for (let i = 0; i < img.length; i++) { diff[i] = Math.max(0, img[i] - dark[i]); if (diff[i] > mx) mx = diff[i]; }
-  if (mx < 40) return null;
-  const th = Math.max(40, mx * 0.5); let sx = 0, sy = 0, sw = 0, n = 0;
-  for (let i = 0; i < diff.length; i++) if (diff[i] >= th) { const w = diff[i]; sx += (i % CAM_W) * w; sy += Math.floor(i / CAM_W) * w; sw += w; n++; }
+function camComponent(img, dark) { // den sammenhængende lysplet omkring det kraftigste pixel (ikke rødt skær i resten af rummet)
+  let mx = 0, mi = -1; const diff = new Float32Array(img.length); for (let i = 0; i < img.length; i++) { diff[i] = Math.max(0, img[i] - dark[i]); if (diff[i] > mx) { mx = diff[i]; mi = i; } }
+  if (mx < 40 || mi < 0) return null;
+  const th = Math.max(35, mx * 0.35), seen = new Uint8Array(img.length), q = [mi]; seen[mi] = 1;
+  let sx = 0, sy = 0, sw = 0, n = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, edge = false;
+  while (q.length) {
+    const i = q.pop(); const x = i % CAM_W, y = (i - x) / CAM_W, w = diff[i];
+    sx += x * w; sy += y * w; sw += w; n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    if (x === 0 || y === 0 || x === CAM_W - 1 || y === CAM_H - 1) edge = true;
+    const nb = [i - 1, i + 1, i - CAM_W, i + CAM_W, i - CAM_W - 1, i - CAM_W + 1, i + CAM_W - 1, i + CAM_W + 1];
+    for (const j of nb) { if (j < 0 || j >= img.length || seen[j]) continue; const jx = j % CAM_W; if (Math.abs(jx - x) > 1) continue; if (diff[j] >= th) { seen[j] = 1; q.push(j); } }
+    if (n > 20000) break;
+  }
   if (n < 3) return null;
-  return { x: sx / sw, y: sy / sw, n, mx };
+  return { x: sx / sw, y: sy / sw, n, mx, w: x1 - x0 + 1, h: y1 - y0 + 1, ext: Math.max(x1 - x0 + 1, y1 - y0 + 1), edge };
 }
-function camExtent(img, dark) { // mønsterets udstrækning i kamera-pixels (bounding box af lyse pixels)
-  let mx = 0; const diff = new Float32Array(img.length); for (let i = 0; i < img.length; i++) { diff[i] = Math.max(0, img[i] - dark[i]); if (diff[i] > mx) mx = diff[i]; }
-  if (mx < 40) return null; const th = Math.max(40, mx * 0.4); let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, n = 0;
-  for (let i = 0; i < diff.length; i++) if (diff[i] >= th) { const x = i % CAM_W, y = Math.floor(i / CAM_W); if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; n++; }
-  if (n < 3) return null; return { w: x1 - x0 + 1, h: y1 - y0 + 1, ext: Math.max(x1 - x0 + 1, y1 - y0 + 1), n };
-}
+const camBlob = (img, dark) => { const c = camComponent(img, dark); return c && !c.edge ? c : null; };
+const camExtent = (img, dark) => { const c = camComponent(img, dark); return c && !c.edge ? c : null; };
 const CAM_SIZE_STEPS = [0, 16, 32, 48, 64, 80, 96, 108];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function camMeasure() {
@@ -176,14 +191,19 @@ async function camMeasure() {
   const was = blackout; blackout = true; sendNow(); await sleep(500);
   const d1 = camGrab(); await sleep(120); const d2 = camGrab(); camCal.dark = d1.map((v, i) => (v + d2[i]) / 2);
   blackout = was;
+  // find den DMX-værdi der giver det MINDSTE mønster (lille plet = præcist tyngdepunkt, mindre rødt skær)
+  camCal.send = [0, 0]; let best = null;
+  for (const c4 of [0, 108]) { if (camCal.state !== 'measuring') break; camCal.ch4 = c4; sendNow(); camStatus(t('cam.pre')); await sleep(650); const e = camExtent(camGrab(), camCal.dark); if (e && (!best || e.ext < best.ext)) best = { ch4: c4, ext: e.ext }; }
+  camCal.gridCh4 = best ? best.ch4 : 108; camCal.dropped = 0;
   for (let i = 0; i < CAM_GRID.length; i++) {
     if (camCal.state !== 'measuring') break;
-    camCal.send = CAM_GRID[i]; sendNow(); camStatus(t('cam.step', { i: i + 1, n: CAM_GRID.length, ok: camCal.pts.length }));
+    camCal.ch4 = camCal.gridCh4; camCal.send = CAM_GRID[i]; sendNow(); camStatus(t('cam.step', { i: i + 1, n: CAM_GRID.length, ok: camCal.pts.length, d: camCal.dropped }));
     await sleep(650);
     const b1 = camBlob(camGrab(), camCal.dark); await sleep(100); const b2 = camBlob(camGrab(), camCal.dark);
     const b = b1 && b2 ? { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, n: Math.min(b1.n, b2.n) } : b1 || b2;
-    if (b && b.n >= 3) camCal.pts.push([CAM_GRID[i][0], CAM_GRID[i][1], b.x, b.y]);
+    if (b && b.n >= 3) camCal.pts.push([CAM_GRID[i][0], CAM_GRID[i][1], b.x, b.y]); else camCal.dropped++;
   }
+  camCal.ch4 = null;
   // størrelses-trappe i midten: hvor stort bliver mønsteret ved hver DMX-værdi?
   camCal.sizes = [];
   if (camCal.state === 'measuring') {
@@ -200,16 +220,17 @@ async function camMeasure() {
   }
   camCal.send = null; camCal.active = false; sendNow();
   if (camCal.state !== 'measuring') return;
-  if (camCal.pts.length < 6) { camCal.state = 'idle'; camStatus(t('cam.tooFew', { n: camCal.pts.length })); return; }
+  if (camCal.pts.length < 6) { camCal.state = 'idle'; camStatus(t('cam.tooFew', { n: camCal.pts.length, d: camCal.dropped })); return; }
   const fit = hFit(camCal.pts); if (!fit) { camCal.state = 'idle'; camStatus(t('cam.fitFail')); return; }
   camCal.H = fit.H; camCal.Hi = hInv(fit.H); camCal.err = fit.err;
   // forslag til område: det laseren faktisk nåede (kamera-hjørner af ±0.8-gitteret)
   camCal.corners = [[-0.8, 0.8], [0.8, 0.8], [0.8, -0.8], [-0.8, -0.8]].map(([x, y]) => hApply(fit.H, x, y));
-  camCal.frame = camGrab(); camCal.state = 'corners'; camStatus(t('cam.corners', { n: camCal.pts.length, e: fit.err.toFixed(1) }));
+  camCal.frame = camGrab(); camCal.state = 'corners'; camStatus(t('cam.corners', { n: camCal.pts.length, e: fit.err.toFixed(1), d: camCal.dropped }));
   $('#camSave').hidden = false;
 }
 function camSave() {
-  if (camCal.state !== 'corners' || !camCal.Hi) return;
+  if (camCal.state !== 'corners') return;
+  const rf = hFit(camCal.pts); if (!rf) { camStatus(t('cam.fitFail')); return; } camCal.H = rf.H; camCal.Hi = hInv(rf.H); camCal.err = rf.err; if (!camCal.Hi) { camStatus(t('cam.fitFail')); return; }
   // hjørner i kamera → sendte værdier → homografi fra app-firkanten (-1..1, y op) til sendte værdier
   const sent = camCal.corners.map(([u, v]) => hApply(camCal.Hi, u, v));
   const sq = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
@@ -229,7 +250,10 @@ function camDrawLoop() {
   if (v.videoWidth) g.drawImage(v, 0, 0, W, H);
   const fx = W / CAM_W, fy = H / CAM_H;
   // målte pletter
-  for (const p of camCal.pts) { g.fillStyle = 'rgba(49,243,172,.9)'; g.beginPath(); g.arc(p[2] * fx, p[3] * fy, 4, 0, Math.PI * 2); g.fill(); }
+  for (const p of camCal.pts) { g.fillStyle = 'rgba(49,243,172,.9)'; g.beginPath(); g.arc(p[2] * fx, p[3] * fy, camCal.state === 'corners' ? 6 : 4, 0, Math.PI * 2); g.fill(); if (camCal.state === 'corners') { g.fillStyle = '#031'; g.font = '700 8px -apple-system'; g.textAlign = 'center'; g.fillText(String(CAM_GRID.findIndex((q) => q[0] === p[0] && q[1] === p[1]) + 1), p[2] * fx, p[3] * fy + 3); } }
+  if (camCal.state === 'corners' && camCal.H) { // forventet gitter ud fra omsætningen – viser hvor prikker burde ligge
+    g.save(); g.strokeStyle = 'rgba(49,243,172,.35)'; g.lineWidth = 1; for (let r = 0; r < 5; r++) { g.beginPath(); for (let c = 0; c < 5; c++) { const [u, v] = hApply(camCal.H, CAM_GRID[r * 5 + c][0], CAM_GRID[r * 5 + c][1]); c ? g.lineTo(u * fx, v * fy) : g.moveTo(u * fx, v * fy); } g.stroke(); g.beginPath(); for (let c = 0; c < 5; c++) { const [u, v] = hApply(camCal.H, CAM_GRID[c * 5 + r][0], CAM_GRID[c * 5 + r][1]); c ? g.lineTo(u * fx, v * fy) : g.moveTo(u * fx, v * fy); } g.stroke(); } g.restore();
+  }
   if (camCal.state === 'corners' && camCal.corners) {
     g.save(); g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.beginPath(); camCal.corners.forEach(([x, y], i) => (i ? g.lineTo(x * fx, y * fy) : g.moveTo(x * fx, y * fy))); g.closePath(); g.stroke();
     camCal.corners.forEach(([x, y], i) => { g.fillStyle = '#ff3b5c'; g.beginPath(); g.arc(x * fx, y * fy, 9, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = '700 10px -apple-system'; g.textAlign = 'center'; g.fillText(['↖', '↗', '↘', '↙'][i], x * fx, y * fy + 4); });
@@ -240,8 +264,15 @@ function camDrawLoop() {
 (() => {
   const cv = $('#camCanvas'); if (!cv) return;
   const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * CAM_W, (e.clientY - r.top) / r.height * CAM_H]; };
-  cv.addEventListener('pointerdown', (e) => { if (camCal.state !== 'corners') return; const [x, y] = pos(e); let best = -1, bd = 1e9; camCal.corners.forEach((c, i) => { const d = Math.hypot(c[0] - x, c[1] - y); if (d < bd) { bd = d; best = i; } }); if (bd < 30) { camCal.drag = best; cv.setPointerCapture(e.pointerId); } });
-  cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); camCal.corners[camCal.drag] = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; });
+  const nearest = (arr, x, y, getXY) => { let best = -1, bd = 1e9; arr.forEach((c, i) => { const [cx, cy] = getXY(c); const d = Math.hypot(cx - x, cy - y); if (d < bd) { bd = d; best = i; } }); return [best, bd]; };
+  cv.addEventListener('contextmenu', (e) => { e.preventDefault(); if (camCal.state !== 'corners') return; const [x, y] = pos(e); const [pi, pd] = nearest(camCal.pts, x, y, (p) => [p[2], p[3]]); if (pi >= 0 && pd < 12) { camCal.pts.splice(pi, 1); camStatus(t('cam.ptRemoved', { n: camCal.pts.length })); } });
+  cv.addEventListener('pointerdown', (e) => {
+    if (camCal.state !== 'corners' || e.button === 2) return; const [x, y] = pos(e);
+    const [ci, cd] = nearest(camCal.corners, x, y, (c) => c); const [pi, pd] = nearest(camCal.pts, x, y, (p) => [p[2], p[3]]);
+    if (pi >= 0 && pd < 10 && pd <= cd) { camCal.drag = 100 + pi; cv.setPointerCapture(e.pointerId); }
+    else if (cd < 30) { camCal.drag = ci; cv.setPointerCapture(e.pointerId); }
+  });
+  cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); const P = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; if (camCal.drag >= 100) { const p = camCal.pts[camCal.drag - 100]; if (p) { p[2] = P[0]; p[3] = P[1]; const rf = hFit(camCal.pts); if (rf) { camCal.H = rf.H; camCal.err = rf.err; } } } else camCal.corners[camCal.drag] = P; });
   const up = () => { camCal.drag = -1; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   $('#camOpen').onclick = camOpen; $('#camClose').onclick = camClose; $('#camRun').onclick = camMeasure; $('#camSave').onclick = camSave;
   $('#camSel').onchange = () => camStart().catch((e) => camStatus(e.message));
@@ -914,18 +945,20 @@ let zoneDrag = false, moveMode = false, posDrag = null, calDrag = null;
   cv.addEventListener('pointerdown', (e) => {
     const [u, v] = rel(e);
     if (measure) { measureRecord(u * 2 - 1, 1 - v * 2); return; }
+    { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < 16) { centerDrag = true; cv.setPointerCapture(e.pointerId); return; } }
     if (special === 'cal') { const p = calPt(); calDrag = { u0: u, v0: v, x0: p.x, y0: p.y, sx: cfg.cal.sx, sy: cfg.cal.sy }; cv.setPointerCapture(e.pointerId); return; }
     if (nearEdge(u, v) || special === 'zone') { zoneDrag = true; cv.setPointerCapture(e.pointerId); applyZoneDrag(u, v); return; }
     if (special !== 'max') { posDrag = { u0: u, v0: v, x0: st.posX, y0: st.posY }; cv.setPointerCapture(e.pointerId); }
   });
   cv.addEventListener('pointermove', (e) => {
     const [u, v] = rel(e);
-    cv.style.cursor = zoneDrag || nearEdge(u, v) ? (['left', 'right'].includes(cfg.zoneSide) ? 'ew-resize' : 'ns-resize') : 'move';
+    { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); cv.style.cursor = centerDrag || Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < 16 ? 'grab' : zoneDrag || nearEdge(u, v) ? (['left', 'right'].includes(cfg.zoneSide) ? 'ew-resize' : 'ns-resize') : 'move'; }
+    if (centerDrag) { setLaserCenterApp(clamp(u * 2 - 1, -1.5, 1.5), clamp(1 - v * 2, -1.5, 1.5)); return; }
     if (calDrag) { const p = calPt(); p.x = clamp(calDrag.x0 + (u - calDrag.u0) * 2 * calDrag.sx, -1, 1); p.y = clamp(calDrag.y0 - (v - calDrag.v0) * 2 * calDrag.sy, -1, 1); cfg.quadSaved = false; calApply(); syncCalUI(); }
     else if (zoneDrag) applyZoneDrag(u, v);
     else if (posDrag) { st.posX = clamp(posDrag.x0 + (u - posDrag.u0) * 2, -1, 1); st.posY = clamp(posDrag.y0 - (v - posDrag.v0) * 2, -1, 1); clampPosToReach(); saveLook(); syncSizeUI(); }
   });
-  const up = () => { zoneDrag = false; posDrag = null; calDrag = null; };
+  const up = () => { zoneDrag = false; posDrag = null; calDrag = null; if (centerDrag) { centerDrag = false; toast(t('pv.centerMoved')); } };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', (e) => { if (!moveMode) return; e.preventDefault(); setSize(st.size - Math.sign(e.deltaY) * 0.03); }, { passive: false });
 })();
@@ -1051,7 +1084,7 @@ function previewTick(now) {
     for (let i = 1; i < 8; i++) { g.beginPath(); g.moveTo(B.x + (B.w * i) / 8, B.y); g.lineTo(B.x + (B.w * i) / 8, B.y + B.h); g.stroke(); g.beginPath(); g.moveTo(B.x, B.y + (B.h * i) / 8); g.lineTo(B.x + B.w, B.y + (B.h * i) / 8); g.stroke(); }
     g.strokeStyle = 'rgba(49,243,172,0.25)'; g.setLineDash([4, 6]); g.strokeRect(B.x, B.y, B.w, B.h); g.setLineDash([]);
     // laserens egen midte (rå 0,0) – viser hvilken vinkel laseren står i ift. området
-    { const [ax, ay] = cfg.camMap ? hApply(cfg.camMap.Hi, 0, 0) : rawToApp(0, 0), [px, py] = boxPt(B, ax, ay); if (px > -20 && px < W + 20 && py > -20 && py < H + 20) { g.save(); g.strokeStyle = special === 'center' ? '#fff' : 'rgba(255,255,255,0.35)'; g.lineWidth = special === 'center' ? 2 : 1; g.beginPath(); g.moveTo(px - 10, py); g.lineTo(px + 10, py); g.moveTo(px, py - 10); g.lineTo(px, py + 10); g.stroke(); g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.stroke(); g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '9px -apple-system'; g.textAlign = 'left'; g.fillText(t('pv.laserCenter'), px + 13, py + 3); g.restore(); } }
+    { const [ax, ay] = laserCenterApp(), [px, py] = boxPt(B, ax, ay); if (px > -20 && px < W + 20 && py > -20 && py < H + 20) { g.save(); g.strokeStyle = special === 'center' ? '#fff' : 'rgba(255,255,255,0.35)'; g.lineWidth = special === 'center' ? 2 : 1; g.beginPath(); g.moveTo(px - 10, py); g.lineTo(px + 10, py); g.moveTo(px, py - 10); g.lineTo(px, py + 10); g.stroke(); g.beginPath(); g.arc(px, py, 7, 0, Math.PI * 2); g.stroke(); g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '9px -apple-system'; g.textAlign = 'left'; g.fillText(t('pv.laserCenter'), px + 13, py + 3); g.restore(); } }
     if (!patData.has(st.pattern) && patAvail.has(st.pattern)) loadPat(st.pattern);
     const real = patData.get(st.pattern);
     const fr = real && real.length ? real : FALLBACK_FRAME;
