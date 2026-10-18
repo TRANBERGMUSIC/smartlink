@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LightLink">
+<meta name="theme-color" content="#050505">
+<link rel="apple-touch-icon" href="/touch-icon.png">
+<link rel="manifest" id="manifest" href="/manifest.json">
+<title>LightLink</title>
+<style>
+:root { --bg:#07080c; --panel:#0e1016; --panel2:#161a23; --line:#222838; --text:#eef1f6; --muted:#8a93a6; --accent:#31f3ac; --accent2:#4f8cff; --dim:rgba(49,243,172,.13); --warn:#ff3b5c; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  -webkit-user-select: none; user-select: none; overscroll-behavior: none; touch-action: manipulation; }
+button { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; height: 50px; padding: 0 12px; font-size: 16px; }
+button:active { transform: scale(.97); }
+.app { display: flex; flex-direction: column; height: 100%; padding-top: env(safe-area-inset-top); }
+header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex: none; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 300; letter-spacing: .28em; font-size: 13px; }
+.brand b { font-weight: 700; }
+.brand img { width: 24px; height: 24px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); margin-left: auto; flex: none; }
+.dot.ok { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.bo { height: 44px; min-width: 150px; font-weight: 800; letter-spacing: .04em; font-size: 13px; border-color: #3fd46b; color: #04130a; background: #3fd46b; box-shadow: 0 0 16px rgba(63,212,107,.45); }
+.bo.on { background: #ff3b5c; border-color: #ff3b5c; color: #fff; box-shadow: 0 0 16px rgba(255,59,92,.45); }
+.lightbar { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); flex: none; }
+.lighthead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.lighthead span { font-size: 12px; letter-spacing: .12em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+.lighthead b { font-size: 26px; font-variant-numeric: tabular-nums; color: var(--accent); }
+.lighthead b.hot { color: #ff8a3c; }
+.hfader { position: relative; height: 46px; border-radius: 12px; background: #000; border: 1px solid var(--line); overflow: hidden; touch-action: none; }
+.hfader .fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+.hfader .fill.hot { background: linear-gradient(90deg, #8a6a10, #ffb02e 70%, #ff6b3c); }
+.hfader .knob { position: absolute; top: 4px; bottom: 4px; width: 10px; margin-left: -5px; border-radius: 4px; background: #fff; box-shadow: 0 0 10px rgba(0,0,0,.6); }
+.hfader .cap { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--warn); }
+.hfader .dz { position: absolute; top: 0; bottom: 0; right: 0; border-left: 2px solid #ff3b5c; background: repeating-linear-gradient(135deg, rgba(255,59,92,.28) 0 4px, rgba(255,59,92,.08) 4px 8px); pointer-events: none; }
+.hfader .dz i { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 16px; opacity: .85; }
+.hfader.danger .knob { background: #fff; outline: 2px solid #ff3b5c; box-shadow: 0 0 12px rgba(255,59,92,.9); }
+.hfader.danger2 .dz i { animation: eye .9s ease-in-out infinite; }
+@keyframes eye { 0%,100% { opacity: .5; } 50% { opacity: 1; transform: translateY(-50%) scale(1.3); } }
+.vb { position: relative; display: grid; grid-template-columns: 1fr auto; row-gap: 6px; align-items: center; user-select: none; margin-top: 12px; }
+.vb-l { font-size: 12px; color: var(--muted); } .vb-v { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+.vb-bar { grid-column: 1 / 3; position: relative; height: 40px; border-radius: 10px; background: #000; border: 1px solid var(--line); overflow: hidden; touch-action: none; }
+.vb-bar::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(255,255,255,.05) calc(10% - 1px) 10%); }
+.vb-fill { position: absolute; top: 0; bottom: 0; left: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); opacity: .85; }
+.zonebar .vb-fill { background: linear-gradient(90deg, #7a1f2e, #ff3b5c); }
+.vb-knob { position: absolute; top: 4px; bottom: 4px; width: 4px; margin-left: -2px; border-radius: 2px; background: #fff; box-shadow: 0 0 8px rgba(0,0,0,.8); }
+.calbtn { margin-top: 14px; height: 44px; } .calbtn.on { border-color: #ff3b5c; color: #ff8a9c; }
+.calrow { grid-template-columns: 1fr 1fr 1fr; margin-top: 12px; } .calrow2 { grid-template-columns: 1fr 1fr; margin-top: 8px; } .calsteps { grid-template-columns: repeat(4, 1fr); margin-top: 10px; } .calsteps button { font-size: 11px; height: 40px; } .calsteps button.on { border-color: #ff3b5c; color: #ff8a9c; background: rgba(255,59,92,.15); } .calrow button.on { border-color: var(--accent); color: var(--accent); }
+#mZoneLaser.on { border-color: #ff3b5c; color: #ff8a9c; background: rgba(255,59,92,.15); }
+.dangernote { margin: 8px 0 0; font-size: 11px; color: #ff8a9c; min-height: 14px; }
+.presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+.presets button { height: 40px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.presets button.on { border-color: var(--accent); color: var(--accent); background: var(--dim); }
+main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px; }
+.page { display: none; }
+.page.on { display: block; }
+h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 4px 0 10px; font-weight: 600; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pat { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; }
+.pat canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pat.has .n { position: absolute; top: 3px; left: 6px; font-size: 10px; color: #bbb; font-weight: 600; }
+.pat .nm { position: absolute; bottom: 3px; left: 4px; right: 4px; font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.pat.on { border-color: var(--accent); box-shadow: 0 0 12px rgba(49,243,172,.3); }
+.pages { display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; }
+.pages button { height: 32px; font-size: 13px; flex: none; }
+.pages button.on, .seg button.on { border-color: var(--accent); color: var(--accent); background: var(--dim); }
+.sw { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sw button { height: 52px; border: 2px solid transparent; font-size: 12px; font-weight: 700; }
+.sw button.on { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,.4); }
+.sw .orig { background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); color: #fff; text-shadow: 0 1px 2px #000; }
+.row { display: flex; gap: 10px; align-items: center; margin: 12px 0; }
+.toggle { flex: 1; }
+.toggle.on { border-color: var(--accent); color: var(--accent); background: var(--dim); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-bottom: 14px; }
+.seg button { height: 40px; font-size: 13px; padding: 0 4px; }
+.sl { display: grid; grid-template-columns: 96px 1fr 46px; align-items: center; gap: 10px; height: 56px; color: var(--muted); font-size: 14px; }
+.sl output { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; font-size: 13px; }
+input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; background: var(--line); border-radius: 3px; width: 100%; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 34px; height: 34px; border-radius: 50%; background: #fff; border: 4px solid var(--panel); box-shadow: 0 0 0 1px #555; }
+.bpm { display: flex; align-items: center; gap: 14px; margin: 6px 0 14px; }
+.bpm b { font-size: 44px; font-variant-numeric: tabular-nums; }
+.bpm small { color: var(--muted); font-weight: 700; }
+.tap { width: 100%; height: 150px; font-size: 32px; font-weight: 900; letter-spacing: .2em; border-radius: 16px; }
+.tap.hit { background: var(--dim); border-color: var(--accent); }
+.info { background: var(--dim); border: 1px solid rgba(49,243,172,.3); border-radius: 10px; padding: 12px; font-size: 13px; margin-bottom: 14px; }
+.scenes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.scenes button { height: 76px; font-size: 16px; font-weight: 600; }
+.scenes button.empty { opacity: .3; border-style: dashed; }
+.scenes button.on { border-color: var(--accent); color: var(--accent); background: var(--dim); }
+nav { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--line); background: #000; flex: none; padding-bottom: env(safe-area-inset-bottom); }
+nav button { border: 0; background: none; height: 62px; border-radius: 0; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+nav button i { font-style: normal; font-size: 18px; }
+nav button.on { color: var(--accent); }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: flex; align-items: center; justify-content: center; text-align: center; padding: 30px; z-index: 5; }
+.overlay[hidden] { display: none; }
+.overlay p { color: var(--muted); }
+.overlay.arm { background: rgba(0,0,0,.85); align-items: flex-end; padding: 0; }
+.armbox { background: var(--panel); border-top: 2px solid var(--warn); border-radius: 18px 18px 0 0; padding: 22px 18px calc(22px + env(safe-area-inset-bottom)); width: 100%; text-align: left; }
+.armbox h2 { color: #ff8a9c; font-size: 18px; letter-spacing: 0; text-transform: none; margin: 0 0 8px; }
+.armbox p { color: var(--text); margin: 0 0 16px; line-height: 1.45; }
+.armchk { display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 16px; }
+.armchk input { width: 24px; height: 24px; accent-color: var(--accent); }
+.armrow { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+.armrow .go { background: #3fd46b; border-color: #3fd46b; color: #04130a; font-weight: 800; }
+.armrow .go:disabled { opacity: .35; }
+.hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+.mlive { position: relative; aspect-ratio: 1 / 1; background: #000; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); touch-action: none; margin-bottom: 10px; }
+#mpv { width: 100%; height: 100%; display: block; }
+.mlab { position: absolute; top: 8px; left: 10px; font-size: 10px; letter-spacing: .2em; color: var(--accent); font-weight: 700; }
+.mpvinfo { position: absolute; bottom: 8px; left: 10px; right: 10px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mtools { grid-template-columns: 1fr 1fr 1fr 1fr; margin-bottom: 8px; }
+.mtools button { height: 44px; font-size: 13px; }
+.mtools button.on { border-color: var(--accent); color: var(--accent); background: var(--dim); }
+#mZone.on { border-color: var(--warn); color: #ff8a9c; background: rgba(255,59,92,.15); }
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+#homeScenes { margin-bottom: 18px; }
+#homeScenes button { height: 64px; }
+.home-btn { height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.home-btn i { font-style: normal; font-size: 26px; }
+.home-btn b { font-size: 15px; }
+.home-btn small { font-size: 11px; color: var(--muted); }
+.home-btn.on { border-color: var(--accent); background: var(--dim); }
+.home-btn.on small { color: var(--accent); }
+.musicbig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 0 0 10px; }
+.seg.autos { grid-auto-flow: row; grid-template-columns: 1fr 1fr 1fr; margin: 14px 0; }
+.seg.autos button { height: 56px; font-size: 16px; }
+.musicbig div { height: 90px; background: var(--panel); border-radius: 12px; position: relative; overflow: hidden; }
+.musicbig div > i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); opacity: .85; }
+.musicbig div > span { position: absolute; left: 10px; top: 8px; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+.musicbig div > b { position: absolute; left: 10px; bottom: 8px; font-size: 13px; mix-blend-mode: difference; }
+.presetgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.presetgrid button { height: 56px; display: flex; align-items: center; gap: 10px; text-align: left; font-size: 14px; }
+.presetgrid span { font-size: 20px; width: 26px; text-align: center; }
+.presetgrid b { font-weight: 600; }
+#lineBtn.on { border-color: #fff; background: rgba(255,255,255,.15); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><img src="/logo-star.png" alt="">LIGHT<b>LINK</b></div>
+    <span class="dot" id="dot"></span>
+    <button class="bo" id="bo">BLACKOUT</button>
+  </header>
+
+  <div class="lightbar">
+    <div class="lighthead"><span data-t="light"></span><b id="eff">0%</b></div>
+    <div class="hfader" id="hf"><div class="fill" id="hfFill"></div><div class="dz" id="hfDanger"><i>👁</i></div><div class="cap" id="hfCap" hidden></div><div class="knob" id="hfKnob"></div></div>
+    <p class="dangernote" id="dangerNote"></p>
+  </div>
+
+  <main>
+    <section class="page" id="p-live">
+      <div class="mlive"><canvas id="mpv"></canvas><span class="mlab">LIVE</span><span class="mpvinfo" id="mpvinfo"></span></div>
+      <div class="seg mtools"><button id="mMove" data-t="move"></button><button id="mZone" data-t="zoneEdit"></button><button id="mZoneLaser" data-t="zoneLaser"></button><button id="mCenter" data-t="center"></button></div>
+      <div class="vb" data-k="size" data-min="15" data-max="100"><span class="vb-l" data-t="size"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div></div>
+      <div class="vb zonebar" data-k="zone" data-min="0" data-max="90"><span class="vb-l" data-t="zone"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div></div>
+      <p class="hint" data-t="liveHint"></p>
+      <button class="wide calbtn" id="mCalBtn" data-t="cal"></button>
+      <div id="mCal" hidden>
+        <div class="seg calsteps" id="mCalSteps"><button data-s="1">1 ↖</button><button data-s="2">2 ↗</button><button data-s="3">3 ↘</button><button data-s="4">4 ↙</button></div>
+        <p class="hint" id="mCalInstr"></p>
+        <div class="vb" data-k="calx" data-min="-100" data-max="100"><span class="vb-l" id="mCalPosLbl"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div></div>
+        <div class="vb" data-k="caly" data-min="-100" data-max="100"><span class="vb-l" id="mCalLenLbl"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div></div>
+        <div class="seg calrow"><button id="mCalDone" data-t="calDone"></button><button id="mCalBox" data-t="calBox"></button><button id="mCalCenter" data-t="calCenter"></button></div>
+        <div class="seg calrow"><button id="mCalIx" data-t="invX"></button><button id="mCalIy" data-t="invY"></button><button id="mCalReset" data-t="calReset"></button></div>
+      </div>
+
+    </section>
+
+    <section class="page on" id="p-home">
+      <div class="home-grid">
+        <button class="home-btn" id="hMusic"><i>♪</i><b data-t="hMusic"></b><small id="hMusicState"></small></button>
+        <button class="home-btn" id="hRandom"><i>🎲</i><b data-t="hRandom"></b><small data-t="hRandomS"></small></button>
+      </div>
+      <h2 data-t="hScenes"></h2>
+      <div class="scenes" id="homeScenes"></div>
+      <h2 data-t="presets"></h2>
+      <div class="presetgrid" id="homePresets"></div>
+    </section>
+
+    <section class="page" id="p-pat">
+      <div class="pages" id="pages"></div>
+      <div class="grid4" id="pats"></div>
+    </section>
+
+    <section class="page" id="p-look">
+      <div class="row" style="margin-top:0"><button class="toggle" id="lineBtn" data-t="line"></button></div>
+      <h2 data-t="color"></h2>
+      <div class="sw" id="sw"></div>
+      <div class="row"><button class="toggle" id="cycle" data-t="cycle"></button></div>
+      <h2 data-t="move"></h2>
+      <div class="seg" id="moves"></div>
+      <label class="sl"><span data-t="size"></span><input type="range" id="size" min="5" max="100"><output></output></label>
+      <label class="sl"><span data-t="rot"></span><input type="range" id="rotSpeed" min="-100" max="100"><output></output></label>
+      <label class="sl"><span data-t="speed"></span><input type="range" id="moveSpeed" min="0" max="100"><output></output></label>
+      <label class="sl"><span data-t="pulse"></span><input type="range" id="pulse" min="0" max="100"><output></output></label>
+      <label class="sl"><span data-t="strobe"></span><input type="range" id="strobe" min="0" max="100"><output></output></label>
+      <div class="row"><button class="toggle" id="reset" data-t="reset"></button></div>
+    </section>
+
+    <section class="page" id="p-music">
+      <div class="musicbig" id="musicbig"><div><span data-t="bass"></span><i id="mB"></i></div><div><span data-t="mid"></span><i id="mM"></i></div><div><span data-t="hi"></span><i id="mH"></i></div></div>
+      <p class="hint" data-t="smart"></p>
+      <div class="seg autos" id="autos"></div>
+      <div class="info" id="laserInfo" hidden data-t="laserInfo"></div>
+
+    </section>
+
+    <section class="page" id="p-scenes">
+      <div class="scenes" id="scenes"></div>
+    </section>
+  </main>
+
+  <nav id="nav">
+    <button data-p="p-home" class="on"><i>⌂</i><span data-t="nHome"></span></button>
+    <button data-p="p-live"><i>◉</i><span data-t="nLive"></span></button>
+    <button data-p="p-pat"><i>✦</i><span data-t="nPat"></span></button>
+    <button data-p="p-look"><i>◐</i><span data-t="nLook"></span></button>
+    <button data-p="p-music"><i>♪</i><span data-t="nMusic"></span></button>
+    <button data-p="p-scenes"><i>▦</i><span data-t="nScenes"></span></button>
+  </nav>
+</div>
+
+<div class="overlay arm" id="armOv" hidden><div class="armbox">
+  <h2 data-t="armT"></h2><p data-t="armP"></p>
+  <label class="armchk"><input type="checkbox" id="armChk"> <span data-t="armC"></span></label>
+  <div class="armrow"><button id="armNo" data-t="cancel"></button><button id="armGo" class="go" disabled data-t="armGo"></button></div>
+</div></div>
+<div class="overlay" id="ov" hidden><div><h2 id="ovT"></h2><p id="ovP"></p></div></div>
+
+<script>
+'use strict';
+const L = {
+  da: { light: 'Lys', color: 'Farve', cycle: 'Farveskift', move: 'Bevægelse', size: 'Størrelse', rot: 'Rotation', speed: 'Fart', pulse: 'Puls på beat', strobe: 'Strobe',
+    reset: 'Nulstil bevægelse', nPat: 'Mønstre', nLook: 'Look', nMusic: 'Musik', nScenes: 'Scener', off: 'Fra', mic: 'Auto (Mac-mik)', laser: 'Auto (laser-mik)',
+    tapHint: 'Tryk TAP i takt med musikken for at sætte tempoet.', laserInfo: 'Laserens egen mikrofon skifter mønstrene. Spil musik tæt på laseren.',
+    still: 'Stille', circle: 'Cirkel', eight: 'Ottetal', sweep: 'Sving', bounce: 'Hop', favs: '★', empty: 'Tom', noKey: 'Mangler kode', noKeyP: "Scan QR-koden i LightLink på Mac'en igen.",
+    presets: 'Presets', line: 'Test-streg', nHome: 'Hjem', nLive: 'Live', move: '✥ Flyt', zoneEdit: 'Zone', zoneLaser: 'Zone-streg', center: 'Centrér', zone: 'Sikkerhedszone', cal: '⚙ Kalibrér placering', calHint: '', calI1: 'Laseren skyder et punkt. Flyt det hen hvor LIVE-boksens ØVERSTE VENSTRE hjørne skal være.', calI2: 'Flyt punktet til det ØVERSTE HØJRE hjørne.', calI3: 'Flyt punktet til det NEDERSTE HØJRE hjørne.', calI4: 'Flyt punktet til det NEDERSTE VENSTRE hjørne. Tryk Færdig.', calPosY: 'Lodret', calPosX: 'Vandret', calWidth: 'Bredde', calHeight: 'Højde', calDone: '✓ Færdig', calBox: 'Tegn firkant', calCenter: 'Laserens midte', calOx: 'Forskyd X', calOy: 'Forskyd Y', calSx: 'Skala X', calSy: 'Skala Y', invX: 'Spejl X', invY: 'Spejl Y', calReset: 'Nulstil', noPat: 'Intet mønster', liveHint: 'Flyt: træk mønsteret derhen det skal pege. Zone: træk den røde grænse op og ned.', danger: '👁 Kraftigt lys – farligt for øjnene. Hold strålerne over hovedhøjde.', hMusic: 'Auto (musik)', hRandom: 'Tilfældig', hRandomS: 'nyt look nu', hScenes: 'Scener', bass: 'Bas', mid: 'Mellem', hi: 'Diskant', smart: 'Lytter selv: bas = puls og skift · diskant = ryk · pause = roligt · drop = stort skift', stOff: 'fra', stMic: 'Mac-mik', stLaser: 'laser-mik', cancel: 'Annuller', armT: 'Tænd laseren?', armP: 'Laseren sender lys ud med det samme. Tjek at ingen kan rammes i øjnene, og at effekten står lavt.', armC: 'Området er sikkert', armGo: '● Tænd laseren', lost: 'Ingen forbindelse', lostP: "Tjek at Mac'en er tændt, LightLink kører, og at telefonen er på samme Wi-Fi.", orig: 'Original', bo: '● LASER TÆNDT', boOn: '○ LASER SLUKKET' },
+  en: { light: 'Light', color: 'Colour', cycle: 'Colour cycle', move: 'Movement', size: 'Size', rot: 'Rotation', speed: 'Speed', pulse: 'Pulse on beat', strobe: 'Strobe',
+    reset: 'Reset movement', nPat: 'Patterns', nLook: 'Look', nMusic: 'Music', nScenes: 'Scenes', off: 'Off', mic: 'Auto (Mac mic)', laser: 'Auto (laser mic)',
+    tapHint: 'Tap TAP in time with the music to set the tempo.', laserInfo: "The laser's own microphone changes the patterns. Play music close to the laser.",
+    still: 'Still', circle: 'Circle', eight: 'Figure 8', sweep: 'Sweep', bounce: 'Bounce', favs: '★', empty: 'Empty', noKey: 'Missing key', noKeyP: 'Scan the QR code in LightLink on the Mac again.',
+    presets: 'Presets', line: 'Test line', nHome: 'Home', nLive: 'Live', move: '✥ Move', zoneEdit: 'Zone', zoneLaser: 'Zone line', center: 'Centre', zone: 'Safety zone', cal: '⚙ Calibrate placement', calHint: '', calI1: 'The cross = the point. Move it to where the TOP LEFT corner of the LIVE box should be.', calI2: 'Move the cross to the TOP RIGHT corner.', calI3: 'Move the cross to the BOTTOM RIGHT corner.', calI4: 'Move the cross to the BOTTOM LEFT corner. Press Done.', calPosY: 'Vertical', calPosX: 'Horizontal', calWidth: 'Width', calHeight: 'Height', calDone: '✓ Done', calBox: 'Draw frame', calCenter: 'Laser centre', calOx: 'Offset X', calOy: 'Offset Y', calSx: 'Scale X', calSy: 'Scale Y', invX: 'Mirror X', invY: 'Mirror Y', calReset: 'Reset', noPat: 'No pattern', liveHint: 'Move: drag the pattern where it should point. Zone: drag the red edge up and down.', danger: '👁 Strong light – dangerous for eyes. Keep beams above head height.', hMusic: 'Auto (music)', hRandom: 'Random', hRandomS: 'new look now', hScenes: 'Scenes', bass: 'Bass', mid: 'Mid', hi: 'Treble', smart: 'Listens by itself: bass = pulse and change · treble = kicks · break = calm · drop = big change', stOff: 'off', stMic: 'Mac mic', stLaser: 'laser mic', cancel: 'Cancel', armT: 'Turn the laser on?', armP: 'The laser will emit light immediately. Make sure nobody can be hit in the eyes and the power is low.', armC: 'The area is safe', armGo: '● Turn laser on', lost: 'No connection', lostP: 'Check that the Mac is on, LightLink is running and the phone is on the same Wi-Fi.', orig: 'Original', bo: '● LASER ON', boOn: '○ LASER OFF' },
+};
+let lang = 'da';
+const tt = (k) => (L[lang] && L[lang][k]) || L.da[k] || k;
+const $ = (s) => document.querySelector(s), $$ = (s) => Array.from(document.querySelectorAll(s));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// nøgle fra QR-koden (huskes, så "Føj til hjemmeskærm" virker)
+let K = new URLSearchParams(location.search).get('k');
+try { if (K) localStorage.setItem('ll.k', K); else K = localStorage.getItem('ll.k'); } catch (_) {}
+if (K) { $('#manifest').href = '/manifest.json?k=' + encodeURIComponent(K); if (!location.search.includes('k=')) history.replaceState(null, '', '/?k=' + encodeURIComponent(K)); }
+const q = (p) => p + (p.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K || '');
+
+function send(cmd) { fetch(q('/cmd'), { method: 'POST', body: JSON.stringify(cmd), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); }
+let lastSend = 0, pending = null;
+function sendThrottled(cmd) {
+  pending = cmd; const now = Date.now();
+  if (now - lastSend > 45) { lastSend = now; send(pending); pending = null; }
+  else setTimeout(() => { if (pending) { lastSend = Date.now(); send(pending); pending = null; } }, 50);
+}
+
+/*ILDA*/
+
+let S = null, touching = null;
+const SW = [
+  { k: 'orig', mode: 'orig' }, { rgb: [255, 0, 0] }, { rgb: [255, 90, 0] }, { rgb: [255, 220, 0] }, { rgb: [140, 255, 0] }, { rgb: [0, 255, 0] },
+  { rgb: [0, 255, 255] }, { rgb: [0, 40, 255] }, { rgb: [140, 0, 255] }, { rgb: [255, 0, 160] }, { rgb: [255, 255, 255] }, { rgb: [255, 170, 90] },
+];
+const MOVES = [['none', 'still'], ['circle', 'circle'], ['eight', 'eight'], ['sweep', 'sweep'], ['bounce', 'bounce']];
+const AUTOS = [['off', 'off'], ['mic', 'mic'], ['laser', 'laser']];
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  $$('[data-t]').forEach((el) => (el.textContent = tt(el.dataset.t)));
+  buildStatic();
+}
+function buildStatic() {
+  $('#sw').innerHTML = '';
+  SW.forEach((s) => {
+    const b = document.createElement('button');
+    if (s.mode === 'orig') { b.className = 'orig'; b.textContent = tt('orig'); } else b.style.background = `rgb(${s.rgb})`;
+    b.onclick = () => send(s.mode === 'orig' ? { type: 'color', mode: 'orig' } : { type: 'color', rgb: s.rgb });
+    $('#sw').appendChild(b);
+  });
+  $('#moves').innerHTML = '';
+  MOVES.forEach(([v, k]) => { const b = document.createElement('button'); b.textContent = tt(k); b.dataset.v = v; b.onclick = () => send({ type: 'move', v }); $('#moves').appendChild(b); });
+  $('#autos').innerHTML = '';
+  AUTOS.forEach(([v, k]) => { const b = document.createElement('button'); b.textContent = tt(k); b.dataset.v = v; b.onclick = () => send({ type: 'auto', mode: v }); $('#autos').appendChild(b); });
+  if (S) render(true);
+}
+
+// ---- lys-fader ----
+(() => {
+  const f = $('#hf');
+  const val = (x) => { const r = f.getBoundingClientRect(); return clamp((x - r.left) / r.width, 0, 1); };
+  f.addEventListener('pointerdown', (e) => { f.setPointerCapture(e.pointerId); touching = 'master'; const v = val(e.clientX); drawFader(v); sendThrottled({ type: 'master', v }); });
+  f.addEventListener('pointermove', (e) => { if (!f.hasPointerCapture(e.pointerId)) return; const v = val(e.clientX); drawFader(v); sendThrottled({ type: 'master', v }); });
+  const end = () => { touching = null; };
+  f.addEventListener('pointerup', end); f.addEventListener('pointercancel', end);
+})();
+function drawFader(m) {
+  const cap = S ? S.cap : 1, eff = Math.round(m * cap * 100);
+  $('#hfFill').style.width = m * 100 + '%'; $('#hfKnob').style.left = m * 100 + '%';
+  const d = Math.max(0, Math.min(1, (eff - 20) / 50)), col = dangerColor(d);
+  $('#hfFill').style.background = `linear-gradient(90deg, var(--accent2), ${col})`;
+  $('#eff').textContent = eff + '%'; $('#eff').style.color = eff > 35 ? col : '';
+  $('#hf').classList.toggle('danger', eff > 35); $('#hf').classList.toggle('danger2', eff > 60);
+  const dz = Math.min(1, 0.35 / Math.max(cap, 0.05)); $('#hfDanger').style.left = dz * 100 + '%'; $('#hfDanger').hidden = dz >= 1;
+  $('#dangerNote').textContent = eff > 35 ? tt('danger') : '';
+}
+function dangerColor(d) { const a = [49, 243, 172], b = [255, 176, 46], c = [255, 59, 92]; const m = d < 0.5 ? a.map((v, i) => v + (b[i] - v) * d * 2) : b.map((v, i) => v + (c[i] - v) * (d - 0.5) * 2); return `rgb(${m.map(Math.round)})`; }
+$('#bo').onclick = () => {
+  if (S && !S.blackout) { send({ type: 'blackout', on: false }); return; }   // sluk med det samme
+  $('#armOv').hidden = false; $('#armChk').checked = false; $('#armGo').disabled = true;
+};
+$('#armChk').onchange = (e) => { $('#armGo').disabled = !e.target.checked; };
+$('#armGo').onclick = () => { $('#armOv').hidden = true; send({ type: 'armConfirmed' }); };
+$('#armNo').onclick = () => { $('#armOv').hidden = true; };
+
+// ---- sliders ----
+const SLD = { size: [100, (v) => v + '%'], rotSpeed: [100, (v) => (v == 0 ? 'Stop' : v > 0 ? '↻' + v : '↺' + -v)], moveSpeed: [100, (v) => v + '%'], pulse: [100, (v) => v + '%'], strobe: [100, (v) => (v == 0 ? tt('off') : v + '%')] };
+for (const id in SLD) {
+  const el = $('#' + id), out = el.parentElement.querySelector('output');
+  el.addEventListener('input', () => { touching = id; out.textContent = SLD[id][1](+el.value); sendThrottled({ type: 'set', key: id, value: el.value / SLD[id][0] }); });
+  el.addEventListener('change', () => { touching = null; });
+  el.addEventListener('touchend', () => { touching = null; });
+}
+$('#cycle').onclick = () => send({ type: 'colorCycle', on: !(S && S.colorCycle) });
+$('#reset').onclick = () => send({ type: 'reset' });
+$('#lineBtn').onclick = () => send({ type: 'testLine' });
+
+
+// ---- live på mobil ----
+let mMode = 'move';
+$('#mMove').onclick = () => { mMode = 'move'; $('#mMove').classList.add('on'); $('#mZone').classList.remove('on'); };
+$('#mZone').onclick = () => { mMode = 'zone'; $('#mZone').classList.add('on'); $('#mMove').classList.remove('on'); };
+$('#mMove').classList.add('on');
+$('#mZoneLaser').onclick = () => send({ type: 'special', v: 'zone' });
+// værdi-bjælker: størrelse, zone og kalibrering
+(() => {
+  const fmt = (k, v) => k === 'size' || k === 'zone' ? v + '%' : k.startsWith('cal:s') ? v + '%' : (v > 0 ? '+' : '') + v;
+  for (const vb of $$('.vb')) {
+    const k = vb.dataset.k, mn = +vb.dataset.min, mx = +vb.dataset.max, bar = vb.querySelector('.vb-bar');
+    vb._set = (v) => { const f = (v - mn) / (mx - mn); vb.querySelector('.vb-fill').style.width = f * 100 + '%'; vb.querySelector('.vb-knob').style.left = f * 100 + '%'; vb.querySelector('.vb-v').textContent = fmt(k, Math.round(v)); };
+    vb._set(mn);
+    const from = (x) => { const r = bar.getBoundingClientRect(); const v = Math.round(mn + Math.max(0, Math.min(1, (x - r.left) / r.width)) * (mx - mn)); vb._set(v); touching = k; if (k === 'size') sendThrottled({ type: 'set', key: 'size', value: v / 100 }); else if (k === 'zone') sendThrottled({ type: 'zone', v: v / 100 }); else if (k === 'calx') sendThrottled({ type: 'calset', k: 'x', v: v / 100 }); else if (k === 'caly') sendThrottled({ type: 'calset', k: 'y', v: v / 100 }); };
+    bar.addEventListener('pointerdown', (e) => { bar.setPointerCapture(e.pointerId); from(e.clientX); });
+    bar.addEventListener('pointermove', (e) => { if (bar.hasPointerCapture(e.pointerId)) from(e.clientX); });
+    const end = () => { touching = null; }; bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+  }
+})();
+$('#mCalBtn').onclick = () => { const on = $('#mCal').hidden; $('#mCal').hidden = !on; $('#mCalBtn').classList.toggle('on', on); if (on) send({ type: 'calstep', step: 1 }); else send({ type: 'caldone' }); };
+$$('#mCalSteps button').forEach((b) => (b.onclick = () => send({ type: 'calstep', step: +b.dataset.s })));
+$('#mCalDone').onclick = () => send({ type: 'caldone' });
+$('#mCalBox').onclick = () => send({ type: 'calbox' });
+$('#mCalCenter').onclick = () => send({ type: 'center', k: 'laser' });
+$('#mCalIx').onclick = () => send({ type: 'cal', k: 'ix', v: !(S && S.cal && S.cal.ix) });
+$('#mCalIy').onclick = () => send({ type: 'cal', k: 'iy', v: !(S && S.cal && S.cal.iy) });
+$('#mCalReset').onclick = () => send({ type: 'cal', k: 'reset' });
+$('#mCenter').onclick = () => send({ type: 'center' });
+(() => {
+  const el = $('.mlive'); let d = null;
+  const rel = (e) => { const r = el.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); const [u, v] = rel(e); d = { u, v, x0: S ? S.posX || 0 : 0, y0: S ? S.posY || 0 : 0 }; if (mMode === 'zone') { touching = 'zone'; sendThrottled({ type: 'zone', v: Math.max(0, Math.min(0.9, 1 - v)) }); } else touching = 'pos'; });
+  el.addEventListener('pointermove', (e) => { if (!d) return; const [u, v] = rel(e); if (mMode === 'zone') sendThrottled({ type: 'zone', v: Math.max(0, Math.min(0.9, 1 - v)) }); else sendThrottled({ type: 'pos', x: Math.max(-1, Math.min(1, d.x0 + (u - d.u) / 0.47)), y: Math.max(-1, Math.min(1, d.y0 - (v - d.v) / 0.47)) }); });
+  const up = () => { d = null; touching = null; }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+})();
+let mFrame = 0, mLast = performance.now();
+const boxPt = (b, ax, ay) => [b.x + (ax + 1) / 2 * b.w, b.y + (1 - ay) / 2 * b.h];
+function mBox(W, H, cal) { const a = Math.max(.2, Math.min(5, cal.sx / cal.sy)); let w = W * .94, h = w / a; if (h > H * .94) { h = H * .94; w = h * a; } return { x: (W - w) / 2, y: (H - h) / 2, w, h, upl: w / (2 * cal.sx) }; }
+function mTick(now) {
+  const cv = $('#mpv');
+  if (S && cv.offsetParent) {
+    const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,0.05)'; for (let i = 1; i < 8; i++) { g.beginPath(); g.moveTo((W * i) / 8, 0); g.lineTo((W * i) / 8, H); g.stroke(); g.beginPath(); g.moveTo(0, (H * i) / 8); g.lineTo(W, (H * i) / 8); g.stroke(); }
+    const fr = patData.get(S.pattern); if (!fr && !patData.has(S.pattern)) loadPat(S.pattern);
+    mFrame += ((now - mLast) / 1000) * 25; mLast = now;
+    if (S.blackout) { g.fillStyle = '#ff3b5c'; g.font = '700 12px -apple-system'; g.textAlign = 'center'; g.fillText(tt('boOn'), W / 2, H / 2); }
+    else if (S.special === 'cal' || S.special === 'center') { const cal = S.cal || { ox: 0, oy: 0, sx: .9, sy: .9 }, bx = mBox(W, H, cal), p = S.special === 'cal' ? (S.calPts || {})[['TL', 'TR', 'BR', 'BL'][(S.calStep || 1) - 1]] || { x: 0, y: 0 } : { x: 0, y: 0 }; const ax = (p.x - cal.ox) / cal.sx, ay = (p.y - cal.oy) / cal.sy, px = bx.x + (ax + 1) / 2 * bx.w, py = bx.y + (1 - ay) / 2 * bx.h, hl = bx.upl, col = S.special === 'cal' ? '#ff3b5c' : '#fff'; if (S.special === 'cal') { const c = [[bx.x, bx.y], [bx.x + bx.w, bx.y], [bx.x + bx.w, bx.y + bx.h], [bx.x, bx.y + bx.h]][(S.calStep || 1) - 1]; g.strokeStyle = '#ff3b5c'; g.fillStyle = 'rgba(255,59,92,.25)'; g.lineWidth = 2; g.beginPath(); g.arc(c[0], c[1], 14, 0, Math.PI * 2); g.fill(); g.stroke(); } g.strokeStyle = col; g.shadowColor = col; g.shadowBlur = 12; g.lineWidth = 3; g.beginPath(); g.moveTo(px - hl, py); g.lineTo(px + hl, py); g.moveTo(px, py - hl); g.lineTo(px, py + hl); g.stroke(); g.shadowBlur = 0; g.fillStyle = col; g.beginPath(); g.arc(px, py, 6, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = '700 13px -apple-system'; g.textAlign = 'center'; g.fillText(S.special === 'cal' ? ['', '↖ ØVERST VENSTRE', '↗ ØVERST HØJRE', '↘ NEDERST HØJRE', '↙ NEDERST VENSTRE'][S.calStep || 1] : 'LASERENS MIDTE', W / 2, 24); }
+    else if (S.special === 'calbox') { const L = Math.min(W, H) / 2 * 0.9, x0 = W / 2 - L, y0 = H / 2 - L, x1 = W / 2 + L, y1 = H / 2 + L; g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.globalAlpha = .3; g.strokeRect(x0, y0, L * 2, L * 2); g.globalAlpha = 1; const st = S.special === 'cal' ? (S.calStep || 1) : [1, 2, 4, 3][Math.floor(now / 450) % 4]; g.lineWidth = 5; g.shadowColor = '#ff3b5c'; g.shadowBlur = 14; g.beginPath(); if (st === 1) { g.moveTo(x0, y0); g.lineTo(x1, y0); } else if (st === 2) { g.moveTo(x0, y1); g.lineTo(x1, y1); } else if (st === 3) { g.moveTo(x1, y0); g.lineTo(x1, y1); } else { g.moveTo(x0, y0); g.lineTo(x0, y1); } g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; g.font = '700 13px -apple-system'; g.textAlign = 'center'; g.fillText(['', 'TOP', 'BUND', 'HØJRE', 'VENSTRE'][st], W / 2, H / 2 + 5); }
+    else if (S.special === 'max') { g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; const L = Math.min(W, H) / 2 * 0.9 * 0.97; g.globalAlpha = .3; g.strokeRect(W / 2 - L, H / 2 - L, L * 2, L * 2); g.globalAlpha = 1; const e = Math.floor(now / 450) % 4, x0 = W / 2 - L, y0 = H / 2 - L, x1 = W / 2 + L, y1 = H / 2 + L; g.lineWidth = 4; g.shadowColor = '#ff3b5c'; g.shadowBlur = 12; g.beginPath(); if (e === 0) { g.moveTo(x0, y0); g.lineTo(x1, y0); } else if (e === 1) { g.moveTo(x0, y1); g.lineTo(x1, y1); } else if (e === 2) { g.moveTo(x0, y0); g.lineTo(x0, y1); } else { g.moveTo(x1, y0); g.lineTo(x1, y1); } g.stroke(); g.shadowBlur = 0; g.fillStyle = '#fff'; g.font = '700 13px -apple-system'; g.textAlign = 'center'; g.fillText(['▲ TOP', '▼ BUND', '◀ VENSTRE', '▶ HØJRE'][e], W / 2, H / 2 + 5); }
+    else if (S.special === 'zone') { const y = H * (1 - S.zone) - 4; g.strokeStyle = '#ff3b5c'; g.lineWidth = 3; g.shadowColor = '#ff3b5c'; g.shadowBlur = 12; g.beginPath(); g.moveTo(W * 0.05, y); g.lineTo(W * 0.95, y); g.stroke(); g.shadowBlur = 0; }
+    else if (!S.pattern) { g.fillStyle = '#5b6375'; g.font = '12px -apple-system'; g.textAlign = 'center'; g.fillText(tt('noPat'), W / 2, H / 2); }
+    else if (fr && fr.length) { const bx = mBox(W, H, S.cal || { ox: 0, oy: 0, sx: .9, sy: .9 }); g.strokeStyle = 'rgba(49,243,172,.25)'; g.setLineDash([4, 6]); g.lineWidth = 1; g.strokeRect(bx.x, bx.y, bx.w, bx.h); g.setLineDash([]); drawIlda(g, W, H, fr[Math.floor(mFrame) % fr.length], { scale: S.size, ang: S.ang || 0, ox: S.posX || 0, oy: S.posY || 0, rgb: S.colorCycle ? null : S.color.mode === 'rgb' ? S.color.rgb : null, glow: 1.3, box: bx }); }
+    else { g.fillStyle = '#5b6375'; g.font = '12px -apple-system'; g.textAlign = 'center'; g.fillText('#' + S.pattern, W / 2, H / 2); }
+    if (S.zone > 0) { const y = H * (1 - S.zone); g.fillStyle = 'rgba(0,0,0,.85)'; g.fillRect(0, y, W, H - y); g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.shadowColor = '#ff3b5c'; g.shadowBlur = 8; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.shadowBlur = 0; g.fillStyle = '#ff3b5c'; g.beginPath(); g.roundRect(W / 2 - 22, y - 6, 44, 12, 6); g.fill(); }
+    $('#mpvinfo').textContent = `#${S.pattern} · ${Math.round(S.size * 100)}%` + (S.freeze ? ' · ❚❚' : '');
+    const cs = S.calStep || 1, cp = S.calPts ? S.calPts[['TL', 'TR', 'BR', 'BL'][cs - 1]] : { x: 0, y: 0 };
+    for (const vb of $$('.vb')) { const k = vb.dataset.k; if (touching === k) continue; if (k === 'size') vb._set(S.size * 100); else if (k === 'zone') vb._set(S.zone * 100); else if (k === 'calx') vb._set(cp.x * 100); else if (k === 'caly') vb._set(cp.y * 100); }
+    $$('#mCalSteps button').forEach((b) => b.classList.toggle('on', +b.dataset.s === cs));
+    $('#mCalInstr').textContent = tt('calI' + cs); $('#mCalPosLbl').textContent = tt('calPosX'); $('#mCalLenLbl').textContent = tt('calPosY');
+    $('#mCalCenter').classList.toggle('on', S.special === 'center');
+    $('#mCalBox').classList.toggle('on', S.special === 'calbox');
+    $('#mZoneLaser').classList.toggle('on', S.special === 'zone');
+    if (S.cal) { $('#mCalIx').classList.toggle('on', !!S.cal.ix); $('#mCalIy').classList.toggle('on', !!S.cal.iy); }
+  }
+  requestAnimationFrame(mTick);
+}
+requestAnimationFrame(mTick);
+
+// ---- hjem ----
+$('#hMusic').onclick = () => send({ type: 'auto', mode: S && S.auto === 'mic' ? 'off' : 'mic' });
+$('#hRandom').onclick = () => send({ type: 'random' });
+function renderHome() {
+  const hs = $('#homeScenes'); if (hs.dataset.k !== S.scenes.join('|')) { hs.dataset.k = S.scenes.join('|'); hs.innerHTML = '';
+    S.scenes.forEach((name, i) => { if (!name) return; const b = document.createElement('button'); b.textContent = name; b.onclick = () => send({ type: 'scene', i }); hs.appendChild(b); });
+    if (!hs.childElementCount) { const e = document.createElement('p'); e.className = 'hint'; e.textContent = tt('empty'); hs.appendChild(e); } }
+  $$('#homeScenes button').forEach((b, i) => b.classList.toggle('on', S.scenes.filter(Boolean)[i] === S.scenes[S.activeScene]));
+  const hp = $('#homePresets'); const pk = (S.presets || []).map((p) => p.join()).join('|');
+  if (hp.dataset.k !== pk) { hp.dataset.k = pk; hp.innerHTML = ''; (S.presets || []).slice(0, 8).forEach(([ic, name], i) => { const b = document.createElement('button'); b.innerHTML = '<span></span><b></b>'; b.firstChild.textContent = ic; b.lastChild.textContent = name; b.onclick = () => send({ type: 'preset', i }); hp.appendChild(b); }); }
+  $('#hMusic').classList.toggle('on', S.auto === 'mic');
+  $('#hMusicState').textContent = tt({ off: 'stOff', mic: 'stMic', laser: 'stLaser', bpm: 'stBpm' }[S.auto] || 'stOff');
+  if (S.music) { $('#mB').style.height = S.music.b * 100 + '%'; $('#mM').style.height = S.music.m * 100 + '%'; $('#mH').style.height = S.music.h * 100 + '%'; }
+}
+
+// ---- navigation ----
+$$('#nav button').forEach((b) => (b.onclick = () => {
+  $$('#nav button').forEach((x) => x.classList.toggle('on', x === b));
+  $$('.page').forEach((p) => p.classList.toggle('on', p.id === b.dataset.p));
+}));
+
+// ---- mønstre ----
+const PAGE = 24; let page = 0, patKey = '';
+const patData = new Map();
+async function loadPat(n) {
+  if (patData.has(n)) return patData.get(n);
+  patData.set(n, null);
+  try { const r = await fetch(q('/pat/' + n)); if (!r.ok) return null; const fr = parseIlda(await r.arrayBuffer()); patData.set(n, fr); return fr; } catch (_) { return null; }
+}
+async function thumb(tile, n) {
+  const fr = await loadPat(n); if (!fr || !fr.length) return;
+  let cv = tile.querySelector('canvas'); if (!cv) { cv = document.createElement('canvas'); tile.prepend(cv); tile.classList.add('has'); }
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawIlda(g, W, H, firstVisible(fr), { glow: 1.1 });
+}
+function renderPats() {
+  const avail = new Set(S.patAvail), favs = S.favs || [];
+  const pages = Math.max(1, Math.ceil(S.patCount / PAGE));
+  const pg = $('#pages'); pg.innerHTML = '';
+  { const b = document.createElement('button'); b.textContent = tt('presets'); b.className = page === 'presets' ? 'on' : ''; b.onclick = () => { page = 'presets'; patKey = ''; render(); }; pg.appendChild(b); }
+  for (let p = 0; p < pages; p++) { const b = document.createElement('button'); b.textContent = `${p * PAGE + 1}–${Math.min(S.patCount, p * PAGE + PAGE)}`; b.className = p === page ? 'on' : ''; b.onclick = () => { page = p; patKey = ''; render(); }; pg.appendChild(b); }
+  if (favs.length) { const b = document.createElement('button'); b.textContent = '★'; b.className = page === -1 ? 'on' : ''; b.onclick = () => { page = -1; patKey = ''; render(); }; pg.appendChild(b); }
+  if (page === 'presets') {
+    const g = $('#pats'); g.innerHTML = ''; g.className = 'presetgrid';
+    (S.presets || []).forEach(([ic, name], i) => { const b = document.createElement('button'); b.innerHTML = '<span></span><b></b>'; b.firstChild.textContent = ic; b.lastChild.textContent = name; b.onclick = () => send({ type: 'preset', i }); g.appendChild(b); });
+    return;
+  }
+  $('#pats').className = 'grid4';
+  const list = page === -1 ? favs.slice().sort((a, b) => a - b) : Array.from({ length: Math.min(PAGE, S.patCount - page * PAGE) }, (_, i) => page * PAGE + i + 1);
+  const g = $('#pats'); g.innerHTML = '';
+  for (const n of list) {
+    const d = document.createElement('div'); d.className = 'pat'; d.dataset.n = n;
+    d.innerHTML = `<span class="n">${n}</span><span class="nm"></span>`;
+    d.querySelector('.nm').textContent = (S.patNames && S.patNames[n]) || '';
+    d.onclick = () => send({ type: 'pattern', n });
+    g.appendChild(d);
+    if (avail.has(n)) requestAnimationFrame(() => thumb(d, n));
+  }
+}
+
+// ---- tegn tilstand ----
+function render(force) {
+  if (!S) return;
+  if (S.lang && S.lang !== lang) { lang = S.lang; applyLang(); return; }
+  if (touching !== 'master') drawFader(S.master);
+  $('#hfCap').hidden = !(S.cap < 1); $('#hfCap').style.left = '100%';
+  $('#bo').classList.toggle('on', S.blackout); $('#bo').textContent = tt(S.blackout ? 'boOn' : 'bo');
+  const key = [page, (S.presets || []).length, S.lang, S.patCount, S.patAvail.length, JSON.stringify(S.patNames), (S.favs || []).join()].join('|');
+  if (force || key !== patKey) { patKey = key; renderPats(); }
+  $$('.pat').forEach((p) => p.classList.toggle('on', +p.dataset.n === S.pattern));
+  $$('#sw button').forEach((b, i) => { const s = SW[i]; b.classList.toggle('on', !S.colorCycle && (s.mode === 'orig' ? S.color.mode === 'orig' : S.color.mode === 'rgb' && String(s.rgb) === String(S.color.rgb))); });
+  $('#cycle').classList.toggle('on', S.colorCycle);
+  $('#lineBtn').classList.toggle('on', S.special === 'line');
+  $$('#moves button').forEach((b) => b.classList.toggle('on', b.dataset.v === S.move));
+  $$('#autos button').forEach((b) => b.classList.toggle('on', b.dataset.v === S.auto));
+  $('#laserInfo').hidden = S.auto !== 'laser';
+  for (const id in SLD) { if (touching === id) continue; const el = $('#' + id); el.value = Math.round(S[id] * SLD[id][0]); el.parentElement.querySelector('output').textContent = SLD[id][1](+el.value); }
+  const sc = $('#scenes');
+  if (sc.childElementCount !== S.scenes.length || force || sc.dataset.k !== S.scenes.join('|')) {
+    sc.dataset.k = S.scenes.join('|'); sc.innerHTML = '';
+    S.scenes.forEach((name, i) => { const b = document.createElement('button'); b.textContent = name || `${i + 1}`; b.className = name ? '' : 'empty'; b.onclick = () => name && send({ type: 'scene', i }); sc.appendChild(b); });
+  }
+  $$('#scenes button').forEach((b, i) => b.classList.toggle('on', i === S.activeScene));
+  renderHome();
+}
+
+// ---- forbindelse ----
+function overlay(tk, pk) { $('#ov').hidden = !tk; if (tk) { $('#ovT').textContent = tt(tk); $('#ovP').textContent = tt(pk); } }
+function connect() {
+  if (!K) { overlay('noKey', 'noKeyP'); return; }
+  const es = new EventSource(q('/events'));
+  let alive = false;
+  es.onopen = () => { alive = true; $('#dot').classList.add('ok'); overlay(null); };
+  es.onmessage = (e) => { try { const d = JSON.parse(e.data); if (d && d.scenes) { S = d; render(); } } catch (_) {} };
+  es.onerror = () => {
+    $('#dot').classList.remove('ok');
+    fetch(q('/patlist')).then((r) => { if (r.status === 403) { es.close(); overlay('noKey', 'noKeyP'); } else if (!alive) overlay('lost', 'lostP'); }).catch(() => overlay('lost', 'lostP'));
+  };
+}
+applyLang();
+connect();
+</script>
+</body>
+</html>

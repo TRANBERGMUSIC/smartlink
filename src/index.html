@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; img-src 'self' data: blob:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co data: blob:">
+<title>LightLink</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img class="logo" src="logo-star.png" alt=""><span class="wordmark">LIGHT<b>LINK</b></span><small>DS-3000RGB MK5</small></div>
+  <nav class="tabs">
+    <button data-tab="live" class="tab active" data-i18n="tab.live"></button>
+    <button data-tab="show" class="tab" data-i18n="tab.show"></button>
+    <button data-tab="keys" class="tab" data-i18n="tab.keys"></button>
+    <button data-tab="design" class="tab" data-i18n="tab.design"></button>
+    <button data-tab="settings" class="tab" data-i18n="tab.settings"></button>
+  </nav>
+  <div class="topright">
+    <button class="mobbtn" id="mobileBtn"><span class="phone">📱</span> <span data-i18n="mob.btn"></span><span class="mobcount" id="mobCount" hidden></span></button>
+    <div class="lang seg" id="langSeg"><button data-lang="da">DA</button><button data-lang="en">EN</button></div>
+    <button class="conn connbtn" id="conn" data-i18n-title="set.reconnectTip"><span class="led" id="connLed"></span><span id="connTxt">—</span></button>
+    <label class="master"><span data-i18n="top.light"></span> <input type="range" id="master" min="0" max="100" value="100"><span id="masterVal">100%</span></label>
+    <button class="blackout" id="blackout" data-i18n-title="top.blackoutTip"></button>
+  </div>
+</header>
+<div class="netbar updbar" id="updBar" hidden>
+  <span class="netic">⬆</span>
+  <span id="updMsg"></span>
+  <div class="spacer"></div>
+  <button id="updInstall" class="primary small" data-i18n="upd.install"></button>
+  <button id="updLater" class="ghost small" data-i18n="upd.later"></button>
+</div>
+<div class="netbar" id="netbar" hidden>
+  <span class="netic" id="netIcon">●</span>
+  <span id="netMsg"></span>
+  <div class="spacer"></div>
+  <button id="netSetup" hidden data-i18n="net.setupBtn"></button>
+</div>
+
+<main>
+<!-- ============ LIVE ============ -->
+<section class="page active" id="page-live">
+  <div class="col col-patterns">
+    <div class="panel preview-panel" id="previewPanel">
+      <canvas id="preview"></canvas>
+      <span class="pv-label">LIVE</span>
+      <div class="pv-tools">
+        <button class="ghost small pv-tool" id="pvMove" data-i18n="pv.move" data-i18n-title="pv.moveTip"></button>
+        <button class="ghost small pv-tool" id="pvZoneLine" data-i18n="pv.zoneLine"></button>
+        <button class="ghost small pv-tool" id="pvMax" data-i18n="pv.max" data-i18n-title="pv.maxTip"></button>
+        <button class="ghost small pv-tool" id="pvCalBtn" data-i18n="pv.cal" data-i18n-title="pv.calTip"></button>
+      </div>
+      <span class="pv-info" id="pvInfo"></span>
+      <div class="pv-sizebar" id="pvSizeBar">
+        <label class="xyz"><b>X</b><span data-i18n="pv.xName"></span><button class="ghost small" data-k="posX" data-d="-1">−</button><input type="range" id="posXLive" min="-100" max="100" value="0" data-k="posX"><button class="ghost small" data-k="posX" data-d="1">+</button><output id="posXOut"></output></label>
+        <label class="xyz"><b>Y</b><span data-i18n="pv.yName"></span><button class="ghost small" data-k="posY" data-d="-1">−</button><input type="range" id="posYLive" min="-100" max="100" value="0" data-k="posY"><button class="ghost small" data-k="posY" data-d="1">+</button><output id="posYOut"></output></label>
+        <label class="xyz"><b>Z</b><span data-i18n="pv.zName"></span><button class="ghost small" id="szMinus">−</button><input type="range" id="sizeLive" min="5" max="100" value="80"><button class="ghost small" id="szPlus">+</button><output id="sizeLiveOut"></output></label>
+        <button class="ghost small" id="posReset" data-i18n="pv.center"></button>
+      </div>
+      <div class="pv-cal" id="pvCal" hidden>
+        <h3 data-i18n="pv.calTitle"></h3>
+        <div class="seg" id="calSteps"><button data-s="1">1 <span data-i18n="pv.calP1"></span></button><button data-s="2">2 <span data-i18n="pv.calP2"></span></button><button data-s="3">3 <span data-i18n="pv.calP3"></span></button><button data-s="4">4 <span data-i18n="pv.calP4"></span></button></div>
+        <p class="cal-instr" id="calInstr"></p>
+        <label><span data-i18n="pv.calX"></span><input type="range" id="calX" min="-100" max="100" value="-90"><output id="calXOut"></output></label>
+        <label><span data-i18n="pv.calY"></span><input type="range" id="calY" min="-100" max="100" value="90"><output id="calYOut"></output></label>
+        <div class="cal-r1"><button class="ghost small" id="calPrev">◀</button><button class="small primary" id="calNext" data-i18n="pv.calNext"></button><button class="ghost small" id="calRun" data-i18n="pv.calRun"></button></div>
+        <div class="cal-r2"><button class="ghost small" id="calBox" data-i18n="pv.calBox"></button><button class="ghost small" id="calCenter" data-i18n="pv.calCenter"></button></div>
+        <p class="cal-status" id="calStatus"></p>
+        <div class="cal-r2"><button class="ghost small" id="calSaveHelpers" data-i18n="pv.calSaveHelpers"></button><button class="ghost small" id="calSaveQuad" data-i18n="pv.calSaveQuad"></button></div>
+        <div class="cal-r3"><label><input type="checkbox" id="calIx"> <span data-i18n="set.invX"></span></label><label><input type="checkbox" id="calIy"> <span data-i18n="set.invY"></span></label><button class="ghost small" id="calReset" data-i18n="pv.calReset"></button></div>
+        <div class="muted small" id="calSummary"></div>
+      </div>
+      <label class="pv-zone"><span data-i18n="pv.zone"></span> <input type="range" id="zoneLive" min="0" max="100" value="0"><output id="zoneLiveOut"></output></label>
+    </div>
+    <div class="panel patpanel">
+      <div class="panel-head">
+        <h2 data-i18n="pat.title"></h2>
+        <div class="seg" id="patPages"></div>
+      </div>
+      <div class="patgrid" id="patGrid"></div>
+      <div class="patfoot">
+        <p class="hint" data-i18n="pat.hint"></p>
+        <button class="ghost small" id="patImport"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col col-look">
+    <div class="panel">
+      <div class="panel-head"><h2 data-i18n="color.title"></h2>
+        <label class="chk"><input type="checkbox" id="colorCycle"> <span data-i18n="color.cycle"></span></label>
+      </div>
+      <div class="swatches" id="swatches"></div>
+      <div class="row">
+        <label><span data-i18n="color.custom"></span> <input type="color" id="customColor" value="#31f3ac"></label>
+        <label class="grow"><span data-i18n="color.cycleSpeed"></span> <input type="range" id="colorCycleSpeed" min="0" max="100" value="30"></label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2 data-i18n="move.title"></h2><div class="spacer"></div><button class="ghost small" id="resetLook" data-i18n="move.reset"></button></div>
+      <div class="seg wide" id="moveSeg">
+        <button data-move="none" class="active" data-i18n="move.none"></button>
+        <button data-move="circle" data-i18n="move.circle"></button>
+        <button data-move="eight" data-i18n="move.eight"></button>
+        <button data-move="sweep" data-i18n="move.sweep"></button>
+        <button data-move="bounce" data-i18n="move.bounce"></button>
+      </div>
+      <div class="quick3" id="moveQuick"><button data-q="small" data-i18n="move.qSmall"></button><button data-q="mid" data-i18n="move.qMid"></button><button data-q="big" data-i18n="move.qBig"></button></div>
+      <div class="vbgrid">
+        <div class="vb" data-def="40"><span class="vb-l" data-i18n="move.amt"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="moveAmt" min="0" max="100" value="40"></div>
+        <div class="vb" data-def="30"><span class="vb-l" data-i18n="move.speed"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="moveSpeed" min="0" max="100" value="30"></div>
+        <div class="vb" data-def="80"><span class="vb-l" data-i18n="move.size"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="size" min="15" max="100" value="80"></div>
+        <div class="vb" data-def="0"><span class="vb-l" data-i18n="move.rot"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="rotSpeed" min="-100" max="100" value="0"></div>
+        <div class="vb" data-def="0"><span class="vb-l" data-i18n="move.angle"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="rotAngle" min="-180" max="180" value="0"></div>
+        <div class="vb" data-def="0"><span class="vb-l" data-i18n="move.pulse"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="pulse" min="0" max="100" value="0"></div>
+        <div class="vb" data-def="0"><span class="vb-l" data-i18n="move.strobe"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="strobe" min="0" max="100" value="0"></div>
+        <div class="vb" data-def="50"><span class="vb-l" data-i18n="move.fps"></span><span class="vb-v"></span><div class="vb-bar"><div class="vb-fill"></div><div class="vb-knob"></div></div><input type="range" id="fps" min="0" max="100" value="50"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="col col-auto">
+    <div class="panel autopanel">
+      <div class="panel-head"><h2 data-i18n="auto.title"></h2><span class="beat" id="beatLed"></span></div>
+      <div class="seg wide" id="autoSeg">
+        <button data-auto="off" class="active" data-i18n="auto.off"></button>
+        <button data-auto="mic" data-i18n="auto.mic"></button>
+        <button data-auto="laser" data-i18n="auto.laser"></button>
+      </div>
+      <div class="automsg" id="autoMsg"></div>
+      <div class="levelrow"><button class="ghost small" id="micTest"></button><div class="meter"><div id="level"></div><div id="thresh"></div></div><span class="db" id="levelDb">—</span></div>
+      <div class="bands"><div class="band"><div id="bandB"></div><span data-i18n="auto.bass"></span></div><div class="band"><div id="bandM"></div><span data-i18n="auto.mid"></span></div><div class="band"><div id="bandH"></div><span data-i18n="auto.hi"></span></div><p class="hint" data-i18n="auto.smart"></p></div>
+      <div class="laserinfo" id="laserInfo"><span class="lm-dot"></span><div><b data-i18n="auto.laserHead"></b><p data-i18n="auto.laserInfo"></p></div></div>
+      <div class="sliders senscol"><label><span data-i18n="auto.sens"></span> <input type="range" id="sens" min="0" max="100" value="55"><output></output></label></div>
+      <div class="autoinfo" id="autoInfo"><span class="ai-dot"></span><div><b data-i18n="auto.onHead"></b><p data-i18n="auto.onInfo"></p></div></div>
+    </div>
+
+    <div class="panel scenepanel">
+      <div class="panel-head"><h2 data-i18n="scene.title"></h2>
+        <button class="ghost small" id="storeMode" data-i18n="scene.store"></button>
+      </div>
+      <div class="scenes" id="scenes"></div>
+      <p class="hint" id="sceneHint"></p>
+    </div>
+  </div>
+
+  <div class="panel faderpanel">
+    <h2 data-i18n="fader.title"></h2>
+    <div class="fader" id="fader" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100">
+      <div class="f-scale"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+      <div class="f-track"><div class="f-danger" id="fDanger" data-i18n-title="fader.dangerTip"></div><div class="f-fill" id="fFill"></div><div class="f-cap" id="fCap"></div><div class="f-knob" id="fKnob"><i></i></div></div>
+    </div>
+    <div class="f-val" id="faderVal">25%</div>
+  </div>
+</section>
+
+<!-- ============ SHOW ============ -->
+<section class="page" id="page-show">
+  <div class="panel showbar">
+    <input class="showname" id="showName" spellcheck="false">
+    <button id="pickAudio" data-i18n="show.pick"></button>
+    <span class="muted" id="audioName"></span>
+    <div class="spacer"></div>
+    <button id="newShow" class="ghost" data-i18n="show.new"></button>
+    <button id="openShow" class="ghost" data-i18n="show.open"></button>
+    <button id="saveShow" data-i18n="show.save"></button>
+  </div>
+
+  <div class="panel">
+    <canvas id="timeline" height="140"></canvas>
+    <div class="transport">
+      <button id="play" class="play"></button>
+      <button id="stop" class="ghost" data-i18n="show.stop"></button>
+      <span class="time" id="time">0:00.0 / 0:00</span>
+      <div class="spacer"></div>
+      <label class="chk rec"><input type="checkbox" id="record"> <span data-i18n="show.rec"></span></label>
+      <button id="addCue" data-i18n="show.addCue"></button>
+      <button id="genShow" class="primary" data-i18n="gen.btn"></button>
+    </div>
+    <p class="hint" data-i18n="show.hint"></p>
+  </div>
+
+  <div class="panel cuepanel">
+    <div class="panel-head"><h2 data-i18n="show.cues"></h2><span class="muted" id="cueCount">0</span></div>
+    <table class="cues"><thead><tr><th data-i18n="show.thTime"></th><th data-i18n="show.thName"></th><th data-i18n="show.thLook"></th><th></th></tr></thead><tbody id="cueBody"></tbody></table>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<!-- ============ TASTER ============ -->
+<section class="page" id="page-keys">
+  <div class="panel keyspanel">
+    <div class="panel-head"><h2 data-i18n="keys.title"></h2><span class="hint" data-i18n="keys.hint"></span><div class="spacer"></div><button class="ghost small" id="keysClear" data-i18n="keys.clear"></button></div>
+    <div class="keyboard" id="keyboard"></div>
+  </div>
+</section>
+
+<!-- ============ DESIGNER ============ -->
+<section class="page" id="page-design">
+  <div class="panel dz-left">
+    <div class="panel-head"><h2 data-i18n="dz.title"></h2>
+      <div class="seg" id="dzMode"><button data-m="text" class="active" data-i18n="dz.text"></button><button data-m="draw" data-i18n="dz.draw"></button><button data-m="shape" data-i18n="dz.shape"></button><button data-m="combo" data-i18n="dz.combo"></button><button data-m="image" data-i18n="dz.image"></button></div>
+    </div>
+    <div class="dz-canvaswrap"><canvas id="dzCanvas"></canvas><span class="pv-label" data-i18n="dz.preview"></span><span class="dz-pts" id="dzPts"></span></div>
+    <p class="hint" id="dzHint"></p>
+  </div>
+  <div class="panel dz-right">
+    <div id="dzTextBox">
+      <h2 data-i18n="dz.textLabel"></h2>
+      <input id="dzText" class="dz-input" value="LASER" maxlength="24" spellcheck="false">
+      <div class="sliders">
+        <label><span data-i18n="dz.size"></span> <input type="range" id="dzSize" min="20" max="100" value="70"><output></output></label>
+        <label><span data-i18n="dz.bold"></span> <input type="range" id="dzBold" min="1" max="4" value="2"><output></output></label>
+      </div>
+    </div>
+    <div id="dzShapeBox" hidden>
+      <h2 data-i18n="dz.shapeLabel"></h2>
+      <div class="dz-shapes" id="dzShapes"></div>
+      <div class="sliders">
+        <label><span data-i18n="dz.size"></span> <input type="range" id="dzShapeSize" min="20" max="100" value="80"><output></output></label>
+        <label><span data-i18n="dz.sides"></span> <input type="range" id="dzSides" min="3" max="12" value="5"><output></output></label>
+      </div>
+    </div>
+    <div id="dzComboBox" hidden>
+      <h2 data-i18n="dz.comboLabel"></h2>
+      <p class="hint" data-i18n="dz.comboHint"></p>
+      <div class="dz-addrow"><input id="dzComboNum" type="number" min="1" max="255" value="1"><button class="ghost small" id="dzComboAdd" data-i18n="dz.comboAdd"></button></div>
+      <div class="dz-layers" id="dzLayers"></div>
+      <div class="sliders" id="dzLayerCtl" hidden>
+        <label><span data-i18n="dz.size"></span> <input type="range" id="dzLScale" min="5" max="100" value="50"><output></output></label>
+        <label><span data-i18n="dz.rot"></span> <input type="range" id="dzLRot" min="-180" max="180" value="0"><output></output></label>
+      </div>
+    </div>
+    <div id="dzImageBox" hidden>
+      <h2 data-i18n="dz.imageLabel"></h2>
+      <p class="hint" data-i18n="dz.imageHint"></p>
+      <div class="dz-addrow"><button class="ghost small" id="dzImgPick" data-i18n="dz.imgPick"></button><span class="muted small" id="dzImgName"></span><input type="file" id="dzImgFile" accept="image/*" hidden></div>
+      <div class="sliders">
+        <label><span data-i18n="dz.size"></span> <input type="range" id="dzImgSize" min="20" max="100" value="90"><output></output></label>
+        <label><span data-i18n="dz.imgDetail"></span> <input type="range" id="dzImgDetail" min="0" max="100" value="60"><output></output></label>
+        <label><span data-i18n="dz.imgColors"></span> <input type="range" id="dzImgColors" min="1" max="6" value="4"><output></output></label>
+        <label><span data-i18n="dz.imgSmooth"></span> <input type="range" id="dzImgSmooth" min="0" max="4" value="1"><output></output></label>
+        <label><span data-i18n="dz.imgMin"></span> <input type="range" id="dzImgMin" min="0" max="40" value="8"><output></output></label>
+      </div>
+      <label class="row"><span data-i18n="dz.imgBg"></span><span class="seg" id="dzImgBg"><button data-bg="auto" class="active" data-i18n="dz.imgBgAuto"></button><button data-bg="dark" data-i18n="dz.imgBgDark"></button><button data-bg="light" data-i18n="dz.imgBgLight"></button></span></label>
+      <label class="row"><input type="checkbox" id="dzImgOwnColor"> <span data-i18n="dz.imgOwnColor"></span></label>
+    </div>
+    <div id="dzDrawBox" hidden>
+      <h2 data-i18n="dz.drawLabel"></h2>
+      <p class="hint" data-i18n="dz.drawHint"></p>
+      <div class="row"><button class="ghost" id="dzUndo" data-i18n="dz.undo"></button><button class="ghost" id="dzClear" data-i18n="dz.clear"></button></div>
+    </div>
+    <h2 class="dz-h" data-i18n="dz.color"></h2>
+    <div class="swatches dz-sw" id="dzSw"></div>
+    <h2 class="dz-h" data-i18n="dz.anim"></h2>
+    <div class="seg wide" id="dzAnim"><button data-a="none" class="active" data-i18n="dz.aNone"></button><button data-a="rotate" data-i18n="dz.aRotate"></button><button data-a="pulse" data-i18n="dz.aPulse"></button><button data-a="wave" data-i18n="dz.aWave"></button><button data-a="write" data-i18n="dz.aWrite"></button></div>
+    <div class="dz-save">
+      <label><span data-i18n="dz.num"></span> <input id="dzNum" type="number" min="1" max="255" value="140"></label>
+      <button class="primary" id="dzSave" data-i18n="dz.save"></button>
+    </div>
+    <p class="hint" data-i18n-html="dz.saveHint"></p>
+  </div>
+</section>
+
+<section class="page" id="page-settings">
+  <div class="panel updpanel">
+    <h2 data-i18n="upd.title"></h2>
+    <div class="row"><span class="muted" id="updVersion"></span><div class="spacer"></div><button class="ghost small" id="updCheck" data-i18n="upd.check"></button><button class="primary small" id="updGo" hidden></button></div>
+    <p class="hint" id="updStatus"></p>
+  </div>
+  <div class="panel">
+    <h2 data-i18n="set.conn"></h2>
+    <div class="form">
+      <label><span data-i18n="set.dmxMode"></span> <select id="dmxMode"><option value="dj" data-i18n="set.modeDj"></option><option value="pro" data-i18n="set.modePro"></option></select></label>
+    <label class="row"><span data-i18n="set.posFmt"></span><select id="posFmt"><option value="u" data-i18n="set.posU"></option><option value="s" data-i18n="set.posS"></option></select></label>
+    <label class="row"><span data-i18n="set.posScaled"></span><input type="checkbox" id="posScaled"></label>
+    <label class="row"><span data-i18n="set.lineThin"></span><input type="range" id="lineThin" min="0" max="50" value="30"><output></output></label>
+      <label><span data-i18n="set.ip"></span> <input id="ip" value="2.255.255.255"></label>
+      <label><span data-i18n="set.universe"></span> <input id="universe" type="number" min="0" max="32767" value="0"></label>
+      <label><span data-i18n="set.autoUni"></span> <input type="checkbox" id="autoUniverse"></label>
+      <label><span data-i18n="set.address"></span> <input id="address" type="number" min="1" max="479" value="1"></label>
+      <label><span data-i18n="set.rate"></span> <input id="rate" type="number" min="10" max="44" value="40"></label>
+    </div>
+    <button id="findBtn" class="primary" data-i18n="diag.find"></button>
+    <button id="testBtn" data-i18n="set.test"></button>
+    <button id="reconnectBtn" data-i18n="set.reconnect"></button>
+    <button id="netRedo" class="ghost" data-i18n="set.netRedo"></button>
+    <button id="netRemove" class="ghost" data-i18n="set.netRemove"></button>
+    <p class="hint" id="netInfo"></p>
+    <p class="hint diag" id="diagInfo"></p>
+  </div>
+
+  <div class="panel">
+    <h2 data-i18n="set.safety"></h2>
+    <div class="form">
+      <label><span data-i18n="set.zone"></span> <input type="range" id="zone" min="0" max="100" value="0"><output></output></label>
+      <label><span data-i18n="set.zoneSide"></span> <select id="zoneSide"><option value="bottom" data-i18n="side.bottom"></option><option value="top" data-i18n="side.top"></option><option value="left" data-i18n="side.left"></option><option value="right" data-i18n="side.right"></option></select></label>
+      <label><span data-i18n="set.maxInt"></span> <input type="range" id="maxInt" min="5" max="100" value="100"><output></output></label>
+      <label><span data-i18n="set.startLow"></span> <input type="checkbox" id="startLow"></label>
+      <label><span data-i18n="set.sizeInv"></span> <input type="checkbox" id="sizeInv"></label>
+      <label><span data-i18n="set.sizeRange"></span> <input type="range" id="sizeRange" min="20" max="100" value="100"><output></output></label>
+      <label><span data-i18n="set.invX"></span> <input type="checkbox" id="invX"></label>
+      <label><span data-i18n="set.invY"></span> <input type="checkbox" id="invY"></label>
+      <label><span data-i18n="set.scan"></span> <select id="scan"><option value="0" data-i18n="scan.std"></option><option value="1" data-i18n="scan.slow"></option><option value="2" data-i18n="scan.mid"></option><option value="3" data-i18n="scan.fast"></option></select></label>
+      <label><span data-i18n="set.testPattern"></span> <input id="testPattern" type="number" min="1" max="255" value="112"></label>
+      <label><span data-i18n="set.linePattern"></span> <input id="linePattern" type="number" min="1" max="255" value="112"></label>
+      <label><span data-i18n="set.lineAuto"></span> <button class="ghost small" id="lineAuto" data-i18n="set.lineAutoBtn"></button></label>
+      <label><span data-i18n="set.lineStep"></span> <span class="linestep"><button class="ghost small" id="linePrev">◀</button><span id="lineNow">1</span><button class="ghost small" id="lineNext">▶</button></span></label>
+      <label><span data-i18n="set.patCount"></span> <input id="patCount" type="number" min="1" max="255" value="128"></label>
+    </div>
+    <p class="hint" data-i18n="set.safetyHint"></p>
+  </div>
+
+  <div class="panel guide">
+    <h2 data-i18n="guide.noLight"></h2>
+    <ol data-i18n-html="guide.noLightList"></ol>
+  </div>
+
+  <div class="panel guide">
+    <h2 data-i18n="guide.title"></h2>
+    <ol data-i18n-html="guide.list"></ol>
+    <p class="hint" data-i18n="guide.back"></p>
+  </div>
+</section>
+</main>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-box">
+    <h3 id="modalTitle"></h3>
+    <input id="modalInput" spellcheck="false">
+    <div class="modal-actions">
+      <button class="ghost" id="modalExtra" hidden></button>
+      <button class="ghost" id="modalExtra2" hidden></button>
+      <button class="ghost danger" id="modalExtra3" hidden></button>
+      <button class="ghost" id="modalExtra4" hidden></button>
+      <div class="spacer"></div>
+      <button class="ghost" id="modalCancel" data-i18n="modal.cancel"></button>
+      <button id="modalOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mobModal" hidden>
+  <div class="modal-box mob-box">
+    <div class="mob-head"><h3 data-i18n="mob.title"></h3><button class="ghost small" id="mobClose">✕</button></div>
+    <label class="chk mob-toggle"><input type="checkbox" id="mobEnable"> <span data-i18n="mob.enable"></span></label>
+    <div class="mob-body" id="mobBody">
+      <div class="mob-qr"><img id="mobQr" alt=""></div>
+      <div class="mob-side">
+        <ol class="mob-steps" data-i18n-html="mob.steps"></ol>
+        <div class="mob-url" id="mobUrl"></div>
+        <div class="mob-status" id="mobStatus"></div>
+        <button class="ghost small" id="mobNewKey" data-i18n="mob.newKey"></button>
+      </div>
+    </div>
+    <p class="hint" data-i18n="mob.hint"></p>
+  </div>
+</div>
+
+<div class="modal" id="armModal" hidden>
+  <div class="modal-box arm-box">
+    <div class="arm-head"><span class="arm-icon">⚠</span><div><h3 data-i18n="arm.title"></h3><p class="arm-sub" data-i18n="arm.sub"></p></div></div>
+    <p class="arm-text" data-i18n-html="arm.text"></p>
+    <label class="arm-chk"><input type="checkbox" id="armCheck"><span class="arm-tick"></span><span data-i18n="arm.check"></span></label>
+    <div class="arm-actions">
+      <button class="ghost" id="armCancel" data-i18n="modal.cancel"></button>
+      <button class="arm-go" id="armGo" disabled data-i18n="arm.go"></button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="diagModal" hidden>
+  <div class="modal-box diag-box">
+    <h3 data-i18n="diag.title"></h3>
+    <p class="diag-lead" data-i18n="diag.lead"></p>
+    <div class="diag-now" id="diagNow"></div>
+    <div class="diag-prog"><div id="diagBar"></div></div>
+    <div class="diag-fail" id="diagFail" hidden><b data-i18n="diag.failHead"></b><ol data-i18n-html="diag.failList"></ol></div>
+    <div class="modal-actions">
+      <button class="ghost" id="diagStop" data-i18n="diag.stop"></button>
+      <div class="spacer"></div>
+      <button class="primary big" id="diagYes" data-i18n="diag.yes"></button>
+    </div>
+  </div>
+</div>
+
+<script src="i18n.js"></script>
+<div class="modal" id="genModal" hidden>
+  <div class="modal-box gen-box">
+    <h3 data-i18n="gen.title"></h3>
+    <p class="muted" data-i18n="gen.lead"></p>
+    <div class="form gen-form">
+      <label><span data-i18n="gen.palette"></span> <select id="genPalette"><option value="auto" data-i18n="gen.pAuto"></option><option value="warm" data-i18n="gen.pWarm"></option><option value="cold" data-i18n="gen.pCold"></option><option value="rainbow" data-i18n="gen.pRainbow"></option></select></label>
+      <label><span data-i18n="gen.density"></span> <input type="range" id="genDensity" min="0" max="100" value="50"><output></output></label>
+      <label><span data-i18n="gen.pool"></span> <select id="genPool"><option value="favs" data-i18n="gen.poolFavs"></option><option value="all" data-i18n="gen.poolAll"></option><option value="presets" data-i18n="gen.poolPresets"></option></select></label>
+      <label class="gen-words"><span data-i18n="gen.words"></span> <span class="gen-wordsopts"><input type="checkbox" id="genWords"> <select id="genLang"><option value="da">Dansk</option><option value="en">English</option></select> <select id="genQuality"><option value="good" data-i18n="gen.qGood"></option><option value="fast" data-i18n="gen.qFast"></option></select></span></label>
+    </div>
+    <p class="hint" data-i18n-html="gen.wordsHint"></p>
+    <div class="gen-prog" id="genProg" hidden><div class="diag-prog"><div id="genBar"></div></div><span id="genStatus"></span></div>
+    <div class="modal-actions">
+      <button class="ghost" id="genCancel" data-i18n="modal.cancel"></button>
+      <div class="spacer"></div>
+      <button class="primary" id="genGo" data-i18n="gen.go"></button>
+    </div>
+  </div>
+</div>
+
+<script src="showgen.js"></script>
+<script src="words.js"></script>
+<script src="designer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
