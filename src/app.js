@@ -184,7 +184,7 @@ async function camStart() {
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); const sel = $('#camSel'); [...sel.options].forEach((o) => { const d = devs.find((x) => x.deviceId === o.value); if (d && d.label) o.textContent = d.label; });
   camDrawLoop();
 }
-function camClose() { camCal.state = 'idle'; camConfirmDone(false); $('#camAuto').hidden = false; $('#camRun').hidden = false; if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; } if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
+function camClose() { camCal.state = 'idle'; camConfirmDone(false); $('#camAuto').hidden = false; $('#camRun').hidden = false; $('#camSize').hidden = false; if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; } if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
 function camStatus(msg) { $('#camStatus').textContent = msg; }
 const CAM_W = 320, CAM_H = 180;
 function camGrab() { // nedskaleret gråtone-lignende (max-kanal) billede
@@ -430,6 +430,34 @@ async function camAuto() {
   }
   camStatus(map ? t('cam.autoDone', { n: map.pts.length, e: map.err.toFixed(1), r: Math.round(R * 100) }) : t('cam.fitFail'));
 }
+// ---- størrelses-test: laseren kører selv faderen igennem, kameraet måler, og retningen rettes automatisk ----
+async function camSizeTest() {
+  if (!camCal.stream) return; if (blackout) { camStatus(t('cam.needOn')); return; }
+  if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off'); if (!st.pattern) { camStatus(t('pat.noData')); return; }
+  camCal.state = 'sizing'; $('#camRun').hidden = true; $('#camAuto').hidden = true; $('#camSize').hidden = true;
+  const was = blackout; blackout = true; sendNow(); camStatus(t('cam.dark')); await sleep(500);
+  const d1 = camGrab(); await sleep(120); const d2 = camGrab(); camCal.dark = d1.map((v, i) => (v + d2[i]) / 2); blackout = was;
+  const posWas = [st.posX, st.posY], sizeWas = st.size; st.posX = 0; st.posY = 0; sm.x = 0; sm.y = 0; // midten – hele figuren i billedet
+  const measure = async () => { sendNow(); await sleep(600); const e1 = camExtent(camGrab(), camCal.dark); await sleep(80); const e2 = camExtent(camGrab(), camCal.dark); return e1 && e2 && Math.abs(e1.ext - e2.ext) <= Math.max(3, e1.ext * 0.25) ? Math.min(e1.ext, e2.ext) : null; };
+  // A) rå kurve: laser-værdi 0→127 – hvornår kan mønsteret ses, og hvor stort er det
+  camCal.active = true; camCal.send = [0, 0]; const sizes = [];
+  for (let c4 = 0; c4 <= 127 && camCal.state === 'sizing'; c4 += 4) { camCal.ch4 = Math.min(127, c4); const e = await measure(); sizes.push({ ch4: camCal.ch4, ext: e }); camStatus(t('cam.sizeScan', { v: camCal.ch4, e: e ? e + ' px' : '–', ok: sizes.filter((x) => x.ext).length })); }
+  camCal.ch4 = null; camCal.send = null; camCal.active = false;
+  const vis = sizes.filter((x) => x.ext);
+  if (camCal.state !== 'sizing') { st.posX = posWas[0]; st.posY = posWas[1]; st.size = sizeWas; return; }
+  if (vis.length >= 3) { cfg.sizeMap = vis; const pe = patExtent(st.pattern); cfg.sizeMapExt = Math.max(0.05, Math.max(pe.x, pe.y)); cfg.sizeMapPattern = st.pattern; }
+  // B) gennem faderen: 0 → 100 % – bliver figuren større? Ellers vendes faderen, og der måles igen
+  const viaFader = async () => { const out_ = []; for (const pct of [0, 0.25, 0.5, 0.75, 1]) { if (camCal.state !== 'sizing') break; st.size = pct; sm.size = pct; const e = await measure(); out_.push({ pct, ext: e }); camStatus(t('cam.faderScan', { p: Math.round(pct * 100), e: e ? e + ' px' : '–' })); } return out_; };
+  let run = await viaFader(); const ok = (r) => r.filter((x) => x.ext);
+  const trend = (r) => { const v = ok(r); return v.length >= 2 ? v[v.length - 1].ext - v[0].ext : 0; };
+  let flipped = false;
+  if (trend(run) < 0) { cfg.sizeFlip = !cfg.sizeFlip; saveCfg(); flipped = true; run = await viaFader(); }
+  st.posX = posWas[0]; st.posY = posWas[1]; st.size = sizeWas; sm.size = sizeWas; saveCfg(); sendNow(); if (typeof syncLookUI === 'function') syncLookUI();
+  $('#camRun').hidden = false; $('#camAuto').hidden = false; $('#camSize').hidden = false; camCal.state = 'idle';
+  const v = ok(run); const txt = v.map((x) => `${Math.round(x.pct * 100)} % → ${x.ext} px`).join(' · ');
+  camStatus(t(trend(run) > 0 ? 'cam.sizeDone' : 'cam.sizeBad', { n: vis.length, f: flipped ? t('cam.sizeFlipped') : '', r: txt }));
+  const inp = $('#sizeFlip'); if (inp) inp.checked = !!cfg.sizeFlip;
+}
 function camSave() {
   if (camCal.state !== 'corners') return;
   const map = camBuildMap(camCal.pts, camCal.corners, camCal.sizes, { size: camCal.size });
@@ -502,6 +530,7 @@ function camDrawLoop() {
   $('#camOk').onclick = () => camConfirmDone(true); $('#camSkip').onclick = () => camConfirmDone(false);
   $('#camFollow').onclick = () => camFollowToggle().catch((e) => camStatus(e.message)); $('#camFix').onclick = camFix;
   $('#camAuto').onclick = () => camAuto().catch((e) => camStatus(e.message));
+  $('#camSize').onclick = () => camSizeTest().catch((e) => camStatus(e.message));
   $('#camSel').onchange = () => camStart().catch((e) => camStatus(t('cam.noCam') + ' ' + (e.name || '') + ' ' + e.message));
   $('#camRefresh').onclick = () => camOpen();
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (!$('#camModal').hidden && camCal.state === 'idle') camOpen(); });
