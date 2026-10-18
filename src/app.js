@@ -23,14 +23,14 @@ const DEFAULT_LOOK = {
   pattern: 1, color: { mode: 'orig', rgb: [255, 255, 255] }, colorCycle: false, colorCycleSpeed: 0.3,
   move: 'none', moveAmt: 0.4, moveSpeed: 0.3, size: 0.8, rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, fps: 0.5, posX: 0, posY: 0, freeze: false,
 };
-const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, sizeFlip: true, quadFix: true, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
+const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, sizeFlip: false, quadFix: true, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
 Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
 const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 if (!cfg.mig1810) { cfg.posScaled = false; cfg.mig1810 = true; }
 if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; }
-if (!cfg.mig1810c) { cfg.sizeFlip = true; cfg.mig1810c = true; } // 19/10: faderen var vendt (0 % = størst) – vend den // målt: størrelses-kanalen vender modsat af hvad jeg antog
+if (!cfg.mig1810c) { cfg.sizeFlip = false; cfg.mig1810c = true; } // målt: størrelses-kanalen vender modsat af hvad jeg antog
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
 cfg.calib = Object.assign({ T: 0.9, B: -0.9, L: -0.9, R: 0.9 }, cfg.calib || {});
@@ -293,7 +293,9 @@ function camPatHalfSent(size) { // mønsterets halve udstrækning i sendte enhed
   let extPx = pts[pts.length - 1].ext; if (ch4 <= pts[0].ch4) extPx = pts[0].ext; else for (let i = 1; i < pts.length; i++) if (ch4 <= pts[i].ch4) { const a = pts[i - 1], b = pts[i]; extPx = a.ext + (b.ext - a.ext) * (ch4 - a.ch4) / Math.max(1, b.ch4 - a.ch4); break; }
   const [u, v] = m.Hac ? hApply(m.Hac, 0, 0) : [CAM_W / 2, CAM_H / 2]; const [s0x, s0y] = hApply(m.Hcs, u, v), [s1x, s1y] = hApply(m.Hcs, u + 1, v), [s2x, s2y] = hApply(m.Hcs, u, v + 1);
   const scale = (Math.hypot(s1x - s0x, s1y - s0y) + Math.hypot(s2x - s0x, s2y - s0y)) / 2; // sendte enheder pr. kamera-pixel
-  return clamp(extPx / 2 * scale * 1.08, 0, 0.95); // lille margen så kanten aldrig klemmes
+  // kurven blev målt med ét bestemt mønster – skalér til det aktuelle mønsters egen udstrækning i filen
+  const pe = patExtent(st.pattern), rel = cfg.sizeMapExt ? Math.max(0.05, Math.max(pe.x, pe.y)) / cfg.sizeMapExt : 1;
+  return clamp(extPx / 2 * scale * rel * 1.08, 0, 0.95); // lille margen så kanten aldrig klemmes
 }
 function camAppToSend(ax, ay) { // app (-1..1, y op) → sendt: via kamerabilledet + rest-korrektion
   const m = cfg.camMap; if (!m || !m.Hac) return hApply(m.H, ax, ay);
@@ -313,7 +315,7 @@ function camBuildMap(pts, corners, sizes, meta) { // sendt→kamera-punkter + va
   const map = { H: fit.H, Hi, Hsc, Hcs, Hac: Hac ? Hac.H : null, res: resBuild(pts, Hcs), pts: pts.map((p) => p.slice()), corners: corners.map((p) => p.slice()), aspect: clamp(((wTop + wBot) / 2) / Math.max(1, (hL + hR) / 2), 0.3, 4), err: rf.err, at: Date.now(), ...(meta || {}) };
   cfg.camMap = map;
   cfg.calPts = { TL: { x: sent[0][0], y: sent[0][1] }, TR: { x: sent[1][0], y: sent[1][1] }, BR: { x: sent[2][0], y: sent[2][1] }, BL: { x: sent[3][0], y: sent[3][1] } };
-  if (sizes && sizes.length >= 3) cfg.sizeMap = sizes;
+  if (sizes && sizes.length >= 3) { cfg.sizeMap = sizes; const pe = patExtent(meta && meta.pattern || st.pattern); cfg.sizeMapExt = Math.max(0.05, Math.max(pe.x, pe.y)); cfg.sizeMapPattern = meta && meta.pattern || st.pattern; }
   cfg.cal.ix = false; cfg.cal.iy = false; calApply(); cfg.calibDone = true; cfg.posMap = null; saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
   return map;
 }
@@ -2195,6 +2197,7 @@ async function netCheck() {
   bar.className = 'netbar'; btn.hidden = true;
   const node = n.found[0];
   if (node && cfg.autoUniverse && node.universe !== undefined && node.universe !== cfg.universe) { cfg.universe = node.universe; $('#universe').value = node.universe; saveCfg(); }
+  { const sm_ = cfg.sizeMap; const el = $('#sizeDiag'); if (el) el.textContent = sm_ ? t('set.sizeDiag', { n: sm_.filter((p) => p.ext).length, p: cfg.sizeMapPattern || '?', lo: Math.min(...sm_.filter((p) => p.ext).map((p) => p.ch4)), hi: Math.max(...sm_.filter((p) => p.ext).map((p) => p.ch4)), cur: sizeCh4(st.size), pct: Math.round(st.size * 100) }) : ''; }
   $('#diagInfo').textContent = node ? t('diag.info', { ip: node.ip, name: node.longName || node.name, u: node.universe, rep: node.report || '—' }) : t('diag.noNode');
   if (n.found.length) {
     bar.className = 'netbar ok';
