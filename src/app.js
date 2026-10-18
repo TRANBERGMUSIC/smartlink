@@ -23,7 +23,7 @@ const DEFAULT_LOOK = {
   pattern: 1, color: { mode: 'orig', rgb: [255, 255, 255] }, colorCycle: false, colorCycleSpeed: 0.3,
   move: 'none', moveAmt: 0.4, moveSpeed: 0.3, size: 0.8, rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, fps: 0.5, posX: 0, posY: 0, freeze: false,
 };
-const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: false, sizeRange: 1, posScaled: false, camPattern: 38, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
+const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: false, sizeRange: 1, posScaled: false, camPattern: 38, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
 Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
@@ -81,8 +81,10 @@ function setCh(ch, v) { const i = cfg.address - 1 + ch - 1; if (i >= 0 && i < 51
 // NB: målt på laseren – 0–63 dækker TOPPEN og 64–127 BUNDEN (modsat Laserworlds tabel). Venstre/højre uændret.
 function zoneVal() {
   if (!(cfg.zone > 0)) return 0;
+  // målt på DS-3000 (bund): værdierne under ~104 giver zonen igen fra midten – det brugbare område er zoneLo…zoneHi
   const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64;
-  return base + Math.max(1, Math.round(cfg.zone * 63));
+  const lo = clamp(cfg.zoneLo ?? 40, 1, 63), hi = clamp(cfg.zoneHi ?? 63, lo + 1, 63);
+  return base + Math.round(lo + cfg.zone * (hi - lo));
 }
 const YF = () => (cfg.yFlip ? -1 : 1); // laserens Y-akse vender modsat skærmens
 // ---------- særlige billeder: test-streg og zonegrænse tegnet af laseren ----------
@@ -139,20 +141,28 @@ async function camOpen() {
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
     const sel = $('#camSel'); sel.innerHTML = ''; devs.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || t('cam.dev', { n: i + 1 }); sel.appendChild(o); });
     if (cfg.camId && devs.some((d) => d.deviceId === cfg.camId)) sel.value = cfg.camId;
+    if (!devs.length) { camStatus(t('cam.none')); }
     await camStart();
-  } catch (e) { camStatus(t('cam.noCam') + ' ' + e.message); }
+    if (!$('#camStatus').textContent || $('#camStatus').textContent === t('cam.opening')) camStatus(t('cam.intro'));
+  } catch (e) { camStatus(t('cam.noCam') + ' ' + (e.name || '') + ' ' + e.message + ' – ' + t('cam.hintPhone')); }
 }
 async function camStart() {
   if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop());
   const id = $('#camSel').value; cfg.camId = id; saveCfg();
-  camCal.stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+  camStatus(t('cam.opening'));
+  try { camCal.stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+  catch (e) { // iPhone væk / gammelt id → prøv et hvilket som helst kamera
+    camCal.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    const tr = camCal.stream.getVideoTracks()[0]; const sid = tr.getSettings && tr.getSettings().deviceId; if (sid) { $('#camSel').value = sid; cfg.camId = sid; saveCfg(); }
+    camStatus(t('cam.fallback', { e: e.name || e.message }));
+  }
   const v = $('#camVideo'); v.srcObject = camCal.stream; await v.play();
   try { const tr = camCal.stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : null; if (caps && caps.zoom && typeof caps.zoom.min === 'number') { await tr.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); camCal.zoomed = caps.zoom.min; } } catch (_) {}
   // labels bliver først tilgængelige efter tilladelse – opdatér listen
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); const sel = $('#camSel'); [...sel.options].forEach((o) => { const d = devs.find((x) => x.deviceId === o.value); if (d && d.label) o.textContent = d.label; });
   camDrawLoop();
 }
-function camClose() { camCal.state = 'idle'; camConfirmDone(false); if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
+function camClose() { camCal.state = 'idle'; camConfirmDone(false); if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; } if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
 function camStatus(msg) { $('#camStatus').textContent = msg; }
 const CAM_W = 320, CAM_H = 180;
 function camGrab() { // nedskaleret gråtone-lignende (max-kanal) billede
@@ -240,20 +250,45 @@ async function camMeasure() {
   camCal.frame = camGrab(); camCal.state = 'corners'; camStatus(t('cam.corners', { n: camCal.pts.length, e: fit.err.toFixed(1), d: camCal.dropped }));
   $('#camSave').hidden = false;
 }
+function camBuildMap(pts, corners, sizes, meta) { // sendt→kamera-punkter + valgte hjørner (kamera) → app→sendt homografi
+  const rf = hFit(pts); if (!rf) return null; const Hsc = rf.H, Hcs = hInv(Hsc); if (!Hcs) return null;
+  const sent = corners.map(([u, v]) => hApply(Hcs, u, v));
+  const sq = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+  const fit = hFit(sq.map((p, i) => [p[0], p[1], sent[i][0], sent[i][1]])); if (!fit) return null;
+  const Hi = hInv(fit.H); if (!Hi) return null;
+  const c = corners, wTop = Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]), wBot = Math.hypot(c[2][0] - c[3][0], c[2][1] - c[3][1]), hL = Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]), hR = Math.hypot(c[2][0] - c[1][0], c[2][1] - c[1][1]);
+  const map = { H: fit.H, Hi, Hsc, Hcs, pts: pts.map((p) => p.slice()), corners: corners.map((p) => p.slice()), aspect: clamp(((wTop + wBot) / 2) / Math.max(1, (hL + hR) / 2), 0.3, 4), err: rf.err, at: Date.now(), ...(meta || {}) };
+  cfg.camMap = map;
+  cfg.calPts = { TL: { x: sent[0][0], y: sent[0][1] }, TR: { x: sent[1][0], y: sent[1][1] }, BR: { x: sent[2][0], y: sent[2][1] }, BL: { x: sent[3][0], y: sent[3][1] } };
+  if (sizes && sizes.length >= 3) cfg.sizeMap = sizes;
+  cfg.cal.ix = false; cfg.cal.iy = false; calApply(); cfg.calibDone = true; cfg.posMap = null; saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
+  return map;
+}
 function camSave() {
   if (camCal.state !== 'corners') return;
-  const rf = hFit(camCal.pts); if (!rf) { camStatus(t('cam.fitFail')); return; } camCal.H = rf.H; camCal.Hi = hInv(rf.H); camCal.err = rf.err; if (!camCal.Hi) { camStatus(t('cam.fitFail')); return; }
-  // hjørner i kamera → sendte værdier → homografi fra app-firkanten (-1..1, y op) til sendte værdier
-  const sent = camCal.corners.map(([u, v]) => hApply(camCal.Hi, u, v));
-  const sq = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
-  const fit = hFit(sq.map((p, i) => [p[0], p[1], sent[i][0], sent[i][1]])); if (!fit) { camStatus(t('cam.fitFail')); return; }
-  const Hi = hInv(fit.H); if (!Hi) { camStatus(t('cam.fitFail')); return; }
-  const c = camCal.corners, wTop = Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]), wBot = Math.hypot(c[2][0] - c[3][0], c[2][1] - c[3][1]), hL = Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]), hR = Math.hypot(c[2][0] - c[1][0], c[2][1] - c[1][1]);
-  cfg.camMap = { H: fit.H, Hi, aspect: clamp(((wTop + wBot) / 2) / Math.max(1, (hL + hR) / 2), 0.3, 4), size: camCal.size, err: camCal.err, at: Date.now(), pts: camCal.pts.length };
-  // hold de gamle felter nogenlunde i sync (zone-streg, boks-mønster m.m. bruger dem)
-  cfg.calPts = { TL: { x: sent[0][0], y: sent[0][1] }, TR: { x: sent[1][0], y: sent[1][1] }, BR: { x: sent[2][0], y: sent[2][1] }, BL: { x: sent[3][0], y: sent[3][1] } };
-  if (camCal.sizes && camCal.sizes.length >= 3) cfg.sizeMap = camCal.sizes; cfg.cal.ix = false; cfg.cal.iy = false; calApply(); cfg.calibDone = true; cfg.posMap = null; saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
-  toast(t('cam.saved', { n: camCal.pts.length, e: camCal.err.toFixed(1) })); camClose();
+  const map = camBuildMap(camCal.pts, camCal.corners, camCal.sizes, { size: camCal.size });
+  if (!map) { camStatus(t('cam.fitFail')); return; }
+  toast(t('cam.saved', { n: map.pts.length, e: map.err.toFixed(1) })); camClose();
+}
+// ---- følg med kameraet: se om mønsteret lander hvor appen tror, og tilret omsætningen med ét klik ----
+async function camFollowToggle() {
+  if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; camStatus(t('cam.intro')); return; }
+  if (!camCal.stream || !cfg.camMap || !cfg.camMap.Hsc) { camStatus(t('cam.needMap')); return; }
+  if (blackout) { camStatus(t('cam.needOn')); return; }
+  const was = blackout; blackout = true; sendNow(); camStatus(t('cam.dark')); await sleep(450);
+  const d1 = camGrab(); await sleep(120); const d2 = camGrab(); camCal.dark = d1.map((v, i) => (v + d2[i]) / 2); blackout = was; sendNow();
+  $('#camFollow').classList.add('on'); $('#camFix').hidden = false;
+  camCal.follow = setInterval(() => {
+    if (!cfg.camMap || !out.on || !st.pattern) { camCal.track = null; return; }
+    const b = camBlob(camGrab(), camCal.dark); const exp = hApply(cfg.camMap.Hsc, out.sendX, out.sendY);
+    camCal.track = { found: b ? [b.x, b.y] : null, exp, send: [out.sendX, out.sendY] };
+    camStatus(b ? t('cam.followDev', { d: Math.hypot(b.x - exp[0], b.y - exp[1]).toFixed(0) }) : t('cam.followNone'));
+  }, 300);
+}
+function camFix() { // tilføj den aktuelle observation og regn omsætningen om
+  const tr = camCal.track; if (!tr || !tr.found || !cfg.camMap) return;
+  const pts = cfg.camMap.pts.filter((p) => Math.hypot(p[0] - tr.send[0], p[1] - tr.send[1]) > 0.05); pts.push([tr.send[0], tr.send[1], tr.found[0], tr.found[1]]);
+  const map = camBuildMap(pts, cfg.camMap.corners, cfg.sizeMap, { size: cfg.camMap.size }); if (map) toast(t('cam.fixed', { n: map.pts.length, e: map.err.toFixed(1) }));
 }
 function camDrawLoop() {
   const cv = $('#camCanvas'); if (!cv || $('#camModal').hidden) return;
@@ -266,6 +301,7 @@ function camDrawLoop() {
   if (camCal.state === 'corners' && camCal.H) { // hvor omsætningen forventer hvert målepunkt
     g.save(); g.strokeStyle = 'rgba(49,243,172,.4)'; g.lineWidth = 1; for (const q of CAM_GRID) { const [u, v] = hApply(camCal.H, q[0], q[1]); g.beginPath(); g.arc(u * fx, v * fy, 10, 0, Math.PI * 2); g.stroke(); } g.restore();
   }
+  if (camCal.track) { const tr = camCal.track; g.save(); g.lineWidth = 2; g.strokeStyle = '#ff3b5c'; g.beginPath(); g.arc(tr.exp[0] * fx, tr.exp[1] * fy, 14, 0, Math.PI * 2); g.stroke(); if (tr.found) { g.fillStyle = '#31f3ac'; g.beginPath(); g.arc(tr.found[0] * fx, tr.found[1] * fy, 6, 0, Math.PI * 2); g.fill(); g.strokeStyle = 'rgba(255,255,255,.6)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(tr.exp[0] * fx, tr.exp[1] * fy); g.lineTo(tr.found[0] * fx, tr.found[1] * fy); g.stroke(); } g.restore(); }
   if (camCal.cur) { const c = camCal.cur; g.save(); g.strokeStyle = c.found ? '#31f3ac' : '#ffaa3c'; g.lineWidth = 3; g.setLineDash([]); g.beginPath(); g.arc(c.x * fx, c.y * fy, 22, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(c.x * fx - 30, c.y * fy); g.lineTo(c.x * fx + 30, c.y * fy); g.moveTo(c.x * fx, c.y * fy - 30); g.lineTo(c.x * fx, c.y * fy + 30); g.stroke(); g.fillStyle = g.strokeStyle; g.font = '700 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('cam.dragHere'), c.x * fx, c.y * fy - 30); g.restore(); }
   if (camCal.state === 'corners' && camCal.corners) {
     g.save(); g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.beginPath(); camCal.corners.forEach(([x, y], i) => (i ? g.lineTo(x * fx, y * fy) : g.moveTo(x * fx, y * fy))); g.closePath(); g.stroke();
@@ -291,7 +327,10 @@ function camDrawLoop() {
   $('#camOpen').onclick = camOpen; $('#camClose').onclick = camClose; $('#camRun').onclick = camMeasure; $('#camSave').onclick = camSave;
   $('#camPat').value = cfg.camPattern || 38; $('#camPat').onchange = () => { cfg.camPattern = clamp(+$('#camPat').value || 38, 1, 255); saveCfg(); };
   $('#camOk').onclick = () => camConfirmDone(true); $('#camSkip').onclick = () => camConfirmDone(false);
-  $('#camSel').onchange = () => camStart().catch((e) => camStatus(e.message));
+  $('#camFollow').onclick = () => camFollowToggle().catch((e) => camStatus(e.message)); $('#camFix').onclick = camFix;
+  $('#camSel').onchange = () => camStart().catch((e) => camStatus(t('cam.noCam') + ' ' + (e.name || '') + ' ' + e.message));
+  $('#camRefresh').onclick = () => camOpen();
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (!$('#camModal').hidden && camCal.state === 'idle') camOpen(); });
   $('#camReset').onclick = () => { cfg.camMap = null; cfg.sizeMap = null; saveCfg(); toast(t('cam.cleared')); camClose(); };
 })();
 // ---- måling af placering: laseren viser mønsteret på 9 kendte rå værdier, brugeren trykker hvor det ramte ----
@@ -972,7 +1011,7 @@ let zoneDrag = false, moveMode = false, posDrag = null, calDrag = null;
     if (centerDrag) { setLaserCenterApp(clamp(u * 2 - 1, -1.5, 1.5), clamp(1 - v * 2, -1.5, 1.5)); return; }
     if (calDrag) { const p = calPt(); p.x = clamp(calDrag.x0 + (u - calDrag.u0) * 2 * calDrag.sx, -1, 1); p.y = clamp(calDrag.y0 - (v - calDrag.v0) * 2 * calDrag.sy, -1, 1); cfg.quadSaved = false; calApply(); syncCalUI(); }
     else if (zoneDrag) applyZoneDrag(u, v);
-    else if (posDrag) { st.posX = clamp(posDrag.x0 + (u - posDrag.u0) * 2, -1, 1); st.posY = clamp(posDrag.y0 - (v - posDrag.v0) * 2, -1, 1); clampPosToReach(); saveLook(); syncSizeUI(); }
+    else if (posDrag) { st.posX = clamp(posDrag.x0 + (u - posDrag.u0) * 2, -1, 1); st.posY = clamp(posDrag.y0 - (v - posDrag.v0) * 2, -1, 1); saveLook(); syncSizeUI(); }
   });
   const up = () => { zoneDrag = false; posDrag = null; calDrag = null; if (centerDrag) { centerDrag = false; toast(t('pv.centerMoved')); } };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
@@ -992,7 +1031,7 @@ function clampPosToReach() {
   st.posX = clamp(ax, -1, 1); st.posY = clamp(ay / YF(), -1, 1);
 }
 function setSize(v) { st.size = clamp(v, 0.15, 1); saveLook(); syncLookUI(); syncSizeUI(); sendNow(); }
-function setPos(k, v) { st[k] = clamp(v, -1, 1); clampPosToReach(); saveLook(); syncSizeUI(); sendNow(); }
+function setPos(k, v) { st[k] = clamp(v, -1, 1); saveLook(); syncSizeUI(); sendNow(); }
 function syncSizeUI() {
   const sz = Math.round(st.size * 100), px = Math.round(st.posX * 100), py = Math.round(st.posY * 100);
   if (+$('#sizeLive').value !== sz) $('#sizeLive').value = sz; $('#sizeLiveOut').textContent = sz + '%';
@@ -1172,7 +1211,7 @@ function previewTick(now) {
         const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * out.size * out.calScale; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]);
         // område hvor mønsterets MIDTE kan stå ved denne størrelse (laseren ganger positionen med størrelsen)
         if (out.reach) {
-          const [a1, b1] = rawToApp(-out.reach.x, out.reach.y), [a2, b2] = rawToApp(out.reach.x, -out.reach.y);
+          const back = (rx, ry) => (cfg.camMap ? hApply(cfg.camMap.Hi, rx, ry) : rawToApp(rx, ry)); const [a1, b1] = back(-out.reach.x, out.reach.y), [a2, b2] = back(out.reach.x, -out.reach.y);
           const [p1x, p1y] = boxPt(B, a1, b1), [p2x, p2y] = boxPt(B, a2, b2);
           g.save(); g.strokeStyle = out.clamped ? 'rgba(255,170,60,.75)' : 'rgba(255,170,60,.35)'; g.setLineDash([6, 5]); g.lineWidth = 1.5; g.strokeRect(p1x, p1y, p2x - p1x, p2y - p1y); g.setLineDash([]);
           g.fillStyle = out.clamped ? 'rgba(255,170,60,.95)' : 'rgba(255,170,60,.6)'; g.font = '600 11px -apple-system'; g.textAlign = 'center';
@@ -1780,7 +1819,7 @@ function bindSetting(id, key, conv = (v) => v, outFmt) {
   const el = $('#' + id);
   const out = el.parentElement.querySelector('output');
   if (el.type === 'checkbox') el.checked = !!cfg[key];
-  else if (el.type === 'range') el.value = cfg[key] * 100;
+  else if (el.type === 'range') el.value = (key === 'zoneLo' || key === 'zoneHi') ? cfg[key] : cfg[key] * 100;
   else el.value = cfg[key];
   if (out && outFmt) out.textContent = outFmt(el.value);
   el.addEventListener(el.type === 'range' ? 'input' : 'change', () => {
@@ -1806,6 +1845,7 @@ $('#maxInt').addEventListener('input', () => updatePowerUI());
 bindSetting('startLow', 'startLow');
 bindSetting('invX', 'invX'); bindSetting('invY', 'invY');
 bindSetting('posFmt', 'posFmt'); bindSetting('posScaled', 'posScaled');
+bindSetting('zoneLo', 'zoneLo', (v) => +v, (v) => String(v)); bindSetting('zoneHi', 'zoneHi', (v) => +v, (v) => String(v));
 bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');
 bindSetting('scan', 'scan', (v) => +v);
 bindSetting('patCount', 'patCount', (v) => clamp(+v | 0, 1, 255));
@@ -1879,7 +1919,13 @@ document.addEventListener('keydown', (e) => {
   const kk = (e.key || '').toLowerCase();
   if (e.code === 'Space') { e.preventDefault(); tap(); }
   else if (!e.metaKey && !e.ctrlKey && !e.altKey && keymap[kk] && !e.repeat) { if (st.pattern === keymap[kk]) { setPattern(0); recordHook(t('pat.offName')); } else { setPattern(keymap[kk]); recordHook(t('pat.name', { n: keymap[kk] })); } flashKey(kk); }
-  else if (e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); const d = e.shiftKey ? 0.05 : 0.01; if (e.key === 'ArrowLeft') setPos('posX', st.posX - d); if (e.key === 'ArrowRight') setPos('posX', st.posX + d); if (e.key === 'ArrowUp') setPos('posY', st.posY + d); if (e.key === 'ArrowDown') setPos('posY', st.posY - d); }
+  else if (e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault(); const d = e.shiftKey ? 0.05 : 0.01;
+    const zoneFocus = document.activeElement === $('#zoneLive') || special === 'zone' || zoneDrag;
+    if (zoneFocus) { // sikkerhedszone: op/ned (eller venstre/højre) = 1 % ad gangen
+      const dir = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1; cfg.zone = clamp(Math.round((cfg.zone + dir * d) * 100) / 100, 0, 0.9); saveCfg(); syncZoneUI(); sendNow();
+    } else { if (e.key === 'ArrowLeft') setPos('posX', st.posX - d); if (e.key === 'ArrowRight') setPos('posX', st.posX + d); if (e.key === 'ArrowUp') setPos('posY', st.posY + d); if (e.key === 'ArrowDown') setPos('posY', st.posY - d); }
+  }
   else if (e.key === 'b' || e.key === 'B') requestArm();
   else if (e.key === 'Escape') setBlackout(true);
   else if (/^[1-9]$/.test(e.key) && scenes[+e.key - 1]) { recallScene(+e.key - 1); recordHook(scenes[+e.key - 1].name); }

@@ -283,6 +283,8 @@
       <label><span data-i18n="set.dmxMode"></span> <select id="dmxMode"><option value="dj" data-i18n="set.modeDj"></option><option value="pro" data-i18n="set.modePro"></option></select></label>
     <label class="row"><span data-i18n="set.posFmt"></span><select id="posFmt"><option value="u" data-i18n="set.posU"></option><option value="s" data-i18n="set.posS"></option></select></label>
     <label class="row"><span data-i18n="set.posScaled"></span><input type="checkbox" id="posScaled"></label>
+    <label class="row"><span data-i18n="set.zoneLo"></span><input type="range" id="zoneLo" min="1" max="62" value="40"><output></output></label>
+    <label class="row"><span data-i18n="set.zoneHi"></span><input type="range" id="zoneHi" min="2" max="63" value="63"><output></output></label>
     <label class="row"><span data-i18n="set.lineThin"></span><input type="range" id="lineThin" min="0" max="50" value="30"><output></output></label>
       <label><span data-i18n="set.ip"></span> <input id="ip" value="2.255.255.255"></label>
       <label><span data-i18n="set.universe"></span> <input id="universe" type="number" min="0" max="32767" value="0"></label>
@@ -336,12 +338,14 @@
 <div class="modal" id="camModal" hidden>
   <div class="modal-box cam-box">
     <h3 data-i18n="cam.title"></h3>
-    <div class="cam-row"><label><span data-i18n="cam.camera"></span><select id="camSel"></select></label><label class="cam-pat"><span data-i18n="cam.pattern"></span><input type="number" id="camPat" min="1" max="255" value="38"></label></div>
+    <div class="cam-row"><label><span data-i18n="cam.camera"></span><select id="camSel"></select><button class="ghost small" id="camRefresh" data-i18n="cam.refresh"></button></label><label class="cam-pat"><span data-i18n="cam.pattern"></span><input type="number" id="camPat" min="1" max="255" value="38"></label></div>
     <div class="cam-view"><video id="camVideo" autoplay muted playsinline></video><canvas id="camCanvas"></canvas></div>
     <p class="cam-status" id="camStatus"></p>
     <div class="modal-actions">
       <button class="ghost danger" id="camReset" data-i18n="cam.reset"></button>
       <button class="ghost" id="camClose" data-i18n="cam.close"></button>
+      <button class="ghost" id="camFollow" data-i18n="cam.follow"></button>
+      <button class="ghost" id="camFix" data-i18n="cam.fix" hidden></button>
       <button class="ghost" id="camSkip" data-i18n="cam.skip" hidden></button>
       <button class="primary" id="camOk" data-i18n="cam.ok" hidden></button>
       <button class="ghost" id="camRun" data-i18n="cam.run"></button>
