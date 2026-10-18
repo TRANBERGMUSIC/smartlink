@@ -595,14 +595,13 @@ function pos16(ch, v, raw = false) {
 function fpsFrac(f) { return clamp(f, 0.02, 1); } // lineært: 0 % = næsten frosset, 50 % = 50 fps, 100 % = 100 fps
 function sizeCh4(size) {
   if (camCal.active && camCal.ch4 != null) return camCal.ch4;
-  // målt med kameraet: ønsket virkelig størrelse (andel af den største målte) → DMX-værdi, lineært mellem målepunkter
-  const sm_ = cfg.sizeMap; if (sm_ && sm_.length >= 3) {
-    const pts = [...sm_].filter((p) => p.ext).sort((a, b) => a.ext - b.ext); if (pts.length < 3) return 64; const mn = pts[0].ext, mx = pts[pts.length - 1].ext;
-    if (cfg.sizeFlip) size = clamp(1.15 - clamp(size, 0.15, 1), 0.15, 1); // vend faderen hvis kurven er målt omvendt
-    const want = mn + (clamp(size, 0.15, 1) - 0.15) / 0.85 * (mx - mn); // 15 % = mindste synlige, 100 % = størst målt
-    if (want <= pts[0].ext) return pts[0].ch4;
-    for (let i = 1; i < pts.length; i++) if (want <= pts[i].ext) { const a = pts[i - 1], b = pts[i], t = (want - a.ext) / Math.max(1e-6, b.ext - a.ext); return clamp(Math.round(a.ch4 + (b.ch4 - a.ch4) * t), 0, 127); }
-    return pts[pts.length - 1].ch4;
+  // målt med kameraet: faderen går lineært gennem de laser-værdier hvor mønsteret var synligt (15 % = den ene ende,
+  // 100 % = den anden). Retningen tages fra målingen (vokser figuren med værdien?) – og kan vendes med 'Vend størrelses-faderen'.
+  const sm_ = cfg.sizeMap; if (sm_ && sm_.filter((p) => p.ext).length >= 3) {
+    const pts = sm_.filter((p) => p.ext).sort((a, b) => a.ch4 - b.ch4); const lo = pts[0].ch4, hi = pts[pts.length - 1].ch4;
+    // DS-3000 (målt): høj værdi = stort mønster. 0 % = mindste synlige, 100 % = største. 'Vend størrelses-faderen' bytter om.
+    let f = clamp(size, 0, 1); if (cfg.sizeFlip) f = 1 - f;
+    return Math.round(lo + f * (hi - lo));
   }
   size = Math.max(0.15, size); const r = clamp(cfg.sizeRange || 1, 0.2, 1); let v = (1 - size) * 127 * r; if (cfg.sizeInv) { v = 127 * r - v; return clamp(v, 19, 127); } return clamp(v, 0, 108); } // aldrig helt lukket – så mønsteret ikke forsvinder (målt 18/10: på DS-3000 er høj værdi = stort)
 // 'max'-visning: laseren tegner én kant ad gangen (top, bund, venstre, højre) – 450 ms pr. kant, så scanneren når at flytte sig
@@ -737,7 +736,7 @@ function computeFrame(now) {
   const pulseAmt = Math.max(st.pulse * pulseEnv, bassP * 0.55) * 0.6;
   // størrelse i app-enheder (1 = fylder det kalibrerede område) → laserens egen skala
   const calScale = clamp(Math.min(cfg.cal.sx, cfg.cal.sy), 0.05, 1);
-  const sizeApp = clamp(sm.size * calm * (1 - pulseAmt) * (1 + dropEnv * 0.25), 0.02, 1);
+  const sizeApp = clamp(sm.size * calm * (1 - pulseAmt) * (1 + dropEnv * 0.25), 0, 1);
   const size = clamp(sizeApp * calScale, 0.02, 1);
   const sizeVal = (1 - size) * 255;
   // farve
@@ -1215,7 +1214,7 @@ function clampPosToReach() {
   const [ax, ay] = rawToApp(rx, ry);
   st.posX = clamp(ax, -1, 1); st.posY = clamp(ay / YF(), -1, 1);
 }
-function setSize(v) { st.size = clamp(v, 0.15, 1); saveLook(); syncLookUI(); syncSizeUI(); sendNow(); }
+function setSize(v) { st.size = clamp(v, 0, 1); saveLook(); syncLookUI(); syncSizeUI(); sendNow(); }
 function setPos(k, v) { st[k] = clamp(v, -1, 1); saveLook(); syncSizeUI(); sendNow(); }
 function syncSizeUI() {
   const sz = Math.round(st.size * 100), px = Math.round(st.posX * 100), py = Math.round(st.posY * 100);
