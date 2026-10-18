@@ -432,43 +432,45 @@ ipcMain.handle('update-check', async () => {
   } catch (e) { return { ok: false, current: app.getVersion(), error: String(e.message || e) }; }
 });
 ipcMain.handle('update-install', async (_e, url) => {
+  const logPath = path.join(app.getPath('userData'), 'update.log');
+  const log = (m) => { try { fs.appendFileSync(logPath, new Date().toISOString() + ' ' + m + '\n'); } catch (_) {} };
   try {
     let appPath = path.resolve(app.getPath('exe'), '..', '..', '..');
+    log('start ' + url + ' app=' + appPath);
     if (!appPath.endsWith('.app')) return { ok: false, error: 'Kører ikke som installeret app (udviklingstilstand).' };
     // Kører appen fra Downloads med karantæne, kører macOS den fra en skjult, skrivebeskyttet kopi (App Translocation).
-    // Find den rigtige app via Spotlight – ellers bed brugeren flytte den til Programmer.
     if (appPath.includes('/AppTranslocation/')) {
       let real = [];
       try { real = require('child_process').execFileSync('/usr/bin/mdfind', ['kMDItemCFBundleIdentifier == "dk.willads.smartlink"'], { timeout: 8000 }).toString().split('\n').map((s) => s.trim()).filter((p) => p.endsWith('.app') && !p.includes('/AppTranslocation/') && fs.existsSync(p)); } catch (_) {}
       real.sort((a, b) => (b.startsWith('/Applications/') ? 1 : 0) - (a.startsWith('/Applications/') ? 1 : 0));
       if (!real.length) return { ok: false, error: 'Appen kører fra en midlertidig placering. Flyt SmartLink.app til Programmer, åbn den derfra og prøv igen.' };
-      appPath = real[0];
+      appPath = real[0]; log('translokeret → ' + appPath);
     }
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lightlink-upd-')); const zip = path.join(tmp, 'SmartLink-Mac.zip');
+    const dir = path.dirname(appPath);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'smartlink-upd-')); const zip = path.join(tmp, 'SmartLink-Mac.zip');
     await httpsGet(url, { toFile: zip, onProgress: (p) => { try { win.webContents.send('update-progress', p); } catch (_) {} } });
-    await new Promise((res, rej) => execFile('ditto', ['-x', '-k', zip, tmp], (err) => (err ? rej(err) : res())));
+    log('hentet ' + fs.statSync(zip).size + ' bytes');
+    await new Promise((res, rej) => execFile('/usr/bin/ditto', ['-x', '-k', zip, tmp], (err, so, se) => (err ? rej(new Error('ditto: ' + (se || err.message))) : res())));
     const found = fs.readdirSync(tmp).find((f) => f.endsWith('.app')); if (!found) throw new Error('Ingen .app i den hentede fil');
-    const newApp = path.join(tmp, found);
-    const script = path.join(tmp, 'swap.sh');
-    fs.writeFileSync(script, `#!/bin/bash
-# vent til SmartLink er lukket, byt app'en ud og start igen
-for i in $(seq 1 100); do kill -0 ${process.pid} 2>/dev/null || break; sleep 0.2; done
-LOG="${path.join(tmp, 'swap.log')}"
-{
-rm -rf "${appPath}"
-ditto "${newApp}" "${path.join(path.dirname(appPath), found)}"
-xattr -dr com.apple.quarantine "${path.join(path.dirname(appPath), found)}" 2>/dev/null
-open "${path.join(path.dirname(appPath), found)}"
-} >"$LOG" 2>&1
-`, { mode: 0o755 });
+    const newApp = path.join(tmp, found), finalPath = path.join(dir, found), oldPath = path.join(dir, found + '.old');
+    log('udpakket ' + newApp + ' → ' + finalPath);
+    // kopiér den nye app ind ved siden af (samme disk), byt navne, start den nye og luk
+    const staged = path.join(dir, found + '.new');
+    try { fs.rmSync(staged, { recursive: true, force: true }); } catch (_) {}
+    await new Promise((res, rej) => execFile('/usr/bin/ditto', [newApp, staged], (err, so, se) => (err ? rej(new Error('kopiering: ' + (se || err.message))) : res())));
+    try { execFile('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', staged], () => {}); } catch (_) {}
+    try { fs.rmSync(oldPath, { recursive: true, force: true }); } catch (_) {}
+    fs.renameSync(appPath, oldPath); log('gammel → ' + oldPath);
+    fs.renameSync(staged, finalPath); log('ny → ' + finalPath);
     const { spawn } = require('child_process');
-    spawn('/bin/bash', [script], { detached: true, stdio: 'ignore' }).unref();
-    setTimeout(() => app.quit(), 300);
+    spawn('/bin/sh', ['-c', `sleep 1; /usr/bin/open "${finalPath}"; sleep 8; rm -rf "${oldPath}"`], { detached: true, stdio: 'ignore' }).unref();
+    log('genstarter'); setTimeout(() => app.quit(), 400);
     return { ok: true };
-  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+  } catch (e) { log('FEJL ' + (e.stack || e)); return { ok: false, error: String(e.message || e) + ' (log: ' + logPath + ')' }; }
 });
 
 app.whenReady().then(() => {
+  try { const me = path.resolve(app.getPath('exe'), '..', '..', '..'); const old = me + '.old'; if (fs.existsSync(old)) fs.rmSync(old, { recursive: true, force: true }); } catch (_) {}
   // fjern karantæne-mærket på den installerede app, så macOS ikke kører den fra en midlertidig kopi næste gang
   try { const me = path.resolve(app.getPath('exe'), '..', '..', '..'); if (me.endsWith('.app') && !me.includes('/AppTranslocation/')) execFile('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', me], () => {}); } catch (_) {}
   // flyt indstillinger og mønstre med fra LightLink (det gamle navn), første gang SmartLink starter
