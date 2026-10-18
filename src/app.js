@@ -23,12 +23,13 @@ const DEFAULT_LOOK = {
   pattern: 1, color: { mode: 'orig', rgb: [255, 255, 255] }, colorCycle: false, colorCycleSpeed: 0.3,
   move: 'none', moveAmt: 0.4, moveSpeed: 0.3, size: 0.8, rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, fps: 0.5, posX: 0, posY: 0, freeze: false,
 };
-const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: false, sizeRange: 1, posScaled: false, camPattern: 38, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
+const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
 Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
 const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 if (!cfg.mig1810) { cfg.posScaled = false; cfg.mig1810 = true; }
+if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; } // målt: størrelses-kanalen vender modsat af hvad jeg antog
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
 cfg.calib = Object.assign({ T: 0.9, B: -0.9, L: -0.9, R: 0.9 }, cfg.calib || {});
@@ -162,7 +163,7 @@ async function camStart() {
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); const sel = $('#camSel'); [...sel.options].forEach((o) => { const d = devs.find((x) => x.deviceId === o.value); if (d && d.label) o.textContent = d.label; });
   camDrawLoop();
 }
-function camClose() { camCal.state = 'idle'; camConfirmDone(false); if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; } if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
+function camClose() { camCal.state = 'idle'; camConfirmDone(false); $('#camAuto').hidden = false; $('#camRun').hidden = false; if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; } if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
 function camStatus(msg) { $('#camStatus').textContent = msg; }
 const CAM_W = 320, CAM_H = 180;
 function camGrab() { // nedskaleret gråtone-lignende (max-kanal) billede
@@ -198,7 +199,7 @@ async function camMeasure() {
   if (!camCal.stream) return;
   if (blackout) { camStatus(t('cam.needOn')); return; }
   if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off');
-  const pat = cfg.camPattern || 38; if (patAvail.size && !patAvail.has(pat)) { /* ikke på kortet – brug det valgte */ } else setPattern(pat, true);
+  const pat = cfg.camPattern || 38; if (patAvail.has(cfg.dotPattern) && !cfg.camPatternUser) setPattern(cfg.dotPattern, true); else if (!patAvail.size || patAvail.has(pat)) setPattern(pat, true);
   if (!st.pattern) setPattern(cfg.testPattern || 5, true);
   camCal.active = true; camCal.pts = []; camCal.state = 'measuring'; camCal.size = st.size; camCal.cur = null; camCal.dropped = 0;
   $('#camRun').hidden = true;
@@ -208,8 +209,8 @@ async function camMeasure() {
   blackout = was;
   // mindste mønster-størrelse (lille plet = præcist midtpunkt)
   camCal.send = [0, 0]; let best = null;
-  for (const c4 of [0, 108]) { if (camCal.state !== 'measuring') break; camCal.ch4 = c4; sendNow(); camStatus(t('cam.pre')); await sleep(650); const e = camExtent(camGrab(), camCal.dark); if (e && (!best || e.ext < best.ext)) best = { ch4: c4, ext: e.ext }; }
-  camCal.gridCh4 = best ? best.ch4 : 108;
+  for (const c4 of [127, 108, 80, 40, 0]) { if (camCal.state !== 'measuring') break; camCal.ch4 = c4; sendNow(); camStatus(t('cam.pre')); await sleep(600); const e = camExtent(camGrab(), camCal.dark); if (e && (!best || e.ext < best.ext)) best = { ch4: c4, ext: e.ext }; }
+  camCal.gridCh4 = best ? best.ch4 : 127; camCal.smallExt = best ? best.ext : null;
   for (let i = 0; i < CAM_GRID.length; i++) {
     if (camCal.state !== 'measuring') break;
     camCal.ch4 = camCal.gridCh4; camCal.send = CAM_GRID[i]; sendNow(); await sleep(650);
@@ -250,6 +251,28 @@ async function camMeasure() {
   camCal.frame = camGrab(); camCal.state = 'corners'; camStatus(t('cam.corners', { n: camCal.pts.length, e: fit.err.toFixed(1), d: camCal.dropped }));
   $('#camSave').hidden = false;
 }
+// rest-korrektion: homografien fanger det store billede; de små, lokale afvigelser (ulinearitet i scannerne) lægges i et
+// gitter over kamerabilledet: for hvert felt gennemsnittet af (faktisk sendt − Hcs(kamera)) for målingerne i feltet.
+const RES_N = 8;
+function resBuild(pts, Hcs) {
+  const sum = Array.from({ length: RES_N * RES_N }, () => [0, 0, 0]);
+  for (const [sx, sy, u, v] of pts) { const [ex, ey] = hApply(Hcs, u, v); const ix = clamp(Math.floor(u / CAM_W * RES_N), 0, RES_N - 1), iy = clamp(Math.floor(v / CAM_H * RES_N), 0, RES_N - 1); const c = sum[iy * RES_N + ix]; c[0] += sx - ex; c[1] += sy - ey; c[2]++; }
+  return { n: RES_N, cells: sum.map((c) => (c[2] >= 2 ? [c[0] / c[2], c[1] / c[2]] : null)) };
+}
+function resLookup(res, u, v) { // bilineær mellem felt-midtpunkter; tomme felter = 0
+  if (!res) return [0, 0]; const n = res.n, gx = clamp(u / CAM_W * n - 0.5, 0, n - 1), gy = clamp(v / CAM_H * n - 0.5, 0, n - 1);
+  const x0 = Math.floor(gx), y0 = Math.floor(gy), x1 = Math.min(n - 1, x0 + 1), y1 = Math.min(n - 1, y0 + 1), tx = gx - x0, ty = gy - y0;
+  const g = (x, y) => res.cells[y * n + x] || [0, 0];
+  const a = g(x0, y0), b = g(x1, y0), c = g(x0, y1), d = g(x1, y1);
+  return [a[0] * (1 - tx) * (1 - ty) + b[0] * tx * (1 - ty) + c[0] * (1 - tx) * ty + d[0] * tx * ty, a[1] * (1 - tx) * (1 - ty) + b[1] * tx * (1 - ty) + c[1] * (1 - tx) * ty + d[1] * tx * ty];
+}
+function camAppToSend(ax, ay) { // app (-1..1, y op) → sendt: via kamerabilledet + rest-korrektion
+  const m = cfg.camMap; if (!m || !m.Hac) return hApply(m.H, ax, ay);
+  const [u, v] = hApply(m.Hac, ax, ay); const [sx, sy] = hApply(m.Hcs, u, v); const [rx, ry] = resLookup(m.res, u, v); return [sx + rx, sy + ry];
+}
+function camLearn(pts, sample) { // gem en ny observation (erstatter en gammel tæt på) – max 400
+  const out = pts.filter((p) => Math.hypot(p[0] - sample[0], p[1] - sample[1]) > 0.012); out.push(sample); return out.length > 900 ? out.slice(out.length - 900) : out;
+}
 function camBuildMap(pts, corners, sizes, meta) { // sendt→kamera-punkter + valgte hjørner (kamera) → app→sendt homografi
   const rf = hFit(pts); if (!rf) return null; const Hsc = rf.H, Hcs = hInv(Hsc); if (!Hcs) return null;
   const sent = corners.map(([u, v]) => hApply(Hcs, u, v));
@@ -257,12 +280,94 @@ function camBuildMap(pts, corners, sizes, meta) { // sendt→kamera-punkter + va
   const fit = hFit(sq.map((p, i) => [p[0], p[1], sent[i][0], sent[i][1]])); if (!fit) return null;
   const Hi = hInv(fit.H); if (!Hi) return null;
   const c = corners, wTop = Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]), wBot = Math.hypot(c[2][0] - c[3][0], c[2][1] - c[3][1]), hL = Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]), hR = Math.hypot(c[2][0] - c[1][0], c[2][1] - c[1][1]);
-  const map = { H: fit.H, Hi, Hsc, Hcs, pts: pts.map((p) => p.slice()), corners: corners.map((p) => p.slice()), aspect: clamp(((wTop + wBot) / 2) / Math.max(1, (hL + hR) / 2), 0.3, 4), err: rf.err, at: Date.now(), ...(meta || {}) };
+  const Hac = hFit(sq.map((p, i) => [p[0], p[1], corners[i][0], corners[i][1]])); // app-firkant → kamera (eksakt 4-punkt)
+  const map = { H: fit.H, Hi, Hsc, Hcs, Hac: Hac ? Hac.H : null, res: resBuild(pts, Hcs), pts: pts.map((p) => p.slice()), corners: corners.map((p) => p.slice()), aspect: clamp(((wTop + wBot) / 2) / Math.max(1, (hL + hR) / 2), 0.3, 4), err: rf.err, at: Date.now(), ...(meta || {}) };
   cfg.camMap = map;
   cfg.calPts = { TL: { x: sent[0][0], y: sent[0][1] }, TR: { x: sent[1][0], y: sent[1][1] }, BR: { x: sent[2][0], y: sent[2][1] }, BL: { x: sent[3][0], y: sent[3][1] } };
   if (sizes && sizes.length >= 3) cfg.sizeMap = sizes;
   cfg.cal.ix = false; cfg.cal.iy = false; calApply(); cfg.calibDone = true; cfg.posMap = null; saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
   return map;
+}
+// ---- helt automatisk: appen flytter selv mønsteret rundt, kameraet finder det, og omsætningen udvides trin for trin
+// til hele det område kameraet kan se. Til sidst kontrol-punkter: passer kamera og forventning? Ellers rettes der til.
+async function camAuto() {
+  if (!camCal.stream) return;
+  if (blackout) { camStatus(t('cam.needOn')); return; }
+  if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off');
+  const pat = cfg.camPattern || 38; if (patAvail.has(cfg.dotPattern) && !cfg.camPatternUser) setPattern(cfg.dotPattern, true); else if (!patAvail.size || patAvail.has(pat)) setPattern(pat, true);
+  camCal.active = true; camCal.pts = []; camCal.state = 'measuring'; camCal.size = st.size; camCal.cur = null; camCal.dropped = 0; camCal.auto = true;
+  $('#camRun').hidden = true; $('#camAuto').hidden = true;
+  const was = blackout; blackout = true; sendNow(); camStatus(t('cam.dark')); await sleep(500);
+  const d1 = camGrab(); await sleep(120); const d2 = camGrab(); camCal.dark = d1.map((v, i) => (v + d2[i]) / 2); blackout = was;
+  camCal.send = [0, 0]; let best = null;
+  for (const c4 of [127, 108, 80, 40, 0]) { if (camCal.state !== 'measuring') break; camCal.ch4 = c4; sendNow(); camStatus(t('cam.pre')); await sleep(600); const e = camExtent(camGrab(), camCal.dark); if (e && (!best || e.ext < best.ext)) best = { ch4: c4, ext: e.ext }; }
+  camCal.gridCh4 = best ? best.ch4 : 127;
+  const look = async (sx, sy) => { // vis mønsteret ved (sx,sy) og find det i kameraet (to billeder, begge skal være enige)
+    camCal.ch4 = camCal.gridCh4; camCal.send = [sx, sy]; sendNow(); await sleep(600);
+    const b1 = camBlob(camGrab(), camCal.dark); await sleep(90); const b2 = camBlob(camGrab(), camCal.dark);
+    if (!b1 || !b2 || Math.hypot(b1.x - b2.x, b1.y - b2.y) > 6) return null; return [(b1.x + b2.x) / 2, (b1.y + b2.y) / 2];
+  };
+  const tol = Math.hypot(CAM_W, CAM_H) * 0.12; let fit = null;
+  const tryPoint = async (sx, sy) => {
+    if (camCal.state !== 'measuring') return false;
+    const b = await look(sx, sy); if (!b) { camCal.dropped++; return false; }
+    if (fit) { const [u, v] = hApply(fit.H, sx, sy); if (Math.hypot(u - b[0], v - b[1]) > tol) { camCal.dropped++; return false; } } // passer ikke med resten → fejlfund
+    camCal.pts.push([sx, sy, b[0], b[1]]); if (camCal.pts.length >= 5) { const f = hFit(camCal.pts); if (f) { fit = f; camCal.H = f.H; } }
+    camStatus(t('cam.autoStep', { n: camCal.pts.length, d: camCal.dropped, r: Math.round(ring * 100) })); return true;
+  };
+  // 1) kerne ±0,5 → 2) udvid i ringe til ±1,0 så længe kameraet kan se punkterne
+  let ring = 0.5;
+  for (const [x, y] of CAM_GRID) await tryPoint(x, y);
+  for (ring of [0.75, 1.0]) {
+    if (camCal.state !== 'measuring') break; let hits = 0;
+    for (const [x, y] of [[-ring, ring], [0, ring], [ring, ring], [ring, 0], [ring, -ring], [0, -ring], [-ring, -ring], [-ring, 0]]) if (await tryPoint(x, y)) hits++;
+    if (!hits) break;
+  }
+  // 2b) løbende optagelse: mønsteret kører i små trin (2 %) i baner over hele området mens kameraet filmer –
+  //     hvert billede giver et målepunkt, så de små lokale afvigelser også bliver lært
+  if (camCal.state === 'measuring' && fit) {
+    const R = Math.max(0.5, ...camCal.pts.map((p) => Math.max(Math.abs(p[0]), Math.abs(p[1]))));
+    const rows = 7, step = 0.02; let got = 0, miss = 0;
+    for (let r = 0; r < rows && camCal.state === 'measuring'; r++) {
+      const sy = -R + (2 * R * r) / (rows - 1); const dir = r % 2 ? -1 : 1;
+      for (let sx = -R * dir; dir > 0 ? sx <= R : sx >= -R; sx += step * dir) {
+        if (camCal.state !== 'measuring') break;
+        camCal.ch4 = camCal.gridCh4; camCal.send = [sx, sy]; sendNow(); await sleep(110);
+        const b = camBlob(camGrab(), camCal.dark); if (!b) { miss++; continue; }
+        const [u, v] = hApply(fit.H, sx, sy); if (Math.hypot(u - b.x, v - b.y) > tol) { miss++; continue; }
+        camCal.pts = camLearn(camCal.pts, [sx, sy, b.x, b.y]); got++;
+        if (got % 10 === 0) { const f = hFit(camCal.pts); if (f) { fit = f; camCal.H = f.H; } camStatus(t('cam.sweep', { n: camCal.pts.length, r: r + 1, rows })); }
+      }
+    }
+  }
+  // 3) kontrol: tilfældige punkter inden for det målte – stor afvigelse → lær af den og regn om (op til 3 runder)
+  if (camCal.state === 'measuring' && fit) {
+    const R = Math.max(0.5, ...camCal.pts.map((p) => Math.max(Math.abs(p[0]), Math.abs(p[1]))));
+    for (let round = 0; round < 3 && camCal.state === 'measuring'; round++) {
+      let errSum = 0, n = 0, added = 0;
+      for (let k = 0; k < 5; k++) {
+        const sx = (Math.random() * 2 - 1) * R * 0.9, sy = (Math.random() * 2 - 1) * R * 0.9;
+        const b = await look(sx, sy); if (!b) continue; const [u, v] = hApply(fit.H, sx, sy); const e = Math.hypot(u - b[0], v - b[1]); errSum += e; n++;
+        if (e > 2 && e < tol) { camCal.pts = camLearn(camCal.pts, [sx, sy, b[0], b[1]]); added++; }
+        camStatus(t('cam.verify', { r: round + 1, e: n ? (errSum / n).toFixed(1) : '–' }));
+      }
+      if (added) { const f = hFit(camCal.pts); if (f) { fit = f; camCal.H = f.H; } }
+      if (n && errSum / n < 2.5) break;
+    }
+  }
+  // 4) størrelses-trappe
+  camCal.sizes = [];
+  if (camCal.state === 'measuring') { camCal.send = [0, 0]; for (const c4 of CAM_SIZE_STEPS) { if (camCal.state !== 'measuring') break; camCal.ch4 = c4; sendNow(); await sleep(600); const e1 = camExtent(camGrab(), camCal.dark); await sleep(90); const e2 = camExtent(camGrab(), camCal.dark); const e = e1 && e2 ? Math.min(e1.ext, e2.ext) : (e1 || e2 || {}).ext; if (e) camCal.sizes.push({ ch4: c4, ext: e }); } }
+  camCal.ch4 = null; camCal.send = null; camCal.active = false; sendNow(); $('#camRun').hidden = false; $('#camAuto').hidden = false;
+  if (camCal.state !== 'measuring') return;
+  if (!fit || camCal.pts.length < 6) { camCal.state = 'idle'; camStatus(t('cam.tooFew', { n: camCal.pts.length, d: camCal.dropped })); return; }
+  camCal.H = fit.H; camCal.Hi = hInv(fit.H); camCal.err = fit.err;
+  // 5) område = hele det målte (største |sendt| der blev set) – gemmes med det samme; hjørnerne kan stadig trækkes
+  const R = Math.max(0.5, ...camCal.pts.map((p) => Math.max(Math.abs(p[0]), Math.abs(p[1]))));
+  camCal.corners = [[-R, R], [R, R], [R, -R], [-R, -R]].map(([x, y]) => hApply(fit.H, x, y).map((v, i) => clamp(v, 0, i ? CAM_H : CAM_W)));
+  camCal.state = 'corners'; $('#camSave').hidden = false;
+  const map = camBuildMap(camCal.pts, camCal.corners, camCal.sizes, { size: camCal.size });
+  camStatus(map ? t('cam.autoDone', { n: map.pts.length, e: map.err.toFixed(1), r: Math.round(R * 100) }) : t('cam.fitFail'));
 }
 function camSave() {
   if (camCal.state !== 'corners') return;
@@ -282,12 +387,19 @@ async function camFollowToggle() {
     if (!cfg.camMap || !out.on || !st.pattern) { camCal.track = null; return; }
     const b = camBlob(camGrab(), camCal.dark); const exp = hApply(cfg.camMap.Hsc, out.sendX, out.sendY);
     camCal.track = { found: b ? [b.x, b.y] : null, exp, send: [out.sendX, out.sendY] };
-    camStatus(b ? t('cam.followDev', { d: Math.hypot(b.x - exp[0], b.y - exp[1]).toFixed(0) }) : t('cam.followNone'));
+    const dev = b ? Math.hypot(b.x - exp[0], b.y - exp[1]) : null;
+    // lærer selv: står mønsteret stille (samme sendte værdi to gange i træk) og kameraet ser det et lidt andet sted → gem det
+    if (b && dev > 2 && dev < Math.hypot(CAM_W, CAM_H) * 0.12 && camCal.lastSend && Math.hypot(camCal.lastSend[0] - out.sendX, camCal.lastSend[1] - out.sendY) < 0.002 && Date.now() - (camCal.lastLearn || 0) > 1000) {
+      camCal.lastLearn = Date.now(); camCal.pending = camLearn(camCal.pending || cfg.camMap.pts, [out.sendX, out.sendY, b.x, b.y]); camCal.pendN = (camCal.pendN || 0) + 1;
+      if (camCal.pendN >= 3) { camBuildMap(camCal.pending, cfg.camMap.corners, cfg.sizeMap, { size: cfg.camMap.size }); camCal.pending = null; camCal.pendN = 0; camCal.learned = (camCal.learned || 0) + 3; }
+    }
+    camCal.lastSend = [out.sendX, out.sendY];
+    camStatus(b ? t('cam.followDev', { d: dev.toFixed(0), l: camCal.learned || 0 }) : t('cam.followNone'));
   }, 300);
 }
 function camFix() { // tilføj den aktuelle observation og regn omsætningen om
   const tr = camCal.track; if (!tr || !tr.found || !cfg.camMap) return;
-  const pts = cfg.camMap.pts.filter((p) => Math.hypot(p[0] - tr.send[0], p[1] - tr.send[1]) > 0.05); pts.push([tr.send[0], tr.send[1], tr.found[0], tr.found[1]]);
+  const pts = camLearn(camCal.pending || cfg.camMap.pts, [tr.send[0], tr.send[1], tr.found[0], tr.found[1]]); camCal.pending = null; camCal.pendN = 0;
   const map = camBuildMap(pts, cfg.camMap.corners, cfg.sizeMap, { size: cfg.camMap.size }); if (map) toast(t('cam.fixed', { n: map.pts.length, e: map.err.toFixed(1) }));
 }
 function camDrawLoop() {
@@ -302,7 +414,7 @@ function camDrawLoop() {
     g.save(); g.strokeStyle = 'rgba(49,243,172,.4)'; g.lineWidth = 1; for (const q of CAM_GRID) { const [u, v] = hApply(camCal.H, q[0], q[1]); g.beginPath(); g.arc(u * fx, v * fy, 10, 0, Math.PI * 2); g.stroke(); } g.restore();
   }
   if (camCal.track) { const tr = camCal.track; g.save(); g.lineWidth = 2; g.strokeStyle = '#ff3b5c'; g.beginPath(); g.arc(tr.exp[0] * fx, tr.exp[1] * fy, 14, 0, Math.PI * 2); g.stroke(); if (tr.found) { g.fillStyle = '#31f3ac'; g.beginPath(); g.arc(tr.found[0] * fx, tr.found[1] * fy, 6, 0, Math.PI * 2); g.fill(); g.strokeStyle = 'rgba(255,255,255,.6)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(tr.exp[0] * fx, tr.exp[1] * fy); g.lineTo(tr.found[0] * fx, tr.found[1] * fy); g.stroke(); } g.restore(); }
-  if (camCal.cur) { const c = camCal.cur; g.save(); g.strokeStyle = c.found ? '#31f3ac' : '#ffaa3c'; g.lineWidth = 3; g.setLineDash([]); g.beginPath(); g.arc(c.x * fx, c.y * fy, 22, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(c.x * fx - 30, c.y * fy); g.lineTo(c.x * fx + 30, c.y * fy); g.moveTo(c.x * fx, c.y * fy - 30); g.lineTo(c.x * fx, c.y * fy + 30); g.stroke(); g.fillStyle = g.strokeStyle; g.font = '700 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('cam.dragHere'), c.x * fx, c.y * fy - 30); g.restore(); }
+  if (camCal.cur) { const c = camCal.cur; g.save(); g.strokeStyle = c.found ? '#31f3ac' : '#ffaa3c'; g.lineWidth = 3; g.setLineDash([]); g.lineWidth = 2; g.beginPath(); g.arc(c.x * fx, c.y * fy, 7, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(c.x * fx - 14, c.y * fy); g.lineTo(c.x * fx - 9, c.y * fy); g.moveTo(c.x * fx + 9, c.y * fy); g.lineTo(c.x * fx + 14, c.y * fy); g.moveTo(c.x * fx, c.y * fy - 14); g.lineTo(c.x * fx, c.y * fy - 9); g.moveTo(c.x * fx, c.y * fy + 9); g.lineTo(c.x * fx, c.y * fy + 14); g.stroke(); g.fillStyle = g.strokeStyle; g.font = '600 11px -apple-system'; g.textAlign = 'center'; g.fillText(t('cam.dragHere'), c.x * fx, c.y * fy - 18); g.restore(); }
   if (camCal.state === 'corners' && camCal.corners) {
     g.save(); g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.beginPath(); camCal.corners.forEach(([x, y], i) => (i ? g.lineTo(x * fx, y * fy) : g.moveTo(x * fx, y * fy))); g.closePath(); g.stroke();
     camCal.corners.forEach(([x, y], i) => { g.fillStyle = '#ff3b5c'; g.beginPath(); g.arc(x * fx, y * fy, 9, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = '700 10px -apple-system'; g.textAlign = 'center'; g.fillText(['↖', '↗', '↘', '↙'][i], x * fx, y * fy + 4); });
@@ -325,9 +437,10 @@ function camDrawLoop() {
   cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); const P = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; if (camCal.drag === 200) { if (camCal.cur) { camCal.cur.x = P[0]; camCal.cur.y = P[1]; } } else if (camCal.drag >= 100) { const p = camCal.pts[camCal.drag - 100]; if (p) { p[2] = P[0]; p[3] = P[1]; const rf = hFit(camCal.pts); if (rf) { camCal.H = rf.H; camCal.err = rf.err; } } } else camCal.corners[camCal.drag] = P; });
   const up = () => { camCal.drag = -1; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   $('#camOpen').onclick = camOpen; $('#camClose').onclick = camClose; $('#camRun').onclick = camMeasure; $('#camSave').onclick = camSave;
-  $('#camPat').value = cfg.camPattern || 38; $('#camPat').onchange = () => { cfg.camPattern = clamp(+$('#camPat').value || 38, 1, 255); saveCfg(); };
+  $('#camPat').value = cfg.camPattern || 38; $('#camPat').onchange = () => { cfg.camPattern = clamp(+$('#camPat').value || 38, 1, 255); cfg.camPatternUser = true; saveCfg(); };
   $('#camOk').onclick = () => camConfirmDone(true); $('#camSkip').onclick = () => camConfirmDone(false);
   $('#camFollow').onclick = () => camFollowToggle().catch((e) => camStatus(e.message)); $('#camFix').onclick = camFix;
+  $('#camAuto').onclick = () => camAuto().catch((e) => camStatus(e.message));
   $('#camSel').onchange = () => camStart().catch((e) => camStatus(t('cam.noCam') + ' ' + (e.name || '') + ' ' + e.message));
   $('#camRefresh').onclick = () => camOpen();
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (!$('#camModal').hidden && camCal.state === 'idle') camOpen(); });
@@ -425,7 +538,7 @@ function sizeCh4(size) {
     for (let i = 1; i < pts.length; i++) if (want <= pts[i].ext) { const a = pts[i - 1], b = pts[i], t = (want - a.ext) / Math.max(1e-6, b.ext - a.ext); return clamp(Math.round(a.ch4 + (b.ch4 - a.ch4) * t), 0, 127); }
     return pts[pts.length - 1].ch4;
   }
-  size = Math.max(0.15, size); const r = clamp(cfg.sizeRange || 1, 0.2, 1); let v = (1 - size) * 127 * r; if (cfg.sizeInv) v = 127 * r - v; return clamp(v, 0, 108); } // aldrig helt lukket – så mønsteret ikke forsvinder
+  size = Math.max(0.15, size); const r = clamp(cfg.sizeRange || 1, 0.2, 1); let v = (1 - size) * 127 * r; if (cfg.sizeInv) { v = 127 * r - v; return clamp(v, 19, 127); } return clamp(v, 0, 108); } // aldrig helt lukket – så mønsteret ikke forsvinder (målt 18/10: på DS-3000 er høj værdi = stort)
 // 'max'-visning: laseren tegner én kant ad gangen (top, bund, venstre, højre) – 450 ms pr. kant, så scanneren når at flytte sig
 const maxEdge = () => Math.floor(performance.now() / 450) % 4;
 function specialFrame(on) {
@@ -588,7 +701,7 @@ function computeFrame(now) {
   let sendX = rawX, sendY = rawY;
   if (!measure && !camCal.active && cfg.camMap) {
     // kamera-kalibrering: app-koordinater → det laseren skal have sendt (homografi målt med kameraet)
-    const [sx, sy] = hApply(cfg.camMap.H, lx, ly / YF());
+    const [sx, sy] = camAppToSend(lx, ly / YF());
     sendX = clamp(sx, -limX, limX); sendY = clamp(sy, -limY, limY);
     clamped = Math.abs(sx - sendX) > 0.003 || Math.abs(sy - sendY) > 0.003;
     const [bx, by] = hApply(cfg.camMap.Hi, sendX, sendY); axc = bx; ayc = by; rawX = sendX; rawY = sendY;
