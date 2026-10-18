@@ -26,6 +26,7 @@ const DEFAULT_LOOK = {
 const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: false, sizeRange: 1, posScaled: true, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
+Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
 const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
@@ -104,6 +105,7 @@ function specialGeom() {
 }
 function s16(off) { const v = Math.round(clamp(off, -1, 1) * 32767) & 0xffff; return [v >> 8, v & 255]; }
 // position (16 bit): standard = 0 venstre/top … 32768 midt … 65535 højre/bund. 'Signeret' = 0 midt (ældre firmware).
+const rawToApp = (rx, ry) => [(rx - cfg.cal.ox) / cfg.cal.sx, (ry - cfg.cal.oy) / cfg.cal.sy];  // rå laser → app
 function calAxis(v, axis) { const c = cfg.cal; const inv = axis === 'x' ? c.ix : c.iy, sc = axis === 'x' ? c.sx : c.sy, off = axis === 'x' ? c.ox : c.oy; return clamp((inv ? -v : v) * sc + off, -1, 1); }
 function pos16(ch, v, raw = false) {
   const axis = ch === 7 || ch === 4 ? 'x' : 'y';
@@ -116,7 +118,7 @@ function pos16(ch, v, raw = false) {
 }
 // størrelse (DJ kanal 4, 0–127): 0 = størst. Kan vendes og begrænses under Indstillinger hvis laseren opfører sig anderledes.
 // animations-fart: 0.5 = 50 fps; under 0.5 går kurven kvadratisk ned, så langsom animation kan finjusteres (0.1 ≈ 2 fps)
-function fpsFrac(f) { f = clamp(f, 0, 1); return Math.max(0.03, f <= 0.5 ? 2 * f * f : f); }
+function fpsFrac(f) { return clamp(f, 0.02, 1); } // lineært: 0 % = næsten frosset, 50 % = 50 fps, 100 % = 100 fps
 function sizeCh4(size) { size = Math.max(0.15, size); const r = clamp(cfg.sizeRange || 1, 0.2, 1); let v = (1 - size) * 127 * r; if (cfg.sizeInv) v = 127 * r - v; return clamp(v, 0, 108); } // aldrig helt lukket – så mønsteret ikke forsvinder
 // 'max'-visning: laseren tegner én kant ad gangen (top, bund, venstre, højre) – 450 ms pr. kant, så scanneren når at flytte sig
 const maxEdge = () => Math.floor(performance.now() / 450) % 4;
@@ -190,7 +192,7 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   // 7–10 position: appen styrer selv bevægelsen (rigtig cirkel, ottetal …) + hvor mønsteret peger hen
   // laseren lægger positionen til FØR den skalerer størrelsen → kompensér, så 'Flyt' passer med LIVE
   const psc = cfg.posScaled ? 1 / Math.max(size, 0.08) : 1;
-  pos16(7, out.lx * psc); pos16(9, out.ly * psc);
+  pos16(7, out.rawX * psc, true); pos16(9, out.rawY * psc, true);
   // 11: farve – 0–15 original, 16–79 ensfarvet, 144–255 automatisk farveskift
   if (st.colorCycle) setCh(11, 144 + st.colorCycleSpeed * 111);
   else if (mode === 'orig') setCh(11, 8);
@@ -247,7 +249,10 @@ function computeFrame(now) {
   const rot = 0.5 + ang / 360;
   // størrelse (kanal: 0 = størst)
   const pulseAmt = Math.max(st.pulse * pulseEnv, bassP * 0.55) * 0.6;
-  const size = clamp(sm.size * calm * (1 - pulseAmt) * (1 + dropEnv * 0.25), 0.02, 1);
+  // størrelse i app-enheder (1 = fylder det kalibrerede område) → laserens egen skala
+  const calScale = clamp(Math.min(cfg.cal.sx, cfg.cal.sy), 0.05, 1);
+  const sizeApp = clamp(sm.size * calm * (1 - pulseAmt) * (1 + dropEnv * 0.25), 0.02, 1);
+  const size = clamp(sizeApp * calScale, 0.02, 1);
   const sizeVal = (1 - size) * 255;
   // farve
   let mode = st.color.mode, rgb = st.color.rgb;
@@ -260,7 +265,13 @@ function computeFrame(now) {
   // skærm-koordinater (0..1) inkl. hvor brugeren har flyttet mønsteret hen; laser-koordinater (-1..1, Y vendt)
   x = clamp(x + sm.x / 2, 0, 1); y = clamp(y + sm.y / 2, 0, 1);
   const lx = (x - 0.5) * 2, ly = (y - 0.5) * 2 * YF();
-  out = { x, y, lx, ly, ang, size, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
+  // rå laser-position (efter kalibrering). Laseren skalerer positionen med størrelsen, og kan højst flytte midten
+  // 'size' ud – og mønsteret må ikke stikke ud over scannernes rækkevidde (så bliver det klemt/forvredet).
+  const lim = Math.max(0, Math.min(size, 1 - size));
+  const rawX = clamp(calAxis(lx, 'x'), -lim, lim), rawY = clamp(calAxis(ly, 'y'), -lim, lim);
+  const [axc, ayc] = rawToApp(rawX, rawY); // tilbage til app-koordinater, så LIVE viser hvor mønsteret faktisk ender
+  x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
+  out = { x, y, lx, ly, rawX, rawY, ang, size: sizeApp, laserSize: size, calScale, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
   if (special) { specialFrame(on); return; }
   if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); return; }
@@ -268,7 +279,7 @@ function computeFrame(now) {
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? st.pattern : 0);
   setCh(3, st.freeze ? 0 : st.fps * 255);
-  put16(4, 0.5 + lx / 2); put16(6, 0.5 + ly / 2); put16(8, rot);
+  put16(4, 0.5 + clamp(out.rawX / Math.max(size, 0.08), -1, 1) / 2); put16(6, 0.5 + clamp(out.rawY / Math.max(size, 0.08), -1, 1) / 2); put16(8, rot);
   setCh(10, sizeVal); setCh(11, sizeVal);
   const fy = cfg.invY !== patFlip.has(st.pattern);
   setCh(12, cfg.invX && fy ? 224 : cfg.invX ? 96 : fy ? 160 : 0);
@@ -705,11 +716,15 @@ function calGeomFor(step) { // den kant der tegnes i 'calbox' (1 top, 2 bund, 3 
   return { vertical: true, x: c.L, y: cy, len: h };
 }
 // gem hjælpe-mønstre til SD-kortet: punkt (#250), firkant (#251) og den præcise kalibrerings-firkant (#252)
-function dotIld() { const n = 24, xy = new Float32Array(n * 2), col = new Uint8Array(n * 3).fill(255), bl = new Uint8Array(n); return encodeFramesIld([{ n, xy, col, bl }], 'DOT'); }
+function dotIld() { // lille cirkel: et helt stillestående punkt slukkes af laserens scan-fail-sikring
+  const n = 36, r = 0.028, xy = new Float32Array(n * 2), col = new Uint8Array(n * 3).fill(255), bl = new Uint8Array(n);
+  for (let i = 0; i < n; i++) { const a = (i / (n - 1)) * Math.PI * 2; xy[i * 2] = Math.cos(a) * r; xy[i * 2 + 1] = Math.sin(a) * r; }
+  return encodeFramesIld([{ n, xy, col, bl }], 'DOT'); }
 function polyIld(pts, name) { // lukket polygon med blank-anløb, 16 punkter pr. kant
   const out = []; const add = (x, y, b) => out.push([x, y, b]);
   for (let k = 0; k < 3; k++) add(pts[0][0], pts[0][1], 1);
-  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; for (let s = 0; s < 16; s++) { const f = s / 16; add(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, 0); } }
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; for (let k = 0; k < 6; k++) add(a[0], a[1], 0); /* dvæl i hjørnet → skarpt hjørne */ for (let s = 1; s < 16; s++) { const f = s / 16; add(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, 0); } }
+  for (let k = 0; k < 6; k++) add(pts[0][0], pts[0][1], 0);
   add(pts[0][0], pts[0][1], 0); add(pts[0][0], pts[0][1], 1);
   const n = out.length, xy = new Float32Array(n * 2), col = new Uint8Array(n * 3).fill(255), bl = new Uint8Array(n);
   out.forEach(([x, y, b], i) => { xy[i * 2] = x; xy[i * 2 + 1] = y; bl[i] = b; });
@@ -759,7 +774,6 @@ function pvBox(W, H) {
   return { x: (W - w) / 2, y: (H - h) / 2, w, h, upl: w / (2 * cfg.cal.sx) };
 }
 const boxPt = (b, ax, ay) => [b.x + (ax + 1) / 2 * b.w, b.y + (1 - ay) / 2 * b.h];              // app-koordinater (-1..1) → pixels
-const rawToApp = (rx, ry) => [(rx - cfg.cal.ox) / cfg.cal.sx, (ry - cfg.cal.oy) / cfg.cal.sy];  // rå laser → app
 $('#pvMove').onclick = () => { moveMode = !moveMode; $('#pvMove').classList.toggle('on', moveMode); $('#pvSizeBar').classList.toggle('show', moveMode); };
 st.freeze = false; // frys er slået fra indtil videre
 
@@ -834,8 +848,8 @@ function previewTick(now) {
       const strobeOff = st.strobe > 0 && Math.floor(now / (220 - st.strobe * 190)) % 2;
       let frame = fr[Math.floor(pvFrame) % fr.length], extra = {};
       if (autoMode === 'laser') { const k = Math.floor(now / 500); const alt = [...patAvail]; const n = alt.length ? alt[k % alt.length] : st.pattern; const f2 = patData.get(n); if (f2 && f2.length) frame = f2[Math.floor(pvFrame) % f2.length]; else if (!patData.has(n) && patAvail.has(n)) loadPat(n); }
-      if (!strobeOff) drawIlda(g, W, H, frame, { scale: out.size, ang: out.ang + (out.flip ? 180 : 0), ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: B, ...extra });
-      if (moveMode) { const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * out.size; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]); }
+      if (!strobeOff) drawIlda(g, W, H, frame, { scale: out.size * out.calScale, ang: out.ang + (out.flip ? 180 : 0), ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: B, ...extra });
+      if (moveMode) { const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * out.size * out.calScale; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]); }
       if (isFallback) { g.fillStyle = '#5b5b57'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t(patAvail.size ? 'pv.missing' : 'pv.load', { n: st.pattern }), W / 2, B.y + 20); }
     }
     drawZone(g, W, H);
@@ -845,13 +859,15 @@ function previewTick(now) {
       g.fillStyle = '#31f3ac'; g.textAlign = 'left'; g.fillText(txt, (W - tw) / 2, 55);
     }
     if (!cfg.calibDone && out.on && !special) { g.fillStyle = '#ffb02e'; g.font = '600 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.needCal'), W / 2, H - 28); }
-    $('#pvInfo').textContent = `${t('pv.power', { n: Math.round(out.intensity * 100) })} · ${st.pattern ? '#' + st.pattern : t('pat.offName')}${patNames[st.pattern] ? ' · ' + patNames[st.pattern] : ''} · ${MOVE_DA[st.move]} · ${Math.round(st.size * 100)}%`;
+    $('#pvInfo').textContent = `${t('pv.power', { n: Math.round(out.intensity * 100) })} · ${st.pattern ? '#' + st.pattern : t('pat.offName')}${patNames[st.pattern] ? ' · ' + patNames[st.pattern] : ''} · ${MOVE_DA[st.move]} · ${Math.round(st.size * 100)}% · ${Math.round(fpsFrac(st.fps) * 100)} fps`;
   }
   requestAnimationFrame(previewTick);
 }
 
-function setPattern(n) {
-  st.pattern = n; activeScene = -1; saveLook();
+function setPattern(n, keepLook = false) {
+  st.pattern = n; activeScene = -1;
+  if (!keepLook) { Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0 }); rotAcc = 0; syncLookUI(); } // nyt mønster = stille – bevægelse vælges aktivt under Bevægelse
+  saveLook();
   $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
   renderScenes();
 }
