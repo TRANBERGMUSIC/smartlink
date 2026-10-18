@@ -53,10 +53,10 @@
       </div>
       <span class="pv-info" id="pvInfo"></span>
       <div class="pv-sizebar" id="pvSizeBar">
-        <label class="xyz"><b>X</b><span data-i18n="pv.xName"></span><button class="ghost small" data-k="posX" data-d="-1">−</button><input type="range" id="posXLive" min="-100" max="100" value="0" data-k="posX"><button class="ghost small" data-k="posX" data-d="1">+</button><output id="posXOut"></output></label>
-        <label class="xyz"><b>Y</b><span data-i18n="pv.yName"></span><button class="ghost small" data-k="posY" data-d="-1">−</button><input type="range" id="posYLive" min="-100" max="100" value="0" data-k="posY"><button class="ghost small" data-k="posY" data-d="1">+</button><output id="posYOut"></output></label>
-        <label class="xyz"><b>Z</b><span data-i18n="pv.zName"></span><button class="ghost small" id="szMinus">−</button><input type="range" id="sizeLive" min="5" max="100" value="80"><button class="ghost small" id="szPlus">+</button><output id="sizeLiveOut"></output></label>
-        <button class="ghost small" id="posReset" data-i18n="pv.center"></button>
+        <b>Z</b><button class="ghost small" id="szMinus">−</button><input type="range" id="sizeLive" min="5" max="100" value="80"><button class="ghost small" id="szPlus">+</button><output id="sizeLiveOut"></output>
+        <span class="sep"></span><b>X</b><button class="ghost small" data-k="posX" data-d="-1">−</button><output id="posXOut"></output><button class="ghost small" data-k="posX" data-d="1">+</button>
+        <b>Y</b><button class="ghost small" data-k="posY" data-d="-1">−</button><output id="posYOut"></output><button class="ghost small" data-k="posY" data-d="1">+</button>
+        <span class="sep"></span><button class="ghost small" id="posReset" data-i18n="pv.center"></button>
       </div>
       <div class="pv-cal" id="pvCal" hidden>
         <h3 data-i18n="pv.calTitle"></h3>

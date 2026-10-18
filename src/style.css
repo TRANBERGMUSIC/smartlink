@@ -465,11 +465,14 @@ button.primary.big { height: 44px; padding: 0 22px; font-size: 15px; }
 .pv-tools { gap: 5px; }
 .pv-tool.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 #pvZoneLine.on { border-color: #ff3b5c; color: #ff8a9c; background: rgba(255,59,92,.15); }
-.pv-sizebar { display: none; position: absolute; left: 12px; bottom: 44px; align-items: center; gap: 6px; background: rgba(7,8,12,.85); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11px; color: var(--muted); backdrop-filter: blur(6px); }
+.pv-sizebar { display: none; position: absolute; left: 12px; bottom: 9px; height: 28px; align-items: center; gap: 4px; background: rgba(7,8,12,.9); border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pv-sizebar b { color: var(--accent); font-size: 11px; margin-left: 2px; }
+.pv-sizebar .sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+.preview-panel:has(.pv-sizebar.show) .pv-info { display: none; }
 .pv-sizebar.show { display: flex; }
-.pv-sizebar input { width: 120px; }
-.pv-sizebar output { width: 34px; text-align: right; color: var(--text); }
-.pv-sizebar button { height: 24px; padding: 0 8px; }
+.pv-sizebar input { width: 110px; }
+.pv-sizebar output { min-width: 30px; text-align: center; color: var(--text); }
+.pv-sizebar button { height: 20px; padding: 0 7px; font-size: 11px; }
 /* cleaner surfaces */
 .panel { background: linear-gradient(180deg, #10131b, #0c0f15); border-color: #1e2432; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 10px 30px rgba(0,0,0,.25); }
 .topbar { background: linear-gradient(180deg, #0b0e14, #07080c); }
@@ -496,11 +499,6 @@ input[type=range]::-webkit-slider-thumb { background: #fff; box-shadow: 0 0 0 1p
 #page-live { grid-template-rows: 470px minmax(330px, 1fr); }
 .pv-tools button.on { border-color: var(--accent); color: var(--accent); }
 #pvMax.on { border-color: #ff3b5c; color: #ff8a9c; }
-.pv-sizebar { left: 12px; right: auto; bottom: 44px; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px 10px; min-width: 300px; }
-.pv-sizebar .xyz { display: grid; grid-template-columns: 14px 58px 24px 1fr 24px 40px; align-items: center; gap: 6px; }
-.pv-sizebar .xyz b { color: var(--accent); font-size: 12px; }
-.pv-sizebar .xyz span { color: var(--muted); }
-.pv-sizebar .xyz input { width: auto; min-width: 110px; }
 .pv-sizebar .xyz output { width: auto; }
 .pv-sizebar > button { align-self: flex-end; margin-top: 2px; }
 .pv-info { right: 270px; }
