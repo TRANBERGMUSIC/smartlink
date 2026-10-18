@@ -336,12 +336,14 @@
 <div class="modal" id="camModal" hidden>
   <div class="modal-box cam-box">
     <h3 data-i18n="cam.title"></h3>
-    <div class="cam-row"><label><span data-i18n="cam.camera"></span><select id="camSel"></select></label></div>
+    <div class="cam-row"><label><span data-i18n="cam.camera"></span><select id="camSel"></select></label><label class="cam-pat"><span data-i18n="cam.pattern"></span><input type="number" id="camPat" min="1" max="255" value="38"></label></div>
     <div class="cam-view"><video id="camVideo" autoplay muted playsinline></video><canvas id="camCanvas"></canvas></div>
     <p class="cam-status" id="camStatus"></p>
     <div class="modal-actions">
       <button class="ghost danger" id="camReset" data-i18n="cam.reset"></button>
       <button class="ghost" id="camClose" data-i18n="cam.close"></button>
+      <button class="ghost" id="camSkip" data-i18n="cam.skip" hidden></button>
+      <button class="primary" id="camOk" data-i18n="cam.ok" hidden></button>
       <button class="ghost" id="camRun" data-i18n="cam.run"></button>
       <button class="primary" id="camSave" data-i18n="cam.save" hidden></button>
     </div>

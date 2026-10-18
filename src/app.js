@@ -23,7 +23,7 @@ const DEFAULT_LOOK = {
   pattern: 1, color: { mode: 'orig', rgb: [255, 255, 255] }, colorCycle: false, colorCycleSpeed: 0.3,
   move: 'none', moveAmt: 0.4, moveSpeed: 0.3, size: 0.8, rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, fps: 0.5, posX: 0, posY: 0, freeze: false,
 };
-const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: false, sizeRange: 1, posScaled: false, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
+const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: false, sizeRange: 1, posScaled: false, camPattern: 38, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
 Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
@@ -103,7 +103,7 @@ let centerDrag = false;
 // på et gitter af kendte sendte værdier, appen finder lyspletten i billedet og regner en homografi sendt→kamera.
 // Brugeren markerer derefter det ønskede område i kamerabilledet → homografi app→sendt (cfg.camMap).
 const camCal = { active: false, send: null, ch4: null, stream: null, dark: null, pts: [], state: 'idle', corners: null, drag: -1, frame: null };
-const CAM_GRID = (() => { const v = [-0.8, -0.4, 0, 0.4, 0.8], g = []; for (const y of v) for (const x of v) g.push([x, y]); return g; })();
+const CAM_GRID = [[0, 0], [-0.5, 0], [0.5, 0], [0, 0.5], [0, -0.5], [-0.5, 0.5], [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]]; // midten først, så ±0,5 (passer i et kamera der ikke kan zoome ud)
 function solveLinear(A, b) { // Gauss med pivot, n×n
   const n = b.length; A = A.map((r) => r.slice()); b = b.slice();
   for (let i = 0; i < n; i++) { let p = i; for (let r = i + 1; r < n; r++) if (Math.abs(A[r][i]) > Math.abs(A[p][i])) p = r; [A[i], A[p]] = [A[p], A[i]]; [b[i], b[p]] = [b[p], b[i]]; if (Math.abs(A[i][i]) < 1e-12) return null; for (let r = 0; r < n; r++) if (r !== i) { const f = A[r][i] / A[i][i]; for (let j = i; j < n; j++) A[r][j] -= f * A[i][j]; b[r] -= f * b[i]; } }
@@ -147,11 +147,12 @@ async function camStart() {
   const id = $('#camSel').value; cfg.camId = id; saveCfg();
   camCal.stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
   const v = $('#camVideo'); v.srcObject = camCal.stream; await v.play();
+  try { const tr = camCal.stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : null; if (caps && caps.zoom && typeof caps.zoom.min === 'number') { await tr.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); camCal.zoomed = caps.zoom.min; } } catch (_) {}
   // labels bliver først tilgængelige efter tilladelse – opdatér listen
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); const sel = $('#camSel'); [...sel.options].forEach((o) => { const d = devs.find((x) => x.deviceId === o.value); if (d && d.label) o.textContent = d.label; });
   camDrawLoop();
 }
-function camClose() { if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
+function camClose() { camCal.state = 'idle'; camConfirmDone(false); if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
 function camStatus(msg) { $('#camStatus').textContent = msg; }
 const CAM_W = 320, CAM_H = 180;
 function camGrab() { // nedskaleret gråtone-lignende (max-kanal) billede
@@ -181,30 +182,42 @@ const camBlob = (img, dark) => { const c = camComponent(img, dark); return c && 
 const camExtent = (img, dark) => { const c = camComponent(img, dark); return c && !c.edge ? c : null; };
 const CAM_SIZE_STEPS = [0, 16, 32, 48, 64, 80, 96, 108];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function camWaitConfirm() { return new Promise((res) => { camCal.confirm = res; $('#camOk').hidden = false; $('#camSkip').hidden = false; }); }
+function camConfirmDone(v) { const f = camCal.confirm; camCal.confirm = null; $('#camOk').hidden = true; $('#camSkip').hidden = true; if (f) f(v); }
 async function camMeasure() {
   if (!camCal.stream) return;
   if (blackout) { camStatus(t('cam.needOn')); return; }
   if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off');
+  const pat = cfg.camPattern || 38; if (patAvail.size && !patAvail.has(pat)) { /* ikke på kortet – brug det valgte */ } else setPattern(pat, true);
   if (!st.pattern) setPattern(cfg.testPattern || 5, true);
-  camCal.active = true; camCal.pts = []; camCal.state = 'measuring'; camCal.size = st.size;
-  // mørkt referencebillede: laser slukket (position = null → intensitet 0)
-  const was = blackout; blackout = true; sendNow(); await sleep(500);
+  camCal.active = true; camCal.pts = []; camCal.state = 'measuring'; camCal.size = st.size; camCal.cur = null; camCal.dropped = 0;
+  $('#camRun').hidden = true;
+  // mørkt referencebillede: laser slukket
+  const was = blackout; blackout = true; sendNow(); camStatus(t('cam.dark')); await sleep(500);
   const d1 = camGrab(); await sleep(120); const d2 = camGrab(); camCal.dark = d1.map((v, i) => (v + d2[i]) / 2);
   blackout = was;
-  // find den DMX-værdi der giver det MINDSTE mønster (lille plet = præcist tyngdepunkt, mindre rødt skær)
+  // mindste mønster-størrelse (lille plet = præcist midtpunkt)
   camCal.send = [0, 0]; let best = null;
   for (const c4 of [0, 108]) { if (camCal.state !== 'measuring') break; camCal.ch4 = c4; sendNow(); camStatus(t('cam.pre')); await sleep(650); const e = camExtent(camGrab(), camCal.dark); if (e && (!best || e.ext < best.ext)) best = { ch4: c4, ext: e.ext }; }
-  camCal.gridCh4 = best ? best.ch4 : 108; camCal.dropped = 0;
+  camCal.gridCh4 = best ? best.ch4 : 108;
   for (let i = 0; i < CAM_GRID.length; i++) {
     if (camCal.state !== 'measuring') break;
-    camCal.ch4 = camCal.gridCh4; camCal.send = CAM_GRID[i]; sendNow(); camStatus(t('cam.step', { i: i + 1, n: CAM_GRID.length, ok: camCal.pts.length, d: camCal.dropped }));
-    await sleep(650);
+    camCal.ch4 = camCal.gridCh4; camCal.send = CAM_GRID[i]; sendNow(); await sleep(650);
     const b1 = camBlob(camGrab(), camCal.dark); await sleep(100); const b2 = camBlob(camGrab(), camCal.dark);
-    const b = b1 && b2 ? { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, n: Math.min(b1.n, b2.n) } : b1 || b2;
-    if (b && b.n >= 3) camCal.pts.push([CAM_GRID[i][0], CAM_GRID[i][1], b.x, b.y]); else camCal.dropped++;
+    const b = b1 && b2 ? { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 } : b1 || b2;
+    // forslag: fundet plet – ellers forudsagt ud fra de punkter vi har (≥4), ellers midten af billedet
+    let guess = b ? [b.x, b.y] : null;
+    if (!guess && camCal.pts.length >= 4) { const f = hFit(camCal.pts); if (f) guess = hApply(f.H, CAM_GRID[i][0], CAM_GRID[i][1]); }
+    if (!guess) guess = camCal.pts.length ? [camCal.pts[0][2], camCal.pts[0][3]] : [CAM_W / 2, CAM_H / 2];
+    camCal.cur = { i, x: clamp(guess[0], 0, CAM_W), y: clamp(guess[1], 0, CAM_H), found: !!b };
+    camStatus(t(b ? 'cam.confirm' : 'cam.confirmNone', { i: i + 1, n: CAM_GRID.length }));
+    const ok = await camWaitConfirm();
+    if (camCal.state !== 'measuring') break;
+    if (ok) camCal.pts.push([CAM_GRID[i][0], CAM_GRID[i][1], camCal.cur.x, camCal.cur.y]); else camCal.dropped++;
+    camCal.cur = null;
   }
   camCal.ch4 = null;
-  // størrelses-trappe i midten: hvor stort bliver mønsteret ved hver DMX-værdi?
+  // størrelses-trappe i midten (automatisk)
   camCal.sizes = [];
   if (camCal.state === 'measuring') {
     camCal.send = [0, 0];
@@ -218,13 +231,12 @@ async function camMeasure() {
     }
     camCal.ch4 = null;
   }
-  camCal.send = null; camCal.active = false; sendNow();
+  camCal.send = null; camCal.active = false; sendNow(); $('#camRun').hidden = false;
   if (camCal.state !== 'measuring') return;
-  if (camCal.pts.length < 6) { camCal.state = 'idle'; camStatus(t('cam.tooFew', { n: camCal.pts.length, d: camCal.dropped })); return; }
+  if (camCal.pts.length < 5) { camCal.state = 'idle'; camStatus(t('cam.tooFew', { n: camCal.pts.length, d: camCal.dropped })); return; }
   const fit = hFit(camCal.pts); if (!fit) { camCal.state = 'idle'; camStatus(t('cam.fitFail')); return; }
   camCal.H = fit.H; camCal.Hi = hInv(fit.H); camCal.err = fit.err;
-  // forslag til område: det laseren faktisk nåede (kamera-hjørner af ±0.8-gitteret)
-  camCal.corners = [[-0.8, 0.8], [0.8, 0.8], [0.8, -0.8], [-0.8, -0.8]].map(([x, y]) => hApply(fit.H, x, y));
+  camCal.corners = [[-0.5, 0.5], [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]].map(([x, y]) => hApply(fit.H, x, y));
   camCal.frame = camGrab(); camCal.state = 'corners'; camStatus(t('cam.corners', { n: camCal.pts.length, e: fit.err.toFixed(1), d: camCal.dropped }));
   $('#camSave').hidden = false;
 }
@@ -251,9 +263,10 @@ function camDrawLoop() {
   const fx = W / CAM_W, fy = H / CAM_H;
   // målte pletter
   for (const p of camCal.pts) { g.fillStyle = 'rgba(49,243,172,.9)'; g.beginPath(); g.arc(p[2] * fx, p[3] * fy, camCal.state === 'corners' ? 6 : 4, 0, Math.PI * 2); g.fill(); if (camCal.state === 'corners') { g.fillStyle = '#031'; g.font = '700 8px -apple-system'; g.textAlign = 'center'; g.fillText(String(CAM_GRID.findIndex((q) => q[0] === p[0] && q[1] === p[1]) + 1), p[2] * fx, p[3] * fy + 3); } }
-  if (camCal.state === 'corners' && camCal.H) { // forventet gitter ud fra omsætningen – viser hvor prikker burde ligge
-    g.save(); g.strokeStyle = 'rgba(49,243,172,.35)'; g.lineWidth = 1; for (let r = 0; r < 5; r++) { g.beginPath(); for (let c = 0; c < 5; c++) { const [u, v] = hApply(camCal.H, CAM_GRID[r * 5 + c][0], CAM_GRID[r * 5 + c][1]); c ? g.lineTo(u * fx, v * fy) : g.moveTo(u * fx, v * fy); } g.stroke(); g.beginPath(); for (let c = 0; c < 5; c++) { const [u, v] = hApply(camCal.H, CAM_GRID[c * 5 + r][0], CAM_GRID[c * 5 + r][1]); c ? g.lineTo(u * fx, v * fy) : g.moveTo(u * fx, v * fy); } g.stroke(); } g.restore();
+  if (camCal.state === 'corners' && camCal.H) { // hvor omsætningen forventer hvert målepunkt
+    g.save(); g.strokeStyle = 'rgba(49,243,172,.4)'; g.lineWidth = 1; for (const q of CAM_GRID) { const [u, v] = hApply(camCal.H, q[0], q[1]); g.beginPath(); g.arc(u * fx, v * fy, 10, 0, Math.PI * 2); g.stroke(); } g.restore();
   }
+  if (camCal.cur) { const c = camCal.cur; g.save(); g.strokeStyle = c.found ? '#31f3ac' : '#ffaa3c'; g.lineWidth = 3; g.setLineDash([]); g.beginPath(); g.arc(c.x * fx, c.y * fy, 22, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(c.x * fx - 30, c.y * fy); g.lineTo(c.x * fx + 30, c.y * fy); g.moveTo(c.x * fx, c.y * fy - 30); g.lineTo(c.x * fx, c.y * fy + 30); g.stroke(); g.fillStyle = g.strokeStyle; g.font = '700 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('cam.dragHere'), c.x * fx, c.y * fy - 30); g.restore(); }
   if (camCal.state === 'corners' && camCal.corners) {
     g.save(); g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.beginPath(); camCal.corners.forEach(([x, y], i) => (i ? g.lineTo(x * fx, y * fy) : g.moveTo(x * fx, y * fy))); g.closePath(); g.stroke();
     camCal.corners.forEach(([x, y], i) => { g.fillStyle = '#ff3b5c'; g.beginPath(); g.arc(x * fx, y * fy, 9, 0, Math.PI * 2); g.fill(); g.fillStyle = '#fff'; g.font = '700 10px -apple-system'; g.textAlign = 'center'; g.fillText(['↖', '↗', '↘', '↙'][i], x * fx, y * fy + 4); });
@@ -267,14 +280,17 @@ function camDrawLoop() {
   const nearest = (arr, x, y, getXY) => { let best = -1, bd = 1e9; arr.forEach((c, i) => { const [cx, cy] = getXY(c); const d = Math.hypot(cx - x, cy - y); if (d < bd) { bd = d; best = i; } }); return [best, bd]; };
   cv.addEventListener('contextmenu', (e) => { e.preventDefault(); if (camCal.state !== 'corners') return; const [x, y] = pos(e); const [pi, pd] = nearest(camCal.pts, x, y, (p) => [p[2], p[3]]); if (pi >= 0 && pd < 12) { camCal.pts.splice(pi, 1); camStatus(t('cam.ptRemoved', { n: camCal.pts.length })); } });
   cv.addEventListener('pointerdown', (e) => {
+    if (camCal.cur && e.button !== 2) { const [x, y] = pos(e); camCal.cur.x = clamp(x, 0, CAM_W); camCal.cur.y = clamp(y, 0, CAM_H); camCal.drag = 200; cv.setPointerCapture(e.pointerId); return; }
     if (camCal.state !== 'corners' || e.button === 2) return; const [x, y] = pos(e);
     const [ci, cd] = nearest(camCal.corners, x, y, (c) => c); const [pi, pd] = nearest(camCal.pts, x, y, (p) => [p[2], p[3]]);
     if (pi >= 0 && pd < 10 && pd <= cd) { camCal.drag = 100 + pi; cv.setPointerCapture(e.pointerId); }
     else if (cd < 30) { camCal.drag = ci; cv.setPointerCapture(e.pointerId); }
   });
-  cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); const P = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; if (camCal.drag >= 100) { const p = camCal.pts[camCal.drag - 100]; if (p) { p[2] = P[0]; p[3] = P[1]; const rf = hFit(camCal.pts); if (rf) { camCal.H = rf.H; camCal.err = rf.err; } } } else camCal.corners[camCal.drag] = P; });
+  cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); const P = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; if (camCal.drag === 200) { if (camCal.cur) { camCal.cur.x = P[0]; camCal.cur.y = P[1]; } } else if (camCal.drag >= 100) { const p = camCal.pts[camCal.drag - 100]; if (p) { p[2] = P[0]; p[3] = P[1]; const rf = hFit(camCal.pts); if (rf) { camCal.H = rf.H; camCal.err = rf.err; } } } else camCal.corners[camCal.drag] = P; });
   const up = () => { camCal.drag = -1; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   $('#camOpen').onclick = camOpen; $('#camClose').onclick = camClose; $('#camRun').onclick = camMeasure; $('#camSave').onclick = camSave;
+  $('#camPat').value = cfg.camPattern || 38; $('#camPat').onchange = () => { cfg.camPattern = clamp(+$('#camPat').value || 38, 1, 255); saveCfg(); };
+  $('#camOk').onclick = () => camConfirmDone(true); $('#camSkip').onclick = () => camConfirmDone(false);
   $('#camSel').onchange = () => camStart().catch((e) => camStatus(e.message));
   $('#camReset').onclick = () => { cfg.camMap = null; cfg.sizeMap = null; saveCfg(); toast(t('cam.cleared')); camClose(); };
 })();

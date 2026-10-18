@@ -664,7 +664,10 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 .cam-box { width: min(880px, 92vw); }
-.cam-row label { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.cam-row { display: flex; gap: 14px; }
+.cam-row label { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); flex: 1; }
+.cam-row label.cam-pat { flex: 0 0 auto; }
+.cam-row label.cam-pat input { width: 64px; }
 .cam-row select { flex: 1; }
 .cam-view { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; margin: 10px 0; border: 1px solid var(--line); }
 .cam-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0; }
