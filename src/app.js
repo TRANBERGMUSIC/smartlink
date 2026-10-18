@@ -88,6 +88,57 @@ const YF = () => (cfg.yFlip ? -1 : 1); // laserens Y-akse vender modsat skærmen
 // ---------- særlige billeder: test-streg og zonegrænse tegnet af laseren ----------
 // Et mønster fra SD-kortet klemmes helt fladt (Y-størrelse = min) → en lang streg.
 let special = null; // null | 'line' | 'zone'
+// ---- måling af placering: laseren viser mønsteret på 9 kendte rå værdier, brugeren trykker hvor det ramte ----
+const MEASURE_GRID = [[0, 0], [-0.7, 0], [0.7, 0], [0, 0.7], [0, -0.7], [-0.7, 0.7], [0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
+let measure = null; // { i, obs: [[sentX, sentY, obsX, obsY], …], size }
+function posMapFor(size) { // nærmeste målte omsætning (evt. interpoleret mellem to størrelser)
+  const maps = cfg.posMap || []; if (maps.length === 1) return maps[0];
+  const srt = [...maps].sort((a, b) => a.size - b.size);
+  if (size <= srt[0].size) return srt[0]; if (size >= srt[srt.length - 1].size) return srt[srt.length - 1];
+  for (let i = 1; i < srt.length; i++) if (size <= srt[i].size) { const a = srt[i - 1], b = srt[i], t = (size - a.size) / Math.max(1e-6, b.size - a.size); return { size, M: a.M.map((v, k) => v + (b.M[k] - v) * t), c: a.c.map((v, k) => v + (b.c[k] - v) * t) }; }
+  return srt[0];
+}
+// mindste kvadraters affin tilpasning: obs = M·sent + c  (M = [a b; c d])
+function fitPosMap(obs) {
+  const n = obs.length; if (n < 3) return null;
+  const solve = (col) => { // løs [sx sy 1]·[p q r]ᵀ = obs_col
+    let A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], B = [0, 0, 0];
+    for (const o of obs) { const v = [o[0], o[1], 1]; for (let i = 0; i < 3; i++) { B[i] += v[i] * o[col]; for (let j = 0; j < 3; j++) A[i][j] += v[i] * v[j]; } }
+    for (let i = 0; i < 3; i++) { let p = i; for (let r = i + 1; r < 3; r++) if (Math.abs(A[r][i]) > Math.abs(A[p][i])) p = r; [A[i], A[p]] = [A[p], A[i]]; [B[i], B[p]] = [B[p], B[i]]; if (Math.abs(A[i][i]) < 1e-9) return null; for (let r = 0; r < 3; r++) if (r !== i) { const f = A[r][i] / A[i][i]; for (let j = 0; j < 3; j++) A[r][j] -= f * A[i][j]; B[r] -= f * B[i]; } }
+    return [B[0] / A[0][0], B[1] / A[1][1], B[2] / A[2][2]];
+  };
+  const X = solve(2), Y = solve(3); if (!X || !Y) return null;
+  const M = [X[0], X[1], Y[0], Y[1]], c = [X[2], Y[2]];
+  let err = 0; for (const o of obs) { const px = M[0] * o[0] + M[1] * o[1] + c[0], py = M[2] * o[0] + M[3] * o[1] + c[1]; err += Math.hypot(px - o[2], py - o[3]); }
+  return { M, c, err: err / n };
+}
+function measureStart() {
+  if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off');
+  if (!st.pattern) setPattern(cfg.testPattern || 5, true);
+  measure = { i: 0, obs: [], size: st.size }; moveMode = false; $('#pvMove').classList.remove('on'); $('#pvSizeBar').classList.remove('show');
+  $('#pvMeasure').classList.add('on'); $('#pvMeasurePanel').hidden = false; measureUI(); sendNow();
+}
+function measureStop(save) {
+  if (save && measure && measure.obs.length >= 4) {
+    const fit = fitPosMap(measure.obs);
+    if (fit) { const maps = (cfg.posMap || []).filter((m) => Math.abs(m.size - measure.size) > 0.1); maps.push({ size: measure.size, M: fit.M, c: fit.c, err: fit.err, at: Date.now() }); cfg.posMap = maps; saveCfg(); toast(t('pv.msDone', { e: Math.round(fit.err * 100) })); }
+    else toast(t('pv.msFail'));
+  }
+  measure = null; $('#pvMeasure').classList.remove('on'); $('#pvMeasurePanel').hidden = true; sendNow();
+}
+function measureRecord(appX, appY) { // app-koordinater (-1..1) → rå via den almindelige kalibrering = hvor laseren faktisk ramte
+  if (!measure) return;
+  const g = MEASURE_GRID[measure.i];
+  measure.obs.push([g[0], g[1], calAxis(appX, 'x'), calAxis(appY * YF(), 'y')]);
+  measureNext();
+}
+function measureNext() { if (!measure) return; measure.i++; if (measure.i >= MEASURE_GRID.length) { measureStop(true); return; } measureUI(); sendNow(); }
+function measureUI() {
+  if (!measure) return;
+  $('#msStep').textContent = t('pv.msStep', { i: measure.i + 1, n: MEASURE_GRID.length });
+  $('#msInfo').textContent = t('pv.msInfo');
+}
+
 function specialGeom() {
   if (special === 'line') return { vertical: false, off: 0, rgb: [255, 255, 255] };
   if (special === 'cal' || special === 'center') { const p = special === 'cal' ? calPt() : { x: 0, y: 0 }; const vertical = maxEdge() % 2 === 1; return { rgb: special === 'cal' ? [255, 0, 0] : [255, 255, 255], raw: true, vertical, x: p.x, y: p.y, len: 1, dot: patAvail.has(cfg.dotPattern) ? cfg.dotPattern : 0 }; }
@@ -193,7 +244,7 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   // 7–10 position: appen styrer selv bevægelsen (rigtig cirkel, ottetal …) + hvor mønsteret peger hen
   // laseren lægger positionen til FØR den skalerer størrelsen → kompensér, så 'Flyt' passer med LIVE
   const psc = cfg.posScaled ? 1 / Math.max(size, 0.08) : 1;
-  pos16(7, out.rawX * psc, true); pos16(9, out.rawY * psc, true);
+  pos16(7, out.sendX * psc, true); pos16(9, out.sendY * psc, true);
   // 11: farve – 0–15 original, 16–79 ensfarvet, 144–255 automatisk farveskift
   if (st.colorCycle) setCh(11, 144 + st.colorCycleSpeed * 111);
   else if (mode === 'orig') setCh(11, 8);
@@ -273,12 +324,16 @@ function computeFrame(now) {
   const ext = patExtent(st.pattern, ang);
   // (målt 18/10: laseren skalerer IKKE positionen med størrelsen – midten kan stå overalt, så længe mønsteret holder sig inden for ±1)
   const limX = Math.max(0, cfg.posScaled ? Math.min(size, 1 - size * ext.x) : 1 - size * ext.x), limY = Math.max(0, cfg.posScaled ? Math.min(size, 1 - size * ext.y) : 1 - size * ext.y);
-  const wantX = calAxis(lx, 'x'), wantY = calAxis(ly, 'y');
-  const rawX = clamp(wantX, -limX, limX), rawY = clamp(wantY, -limY, limY);
+  let wantX = calAxis(lx, 'x'), wantY = calAxis(ly, 'y');
+  if (measure) { const g = MEASURE_GRID[measure.i]; wantX = g[0]; wantY = g[1]; } // måling: fast rå værdi, ingen omregning
+  let rawX = clamp(wantX, -limX, limX), rawY = clamp(wantY, -limY, limY);
   const clamped = Math.abs(wantX - rawX) > 0.003 || Math.abs(wantY - rawY) > 0.003;
   const [axc, ayc] = rawToApp(rawX, rawY); // tilbage til app-koordinater, så LIVE viser hvor mønsteret faktisk ender
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
-  out = { x, y, lx, ly, rawX, rawY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
+  // målt omsætning (Mål placering): det laseren skal have sendt for at ramme det ønskede sted
+  let sendX = rawX, sendY = rawY;
+  if (!measure && cfg.posMap) { const m = posMapFor(size); const d = m.M[0] * m.M[3] - m.M[1] * m.M[2]; if (Math.abs(d) > 1e-6) { const ox = rawX - m.c[0], oy = rawY - m.c[1]; sendX = clamp((m.M[3] * ox - m.M[1] * oy) / d, -1, 1); sendY = clamp((-m.M[2] * ox + m.M[0] * oy) / d, -1, 1); } }
+  out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
   if (special) { specialFrame(on); return; }
   if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); return; }
@@ -286,7 +341,7 @@ function computeFrame(now) {
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? st.pattern : 0);
   setCh(3, st.freeze ? 0 : st.fps * 255);
-  { const ps = cfg.posScaled ? Math.max(size, 0.08) : 1; put16(4, 0.5 + clamp(out.rawX / ps, -1, 1) / 2); put16(6, 0.5 + clamp(out.rawY / ps, -1, 1) / 2); } put16(8, rot);
+  { const ps = cfg.posScaled ? Math.max(size, 0.08) : 1; put16(4, 0.5 + clamp(out.sendX / ps, -1, 1) / 2); put16(6, 0.5 + clamp(out.sendY / ps, -1, 1) / 2); } put16(8, rot);
   setCh(10, sizeVal); setCh(11, sizeVal);
   const fy = cfg.invY !== patFlip.has(st.pattern);
   setCh(12, cfg.invX && fy ? 224 : cfg.invX ? 96 : fy ? 160 : 0);
@@ -683,6 +738,7 @@ let zoneDrag = false, moveMode = false, posDrag = null, calDrag = null;
   };
   cv.addEventListener('pointerdown', (e) => {
     const [u, v] = rel(e);
+    if (measure) { measureRecord(u * 2 - 1, 1 - v * 2); return; }
     if (special === 'cal') { const p = calPt(); calDrag = { u0: u, v0: v, x0: p.x, y0: p.y, sx: cfg.cal.sx, sy: cfg.cal.sy }; cv.setPointerCapture(e.pointerId); return; }
     if (nearEdge(u, v) || special === 'zone') { zoneDrag = true; cv.setPointerCapture(e.pointerId); applyZoneDrag(u, v); return; }
     if (special !== 'max') { posDrag = { u0: u, v0: v, x0: st.posX, y0: st.posY }; cv.setPointerCapture(e.pointerId); }
@@ -723,6 +779,10 @@ $('#szMinus').onclick = () => setSize(st.size - 0.05); $('#szPlus').onclick = ()
 $$('#pvSizeBar button[data-k]').forEach((b) => (b.onclick = () => setPos(b.dataset.k, st[b.dataset.k] + 0.05 * +b.dataset.d)));
 $('#posReset').onclick = () => { st.posX = 0; st.posY = 0; setSize(0.8); };
 $('#pvMax').onclick = () => setSpecial('max');
+$('#pvMeasure').onclick = () => (measure ? measureStop(false) : measureStart());
+$('#msSkip').onclick = () => measureNext();
+$('#msCancel').onclick = () => measureStop(false);
+$('#msReset').onclick = () => { cfg.posMap = null; saveCfg(); measureStop(false); toast(t('pv.msCleared')); };
 // ---------- kalibrering med 4 punkter: øverst venstre, øverst højre, nederst højre, nederst venstre ----------
 // Hvert punkt vises af laseren som et kryds (vandret + lodret streg skiftevis). Krydsets midte er punktet.
 let calStep = 1;
@@ -829,7 +889,16 @@ function previewTick(now) {
       if (vertical) { g.moveTo(px, py - hl); g.lineTo(px, py + hl); } else { g.moveTo(px - hl, py); g.lineTo(px + hl, py); }
       g.stroke(); g.restore();
     };
-    if ((special === 'cal' || special === 'center') && out.on) {
+    if (measure && out.on) {
+      // alle 9 målepunkter: grå = kommer, grøn = målt, rød = nu. Brugeren trykker hvor laseren ramte.
+      MEASURE_GRID.forEach((gp, i) => { const [ax, ay] = rawToApp(gp[0], gp[1]), [px, py] = boxPt(B, ax, ay); g.save(); g.strokeStyle = i === measure.i ? '#ff3b5c' : i < measure.i ? 'rgba(49,243,172,.6)' : 'rgba(255,255,255,.18)'; g.lineWidth = i === measure.i ? 2.5 : 1; g.setLineDash(i === measure.i ? [] : [3, 4]); g.beginPath(); g.arc(px, py, i === measure.i ? 14 : 9, 0, Math.PI * 2); g.stroke(); g.fillStyle = g.strokeStyle; g.font = '600 10px -apple-system'; g.textAlign = 'center'; g.fillText(String(i + 1), px, py + 4); g.restore(); });
+      measure.obs.forEach((o, i) => { const [ax, ay] = rawToApp(o[2], o[3]), [px, py] = boxPt(B, ax, ay), [bx, by] = rawToApp(o[0], o[1]), [qx, qy] = boxPt(B, bx, by); g.save(); g.strokeStyle = 'rgba(49,243,172,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(qx, qy); g.lineTo(px, py); g.stroke(); g.fillStyle = '#31f3ac'; g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.fill(); g.restore(); });
+      g.fillStyle = '#fff'; g.font = '700 14px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.msStep', { i: measure.i + 1, n: MEASURE_GRID.length }), W / 2, B.y + 22);
+      g.fillStyle = '#ff8a9c'; g.font = '12px -apple-system'; g.fillText(t('pv.msLive'), W / 2, B.y + 40);
+      // selve mønsteret tegnes hvor appen *tror* det er (rød ring = dér skulle det ramme)
+      const real = patData.get(st.pattern); const fr0 = real && real.length ? real : FALLBACK_FRAME;
+      drawIlda(g, W, H, fr0[Math.floor(pvFrame) % fr0.length], { scale: out.size * out.calScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: [255, 59, 92], alpha: 0.5, glow: 1, box: B });
+    } else if ((special === 'cal' || special === 'center') && out.on) {
       const p = special === 'cal' ? calPt() : { x: 0, y: 0 }, col = special === 'cal' ? '#ff3b5c' : '#fff';
       // målet: det hjørne af LIVE-boksen punktet skal svare til
       if (special === 'cal') { const corner = [[B.x, B.y], [B.x + B.w, B.y], [B.x + B.w, B.y + B.h], [B.x, B.y + B.h]][calStep - 1]; g.save(); g.strokeStyle = '#ff3b5c'; g.fillStyle = 'rgba(255,59,92,.25)'; g.lineWidth = 2; g.beginPath(); g.arc(corner[0], corner[1], 14, 0, Math.PI * 2); g.fill(); g.stroke(); g.restore(); }
@@ -1439,6 +1508,7 @@ $('#openShow').onclick = async () => {
     if (show.audioPath) await loadAudio(show.audioPath); else $('#audioName').textContent = t('show.noSong');
   } catch (e) { modal(t('show.bad'), null); }
 };
+function toast(msg, ms = 4000) { let el = $('#toast'); if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); } el.textContent = msg; el.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), ms); }
 function flash(sel, txt) { const b = $(sel), o = b.textContent; b.textContent = txt; setTimeout(() => (b.textContent = o), 1200); }
 
 // ---------- automatisk show-designer ----------
@@ -1585,6 +1655,7 @@ document.addEventListener('keydown', (e) => {
   const kk = (e.key || '').toLowerCase();
   if (e.code === 'Space') { e.preventDefault(); tap(); }
   else if (!e.metaKey && !e.ctrlKey && !e.altKey && keymap[kk] && !e.repeat) { if (st.pattern === keymap[kk]) { setPattern(0); recordHook(t('pat.offName')); } else { setPattern(keymap[kk]); recordHook(t('pat.name', { n: keymap[kk] })); } flashKey(kk); }
+  else if (e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); const d = e.shiftKey ? 0.05 : 0.01; if (e.key === 'ArrowLeft') setPos('posX', st.posX - d); if (e.key === 'ArrowRight') setPos('posX', st.posX + d); if (e.key === 'ArrowUp') setPos('posY', st.posY + d); if (e.key === 'ArrowDown') setPos('posY', st.posY - d); }
   else if (e.key === 'b' || e.key === 'B') requestArm();
   else if (e.key === 'Escape') setBlackout(true);
   else if (/^[1-9]$/.test(e.key) && scenes[+e.key - 1]) { recallScene(+e.key - 1); recordHook(scenes[+e.key - 1].name); }
