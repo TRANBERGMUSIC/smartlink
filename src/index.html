@@ -51,6 +51,7 @@
         <button class="ghost small pv-tool" id="pvMax" data-i18n="pv.max" data-i18n-title="pv.maxTip"></button>
         <button class="ghost small pv-tool" id="pvCalBtn" data-i18n="pv.cal" data-i18n-title="pv.calTip"></button>
         <button class="ghost small pv-tool" id="pvMeasure" data-i18n="pv.ms" data-i18n-title="pv.msTip"></button>
+        <button class="ghost small pv-tool" id="camOpen" data-i18n="cam.btn" data-i18n-title="cam.tip"></button>
       </div>
       <div class="pv-ms" id="pvMeasurePanel" hidden>
         <b id="msStep"></b><span id="msInfo"></span>
@@ -332,6 +333,20 @@
 </section>
 </main>
 
+<div class="modal" id="camModal" hidden>
+  <div class="modal-box cam-box">
+    <h3 data-i18n="cam.title"></h3>
+    <div class="cam-row"><label><span data-i18n="cam.camera"></span><select id="camSel"></select></label></div>
+    <div class="cam-view"><video id="camVideo" autoplay muted playsinline></video><canvas id="camCanvas"></canvas></div>
+    <p class="cam-status" id="camStatus"></p>
+    <div class="modal-actions">
+      <button class="ghost danger" id="camReset" data-i18n="cam.reset"></button>
+      <button class="ghost" id="camClose" data-i18n="cam.close"></button>
+      <button class="ghost" id="camRun" data-i18n="cam.run"></button>
+      <button class="primary" id="camSave" data-i18n="cam.save" hidden></button>
+    </div>
+  </div>
+</div>
 <div class="modal" id="modal" hidden>
   <div class="modal-box">
     <h3 id="modalTitle"></h3>

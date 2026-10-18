@@ -358,6 +358,7 @@ function remoteStop() {
   remote.server.close(); remote.server = null; notifyRemoteCount();
 }
 function notifyRemoteCount() { if (win && !win.isDestroyed()) win.webContents.send('remote-count', remote.clients.size); }
+ipcMain.handle('cam-access', async () => { try { if (process.platform === 'darwin') { const { systemPreferences } = require('electron'); return await systemPreferences.askForMediaAccess('camera'); } } catch (e) { return false; } return true; });
 ipcMain.on('remote-state', (_e, json) => {
   if (json === remote.state) return;
   remote.state = json;

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('laser', {
   remoteEnable: (on) => ipcRenderer.invoke('remote-enable', on),
   remoteNewKey: () => ipcRenderer.invoke('remote-newkey'),
   remoteState: (json) => ipcRenderer.send('remote-state', json),
+  camAccess: () => ipcRenderer.invoke('cam-access'),
   onRemoteCmd: (fn) => ipcRenderer.on('remote-cmd', (_e, c) => fn(c)),
   onRemoteCount: (fn) => ipcRenderer.on('remote-count', (_e, n) => fn(n)),
   reconnect: () => ipcRenderer.invoke('reconnect'),
