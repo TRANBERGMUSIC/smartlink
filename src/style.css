@@ -638,3 +638,21 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .wordmark { letter-spacing: -.01em; font-size: 17px; font-weight: 500; }
 .wordmark b { font-weight: 800; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .logo { width: 34px; height: 34px; filter: drop-shadow(0 0 8px rgba(49,243,172,.35)); }
+/* mønster-indstillinger (popover) */
+.patpop { position: fixed; z-index: 60; width: 300px; background: rgba(12,14,20,.97); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.6); backdrop-filter: blur(10px); }
+.pp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.pp-head canvas { width: 54px; height: 54px; background: #000; border-radius: 8px; border: 1px solid var(--line); flex: none; }
+.pp-head b { display: block; font-size: 14px; } .pp-head .small { font-size: 10.5px; } .pp-head .ghost { margin-left: auto; width: 28px; padding: 0; }
+.pp-row { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; color: var(--muted); }
+.pp-row input { height: 32px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; color: var(--text); }
+.pp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pp-tog { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px; font-size: 12px; justify-content: flex-start; }
+.pp-tog i { font-style: normal; width: 18px; text-align: center; color: var(--muted); }
+.pp-tog.on { border-color: var(--accent); color: var(--accent); background: var(--dim, rgba(49,243,172,.12)); } .pp-tog.on i { color: var(--accent); }
+.pp-tog:disabled { opacity: .4; }
+.pp-foot { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
+.pp-foot .danger { color: #ff8a9c; } #ppLine.on { border-color: #ff3b5c; color: #ff8a9c; }
+.patpop .hint { margin: 8px 0 0; font-size: 10.5px; }
+.arm-cal { background: rgba(255,176,46,.08); border: 1px solid rgba(255,176,46,.4); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.arm-cal b { color: #ffb02e; display: block; margin-bottom: 4px; } .arm-cal p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; }
+.arm-cal .arm-go { width: 100%; }

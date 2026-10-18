@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><img class="logo" src="logo.svg" alt=""><span class="wordmark">Smart<b>Link</b></span><small>DS-3000RGB MK5</small></div>
+  <div class="brand"><img class="logo" src="logo-star.png" alt=""><span class="wordmark">Smart<b>Link</b></span><small>DS-3000RGB MK5</small></div>
   <nav class="tabs">
     <button data-tab="live" class="tab active" data-i18n="tab.live"></button>
     <button data-tab="show" class="tab" data-i18n="tab.show"></button>
@@ -360,11 +360,25 @@
   </div>
 </div>
 
+<div class="patpop" id="patPop" hidden>
+  <div class="pp-head"><canvas id="ppThumb"></canvas><div><b id="ppTitle"></b><span class="muted small" id="ppSub"></span></div><button class="ghost small" id="ppClose">✕</button></div>
+  <label class="pp-row"><span data-i18n="pp.name"></span><input id="ppName" spellcheck="false"></label>
+  <div class="pp-grid">
+    <button class="pp-tog" id="ppFav"><i>★</i><span data-i18n="pp.fav"></span></button>
+    <button class="pp-tog" id="ppFlip"><i>⟲</i><span data-i18n="pp.flip"></span></button>
+    <button class="pp-tog" id="ppMirror"><i>↕</i><span data-i18n="pp.mirror"></span></button>
+    <button class="pp-tog" id="ppMirrorX"><i>↔</i><span data-i18n="pp.mirrorX"></span></button>
+  </div>
+  <label class="pp-row"><span data-i18n="pp.key"></span><input id="ppKey" maxlength="1" placeholder="–"></label>
+  <div class="pp-foot"><button class="ghost small danger" id="ppDelete" data-i18n="pat.delete"></button><div class="spacer"></div><button class="ghost small" id="ppLine" data-i18n="pp.useLine"></button><button class="primary small" id="ppShow" data-i18n="pp.show"></button></div>
+  <p class="hint" id="ppMirrorHint" data-i18n="pp.mirrorHint"></p>
+</div>
 <div class="modal" id="armModal" hidden>
   <div class="modal-box arm-box">
     <div class="arm-head"><span class="arm-icon">⚠</span><div><h3 data-i18n="arm.title"></h3><p class="arm-sub" data-i18n="arm.sub"></p></div></div>
     <p class="arm-text" data-i18n-html="arm.text"></p>
-    <label class="arm-chk"><input type="checkbox" id="armCheck"><span class="arm-tick"></span><span data-i18n="arm.check"></span></label>
+    <div class="arm-cal" id="armCal" hidden><b data-i18n="arm.calTitle"></b><p data-i18n="arm.calText"></p><button class="arm-go" id="armCalGo" data-i18n="arm.calGo"></button></div>
+    <label class="arm-chk" id="armChkRow"><input type="checkbox" id="armCheck"><span class="arm-tick"></span><span data-i18n="arm.check"></span></label>
     <div class="arm-actions">
       <button class="ghost" id="armCancel" data-i18n="modal.cancel"></button>
       <button class="arm-go" id="armGo" disabled data-i18n="arm.go"></button>

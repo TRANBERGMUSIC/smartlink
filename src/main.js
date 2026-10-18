@@ -402,7 +402,7 @@ function createWindow() {
 
 // ---------- opdateringer fra GitHub Releases ----------
 // Appen tjekker den nyeste release, henter SmartLink-Mac.zip, pakker den ud og bytter sig selv ud (uden Apple-signatur).
-const UPDATE_REPO = 'TRANBERGMUSIC/lightlink'; // repo-navnet er uændret
+const UPDATE_REPO = 'TRANBERGMUSIC/smartlink'; // repo-navnet er uændret
 const https = require('https');
 function httpsGet(url, { onProgress, toFile } = {}, hops = 0) {
   return new Promise((resolve, reject) => {

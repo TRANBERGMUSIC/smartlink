@@ -30,6 +30,7 @@ const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
 cfg.calib = Object.assign({ T: 0.9, B: -0.9, L: -0.9, R: 0.9 }, cfg.calib || {});
+if (cfg.calibDone === undefined) cfg.calibDone = !!cfg.calPts && JSON.stringify(cfg.calPts) !== JSON.stringify({ TL: { x: -0.9, y: 0.9 }, TR: { x: 0.9, y: 0.9 }, BR: { x: 0.9, y: -0.9 }, BL: { x: -0.9, y: -0.9 } }); // allerede kalibreret i en tidligere version
 cfg.calPts = cfg.calPts || { TL: { x: cfg.calib.L, y: cfg.calib.T }, TR: { x: cfg.calib.R, y: cfg.calib.T }, BR: { x: cfg.calib.R, y: cfg.calib.B }, BL: { x: cfg.calib.L, y: cfg.calib.B } };
 // v3.5: målt på laseren – Y vender som på skærmen (høj værdi = op). Gamle gemte indstillinger rettes én gang.
 if (!cfg.v35) { cfg.yFlip = false; cfg.v35 = true; store.set('settings', cfg); }
@@ -173,7 +174,7 @@ function setSpecial(v) {
 
 // DJ-tilstand (19 kanaler) – laserens standard
 function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
-  const show = on && st.pattern > 0; // intet mønster = helt slukket (nogle kort har en 000.ild)
+  const show = on && st.pattern > 0 && cfg.calibDone; // intet mønster = helt slukket (nogle kort har en 000.ild); ingen mønstre før området er kalibreret
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? st.pattern : 0);
   // 3: 0–15 = 50 fps standard, 16–255 = 0…100 fps (16 ≈ 0 fps = frosset billede)
@@ -573,7 +574,7 @@ function renderPatterns() {
     d.innerHTML = `<span class="n">${n}</span><span class="nm"></span>${favs.has(n) ? '<span class="star">★</span>' : ''}`;
     d.querySelector('.nm').textContent = patNames[n] || '';
     d.onclick = () => { if (st.pattern === n) { setPattern(0); recordHook(t('pat.offName')); } else { setPattern(n); recordHook(t('pat.name', { n })); } };
-    d.oncontextmenu = (e) => { e.preventDefault(); editPattern(n); };
+    d.oncontextmenu = (e) => { e.preventDefault(); editPattern(n, d); };
     d.onmouseenter = () => startHover(d, n);
     d.onmouseleave = () => { if (hoverAnim && hoverAnim.tile === d) stopHover(); };
     g.appendChild(d);
@@ -724,7 +725,7 @@ async function saveHelperPatterns(withQuad) {
 }
 function calSet(k, v) { const p = calPt(); if (k === 'x') p.x = clamp(v, -1, 1); else if (k === 'y') p.y = clamp(v, -1, 1); cfg.quadSaved = false; calApply(); syncCalUI(); }
 function calGoto(step) { calStep = clamp(step | 0, 1, 4); if (special !== 'cal') setSpecial('cal'); syncCalUI(); }
-function calDone() { calApply(); if (special === 'cal') setSpecial('cal'); syncCalUI(); }
+function calDone() { calApply(); cfg.calibDone = true; saveCfg(); if (special === 'cal') setSpecial('cal'); syncCalUI(); }
 function syncCalUI() {
   const p = calPt();
   $$('#calSteps button').forEach((b) => b.classList.toggle('active', +b.dataset.s === calStep));
@@ -751,7 +752,7 @@ $('#calSaveQuad').onclick = () => saveHelperPatterns(true);
 $('#calX').addEventListener('input', (e) => calSet('x', e.target.value / 100));
 $('#calY').addEventListener('input', (e) => calSet('y', e.target.value / 100));
 $('#calIx').onchange = (e) => { cfg.cal.ix = e.target.checked; saveCfg(); }; $('#calIy').onchange = (e) => { cfg.cal.iy = e.target.checked; saveCfg(); };
-$('#calReset').onclick = () => { cfg.calPts = JSON.parse(JSON.stringify(CAL_PTS_DEF)); cfg.cal.ix = false; cfg.cal.iy = false; calApply(); syncCalUI(); };
+$('#calReset').onclick = () => { cfg.calPts = JSON.parse(JSON.stringify(CAL_PTS_DEF)); cfg.cal.ix = false; cfg.cal.iy = false; cfg.calibDone = false; calApply(); syncCalUI(); };
 // LIVE-boksen = det kalibrerede område (samme sideforhold som i virkeligheden), centreret i lærredet
 function pvBox(W, H) {
   const a = Math.max(0.2, Math.min(5, cfg.cal.sx / cfg.cal.sy)); let w = W * 0.94, h = w / a; if (h > H * 0.94) { h = H * 0.94; w = h * a; }
@@ -843,6 +844,7 @@ function previewTick(now) {
       g.fillStyle = 'rgba(49,243,172,0.12)'; g.fillRect((W - tw) / 2 - 10, 40, tw + 20, 22);
       g.fillStyle = '#31f3ac'; g.textAlign = 'left'; g.fillText(txt, (W - tw) / 2, 55);
     }
+    if (!cfg.calibDone && out.on && !special) { g.fillStyle = '#ffb02e'; g.font = '600 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.needCal'), W / 2, H - 28); }
     $('#pvInfo').textContent = `${t('pv.power', { n: Math.round(out.intensity * 100) })} · ${st.pattern ? '#' + st.pattern : t('pat.offName')}${patNames[st.pattern] ? ' · ' + patNames[st.pattern] : ''} · ${MOVE_DA[st.move]} · ${Math.round(st.size * 100)}%`;
   }
   requestAnimationFrame(previewTick);
@@ -853,7 +855,38 @@ function setPattern(n) {
   $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
   renderScenes();
 }
-async function editPattern(n) {
+// ---------- mønster-indstillinger (højreklik): navn, favorit, vend, spejl, tast, slet ----------
+let ppN = 0, patMirror = new Set(store.get('patMirror', [])); // patMirror: mønstre der spejles lodret i appen (vises som i filen – laseren kan kun vende 180°)
+function openPatPop(n, anchor) {
+  ppN = n; const pop = $('#patPop'); pop.hidden = false;
+  $('#ppTitle').textContent = t('pat.name', { n }); $('#ppSub').textContent = patAvail.has(n) ? t('pp.onCard') : t('pp.notLoaded');
+  $('#ppName').value = patNames[n] || '';
+  $('#ppFav').classList.toggle('on', favs.has(n)); $('#ppFlip').classList.toggle('on', patFlip.has(n)); $('#ppMirror').classList.remove('on'); $('#ppMirrorX').classList.remove('on');
+  $('#ppMirror').disabled = !patAvail.has(n); $('#ppMirrorX').disabled = !patAvail.has(n); $('#ppDelete').disabled = !patAvail.has(n);
+  const key = Object.keys(keymap).find((k) => keymap[k] === n); $('#ppKey').value = key ? key.toUpperCase() : '';
+  $('#ppLine').classList.toggle('on', cfg.linePattern === n);
+  const cv = $('#ppThumb'); const [g, W, H] = sizeCanvas(cv); g.clearRect(0, 0, W, H); const fr = patData.get(n); if (fr && fr.length) drawIlda(g, W, H, firstVisible(fr), { glow: 1.1, ang: patFlip.has(n) ? 180 : 0 });
+  // placér ved siden af flisen, inden for vinduet
+  const r = anchor.getBoundingClientRect(); const pw = 300, ph = 330;
+  let x = r.right + 10, y = r.top; if (x + pw > innerWidth - 8) x = r.left - pw - 10; if (x < 8) x = 8; if (y + ph > innerHeight - 8) y = innerHeight - ph - 8;
+  pop.style.left = x + 'px'; pop.style.top = Math.max(8, y) + 'px';
+  setTimeout(() => $('#ppName').focus(), 20);
+}
+function closePatPop() { $('#patPop').hidden = true; }
+$('#ppClose').onclick = closePatPop;
+document.addEventListener('pointerdown', (e) => { if (!$('#patPop').hidden && !e.target.closest('#patPop') && !e.target.closest('.pat')) closePatPop(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#patPop').hidden) { closePatPop(); e.stopPropagation(); } }, true);
+$('#ppName').addEventListener('input', (e) => { const v = e.target.value.trim(); if (v) patNames[ppN] = v; else delete patNames[ppN]; store.set('patNames', patNames); renderPatterns(); });
+$('#ppFav').onclick = () => { favs.has(ppN) ? favs.delete(ppN) : favs.add(ppN); store.set('favs', [...favs]); $('#ppFav').classList.toggle('on', favs.has(ppN)); renderPatterns(); };
+$('#ppFlip').onclick = () => { patFlip.has(ppN) ? patFlip.delete(ppN) : patFlip.add(ppN); store.set('patFlip', [...patFlip]); $('#ppFlip').classList.toggle('on', patFlip.has(ppN)); renderPatterns(); renderKeyboard(); openPatPop(ppN, $(`.pat[data-n="${ppN}"]`) || document.body); };
+$('#ppMirror').onclick = () => mirrorPatternFile(ppN, 'y');
+$('#ppMirrorX').onclick = () => mirrorPatternFile(ppN, 'x');
+$('#ppKey').addEventListener('input', (e) => { const k = e.target.value.trim().toLowerCase(); for (const kk of Object.keys(keymap)) if (keymap[kk] === ppN) delete keymap[kk]; if (k) keymap[k] = ppN; store.set('keymap', keymap); renderKeyboard(); e.target.value = k.toUpperCase(); });
+$('#ppLine').onclick = () => { cfg.linePattern = ppN; $('#linePattern').value = ppN; saveCfg(); $('#ppLine').classList.add('on'); };
+$('#ppShow').onclick = () => { setPattern(ppN); closePatPop(); };
+$('#ppDelete').onclick = async () => { const ok = await modal(t('pat.deleteConfirm', { n: ppN }), null); if (ok === null) return; await window.laser.patDelete(ppN); patAvail.delete(ppN); patData.delete(ppN); favs.delete(ppN); store.set('favs', [...favs]); closePatPop(); renderPatterns(); renderKeyboard(); };
+async function editPattern(n, anchor) { openPatPop(n, anchor || $(`.pat[data-n="${n}"]`) || document.body); }
+async function editPatternOld(n) {
   const r = await modal(t('pat.name', { n }), patNames[n] || '', t(favs.has(n) ? 'pat.unfav' : 'pat.fav'), t(patFlip.has(n) ? 'pat.unflip' : 'pat.flip'), patAvail.has(n) ? t('pat.delete') : null, patAvail.has(n) ? t('pat.mirror') : null);
   if (r === null) return;
   if (r === '__extra4') { await mirrorPatternFile(n); return; }
@@ -1010,7 +1043,16 @@ function setBlackout(v) { blackout = v; const b = $('#blackout'); b.classList.to
 function requestArm() {
   if (!blackout) { setBlackout(true); return; }   // sluk kræver ingen bekræftelse
   $('#armCheck').checked = false; $('#armGo').disabled = true; $('#armModal').hidden = false;
+  // ny opstilling: området skal kalibreres, før der kan skydes andet ud
+  const needCal = !cfg.calibDone;
+  $('#armCal').hidden = !needCal; $('#armChkRow').hidden = needCal; $('#armGo').hidden = needCal;
 }
+$('#armCalGo').onclick = () => {
+  $('#armModal').hidden = true;
+  setPattern(0); setBlackout(false);               // laseren tændes, men viser kun kalibreringspunktet
+  $('#pvCal').hidden = false; $('#pvCalBtn').classList.add('on'); calGoto(1);
+  $$('.tab').forEach((x) => x.classList.toggle('active', x.dataset.tab === 'live')); $$('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-live'));
+};
 $('#armCheck').onchange = (e) => { $('#armGo').disabled = !e.target.checked; };
 $('#armGo').onclick = () => { if (!$('#armCheck').checked) return; $('#armModal').hidden = true; setBlackout(false); };
 $('#armCancel').onclick = () => { $('#armModal').hidden = true; };
@@ -1067,6 +1109,7 @@ async function setAuto(m) {
     if (r === null) { m = autoMode; } else { cfg.dmxMode = 'dj'; $('#dmxMode').value = 'dj'; saveCfg(); }
   }
   if (m === 'mic' && !(await startMic())) { m = 'off'; }
+  if (m === 'off' && autoMode !== 'off') { setPattern(0); }      // musik fra → laseren viser intet, klar til nyt
   autoMode = m;
   if (m !== 'mic' && !micTesting) stopMic();
   $$('#autoSeg button').forEach((b) => b.classList.toggle('active', b.dataset.auto === m));
@@ -1496,9 +1539,9 @@ document.addEventListener('keydown', (e) => {
 
 let modalResolve;
 // spejl et mønster lodret og gem en rettet .ild (til SD-kortet) – til mønstre der står på hovedet
-async function mirrorPatternFile(n) {
+async function mirrorPatternFile(n, axis = 'y') {
   const fr = await loadPat(n); if (!fr || !fr.length) return;
-  const frames = fr.map((f) => ({ n: f.n, xy: f.xy.map((v, i) => (i % 2 ? -v : v)), col: f.col, bl: f.bl }));
+  const frames = fr.map((f) => ({ n: f.n, xy: f.xy.map((v, i) => ((i % 2 === 1) === (axis === 'y') ? -v : v)), col: f.col, bl: f.bl }));
   const bytes = encodeFramesIld(frames, 'FLIP' + n);
   const r = await window.laser.saveIld(String(n).padStart(3, '0'), bytes, true);
   if (!r) return;
