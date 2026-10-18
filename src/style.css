@@ -675,3 +675,4 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .cam-status { font-size: 12px; color: var(--muted); min-height: 2.6em; margin: 0 0 8px; }
 #camOpen.on { border-color: var(--accent); }
 #camFollow.on { border-color: var(--accent); color: var(--accent); }
+.cam-zoom { font-size: 11px; color: var(--muted); opacity: .8; margin: -4px 0 8px; }

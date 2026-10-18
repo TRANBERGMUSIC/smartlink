@@ -158,7 +158,13 @@ async function camStart() {
     camStatus(t('cam.fallback', { e: e.name || e.message }));
   }
   const v = $('#camVideo'); v.srcObject = camCal.stream; await v.play();
-  try { const tr = camCal.stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : null; if (caps && caps.zoom && typeof caps.zoom.min === 'number') { await tr.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); camCal.zoomed = caps.zoom.min; } } catch (_) {}
+  camCal.zoomInfo = '';
+  try { const tr = camCal.stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : null; const set = tr.getSettings ? tr.getSettings() : {};
+    if (caps && caps.zoom && typeof caps.zoom.min === 'number') { await tr.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); camCal.zoomed = caps.zoom.min; camCal.zoomInfo = t('cam.zoomSet', { z: caps.zoom.min }); }
+    else camCal.zoomInfo = t('cam.zoomNo');
+    camCal.zoomInfo += ` · ${set.width || '?'}×${set.height || '?'}`;
+  } catch (_) {}
+  $('#camZoom').textContent = camCal.zoomInfo;
   // labels bliver først tilgængelige efter tilladelse – opdatér listen
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); const sel = $('#camSel'); [...sel.options].forEach((o) => { const d = devs.find((x) => x.deviceId === o.value); if (d && d.label) o.textContent = d.label; });
   camDrawLoop();
@@ -374,6 +380,19 @@ async function camAuto() {
       if (n && errSum / n < 2.5) break;
     }
   }
+  // 3b) sikkerhedszone: zone-stregen vises ved forskellige %, kameraet finder stregen → hvor sidder kanten reelt?
+  if (camCal.state === 'measuring' && fit) {
+    const zoneWas = cfg.zone, specialWas = special; const zm = []; camCal.send = null; camCal.ch4 = null; camCal.active = false; // specialFrame styrer selv
+    special = 'zone';
+    for (let z = 0.05; z <= 0.96 && camCal.state === 'measuring'; z += 0.1) {
+      cfg.zone = Math.round(z * 100) / 100; sendNow(); await sleep(550);
+      const c1 = camComponent(camGrab(), camCal.dark); await sleep(80); const c2 = camComponent(camGrab(), camCal.dark);
+      if (!c1 || !c2) continue; const u = (c1.x + c2.x) / 2, v = (c1.y + c2.y) / 2;
+      const [sx, sy] = hApply(hInv(fit.H), u, v); zm.push({ z: cfg.zone, sent: [sx, sy], cam: [u, v] });
+      camStatus(t('cam.zoneScan', { z: Math.round(cfg.zone * 100), n: zm.length }));
+    }
+    special = specialWas; cfg.zone = zoneWas; camCal.active = true; camCal.zoneRaw = zm;
+  }
   // 4) størrelses-kurven er allerede målt i trin 0 – brug kun de synlige trin
   camCal.sizes = camCal.sizeVisible || [];
   camCal.ch4 = null; camCal.send = null; camCal.active = false; sendNow(); $('#camRun').hidden = false; $('#camAuto').hidden = false;
@@ -385,6 +404,13 @@ async function camAuto() {
   camCal.corners = [[-R, R], [R, R], [R, -R], [-R, -R]].map(([x, y]) => hApply(fit.H, x, y).map((v, i) => clamp(v, 0, i ? CAM_H : CAM_W)));
   camCal.state = 'corners'; $('#camSave').hidden = false;
   const map = camBuildMap(camCal.pts, camCal.corners, camCal.sizes, { size: camCal.size, pattern: camCal.pattern, smallCh4: camCal.gridCh4 });
+  if (map && camCal.zoneRaw && camCal.zoneRaw.length >= 2) {
+    // kanten i app-koordinater (y op) → andel fra bunden af LIVE-feltet; kun monotont stigende målinger beholdes
+    const side = cfg.zoneSide || 'bottom'; const arr = [];
+    for (const m of camCal.zoneRaw) { const [ax, ay] = hApply(map.Hi, m.sent[0], m.sent[1]); const f = side === 'bottom' ? (ay + 1) / 2 : side === 'top' ? (1 - ay) / 2 : side === 'left' ? (ax + 1) / 2 : (1 - ax) / 2; arr.push({ z: m.z, f: clamp(f, 0, 1) }); }
+    arr.sort((a, b) => a.z - b.z); const mono = []; for (const q of arr) if (!mono.length || q.f > mono[mono.length - 1].f) mono.push(q);
+    cfg.zoneMap = mono.length >= 2 ? mono : null; saveCfg();
+  }
   camStatus(map ? t('cam.autoDone', { n: map.pts.length, e: map.err.toFixed(1), r: Math.round(R * 100) }) : t('cam.fitFail'));
 }
 function camSave() {
@@ -462,7 +488,7 @@ function camDrawLoop() {
   $('#camSel').onchange = () => camStart().catch((e) => camStatus(t('cam.noCam') + ' ' + (e.name || '') + ' ' + e.message));
   $('#camRefresh').onclick = () => camOpen();
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (!$('#camModal').hidden && camCal.state === 'idle') camOpen(); });
-  $('#camReset').onclick = () => { cfg.camMap = null; cfg.sizeMap = null; saveCfg(); toast(t('cam.cleared')); camClose(); };
+  $('#camReset').onclick = () => { cfg.camMap = null; cfg.sizeMap = null; cfg.zoneMap = null; saveCfg(); toast(t('cam.cleared')); camClose(); };
 })();
 // ---- måling af placering: laseren viser mønsteret på 9 kendte rå værdier, brugeren trykker hvor det ramte ----
 const MEASURE_GRID = [[0, 0], [-0.7, 0], [0.7, 0], [0, 0.7], [0, -0.7], [-0.7, 0.7], [0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
@@ -1084,7 +1110,9 @@ window.addEventListener('resize', debounce(() => renderPatterns(), 200));
 // ---------- sikkerhedszone i forhåndsvisningen ----------
 function zoneRect(W, H) {
   if (!(cfg.zone > 0)) return null;
-  const z = cfg.zone, b = pvBox(W, H);
+  const b = pvBox(W, H); let z = cfg.zone;
+  const zm = cfg.zoneMap; // målt med kameraet: zone-% → hvor kanten faktisk sidder (andel af LIVE-feltet)
+  if (zm && zm.length >= 2) { const pts = [...zm].sort((a, b2) => a.z - b2.z); if (z <= pts[0].z) z = pts[0].f; else if (z >= pts[pts.length - 1].z) z = pts[pts.length - 1].f; else for (let i = 1; i < pts.length; i++) if (z <= pts[i].z) { const a = pts[i - 1], c = pts[i]; z = a.f + (c.f - a.f) * (z - a.z) / Math.max(1e-6, c.z - a.z); break; } z = clamp(z, 0.005, 0.98); }
   switch (cfg.zoneSide) {
     case 'top': return [b.x, b.y, b.w, b.h * z];
     case 'left': return [b.x, b.y, b.w * z, b.h];
