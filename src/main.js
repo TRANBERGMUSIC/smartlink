@@ -433,8 +433,17 @@ ipcMain.handle('update-check', async () => {
 });
 ipcMain.handle('update-install', async (_e, url) => {
   try {
-    const appPath = path.resolve(app.getPath('exe'), '..', '..', '..');
+    let appPath = path.resolve(app.getPath('exe'), '..', '..', '..');
     if (!appPath.endsWith('.app')) return { ok: false, error: 'Kører ikke som installeret app (udviklingstilstand).' };
+    // Kører appen fra Downloads med karantæne, kører macOS den fra en skjult, skrivebeskyttet kopi (App Translocation).
+    // Find den rigtige app via Spotlight – ellers bed brugeren flytte den til Programmer.
+    if (appPath.includes('/AppTranslocation/')) {
+      let real = [];
+      try { real = require('child_process').execFileSync('/usr/bin/mdfind', ['kMDItemCFBundleIdentifier == "dk.willads.smartlink"'], { timeout: 8000 }).toString().split('\n').map((s) => s.trim()).filter((p) => p.endsWith('.app') && !p.includes('/AppTranslocation/') && fs.existsSync(p)); } catch (_) {}
+      real.sort((a, b) => (b.startsWith('/Applications/') ? 1 : 0) - (a.startsWith('/Applications/') ? 1 : 0));
+      if (!real.length) return { ok: false, error: 'Appen kører fra en midlertidig placering. Flyt SmartLink.app til Programmer, åbn den derfra og prøv igen.' };
+      appPath = real[0];
+    }
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lightlink-upd-')); const zip = path.join(tmp, 'SmartLink-Mac.zip');
     await httpsGet(url, { toFile: zip, onProgress: (p) => { try { win.webContents.send('update-progress', p); } catch (_) {} } });
     await new Promise((res, rej) => execFile('ditto', ['-x', '-k', zip, tmp], (err) => (err ? rej(err) : res())));
@@ -444,10 +453,13 @@ ipcMain.handle('update-install', async (_e, url) => {
     fs.writeFileSync(script, `#!/bin/bash
 # vent til SmartLink er lukket, byt app'en ud og start igen
 for i in $(seq 1 100); do kill -0 ${process.pid} 2>/dev/null || break; sleep 0.2; done
+LOG="${path.join(tmp, 'swap.log')}"
+{
 rm -rf "${appPath}"
 ditto "${newApp}" "${path.join(path.dirname(appPath), found)}"
 xattr -dr com.apple.quarantine "${path.join(path.dirname(appPath), found)}" 2>/dev/null
 open "${path.join(path.dirname(appPath), found)}"
+} >"$LOG" 2>&1
 `, { mode: 0o755 });
     const { spawn } = require('child_process');
     spawn('/bin/bash', [script], { detached: true, stdio: 'ignore' }).unref();
@@ -457,6 +469,8 @@ open "${path.join(path.dirname(appPath), found)}"
 });
 
 app.whenReady().then(() => {
+  // fjern karantæne-mærket på den installerede app, så macOS ikke kører den fra en midlertidig kopi næste gang
+  try { const me = path.resolve(app.getPath('exe'), '..', '..', '..'); if (me.endsWith('.app') && !me.includes('/AppTranslocation/')) execFile('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', me], () => {}); } catch (_) {}
   // flyt indstillinger og mønstre med fra LightLink (det gamle navn), første gang SmartLink starter
   try {
     const oldDir = path.join(app.getPath('appData'), 'LightLink'), newDir = app.getPath('userData');
