@@ -634,3 +634,7 @@ input[type=range]::-webkit-slider-thumb { background: #fff; box-shadow: 0 0 0 1p
 body.hasupd main { height: calc(100% - 100px); }
 body.hasbar.hasupd main { height: calc(100% - 144px); }
 .updbar .ghost { background: transparent; color: var(--text); border-color: var(--line); }
+/* SmartLink brand */
+.wordmark { letter-spacing: -.01em; font-size: 17px; font-weight: 500; }
+.wordmark b { font-weight: 800; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.logo { width: 34px; height: 34px; filter: drop-shadow(0 0 8px rgba(49,243,172,.35)); }

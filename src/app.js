@@ -1,4 +1,4 @@
-/* LightLink – renderer
+/* SmartLink – renderer
  * Styrer Laserworld ShowNET (Professional mode, 34 kanaler) via Art-Net.
  * Kanaler (relativt til startadresse):
  *  1 intensitet · 2 mønster (001.ild…) · 3 framerate (128 = 50 fps)
@@ -1330,7 +1330,7 @@ $('#newShow').onclick = async () => {
 };
 $('#saveShow').onclick = async () => {
   show.name = $('#showName').value;
-  const p = await window.laser.saveShow(show.name, JSON.stringify({ app: 'LightLink', version: 1, ...show }, null, 1));
+  const p = await window.laser.saveShow(show.name, JSON.stringify({ app: 'SmartLink', version: 1, ...show }, null, 1));
   if (p) flash('#saveShow', t('show.saved'));
 };
 $('#openShow').onclick = async () => {
@@ -1507,7 +1507,7 @@ async function mirrorPatternFile(n) {
 }
 function encodeFramesIld(frames, name = 'LIGHTLNK') {
   const parts = [];
-  const header = (cnt, fi, total) => { const b = new Uint8Array(32), dv = new DataView(b.buffer); b.set([0x49, 0x4c, 0x44, 0x41], 0); b[7] = 5; const nm = (name + '        ').slice(0, 8), co = 'LightLnk'; for (let i = 0; i < 8; i++) { b[8 + i] = nm.charCodeAt(i); b[16 + i] = co.charCodeAt(i); } dv.setUint16(24, cnt); dv.setUint16(26, fi); dv.setUint16(28, total); return b; };
+  const header = (cnt, fi, total) => { const b = new Uint8Array(32), dv = new DataView(b.buffer); b.set([0x49, 0x4c, 0x44, 0x41], 0); b[7] = 5; const nm = (name + '        ').slice(0, 8), co = 'SmartLnk'; for (let i = 0; i < 8; i++) { b[8 + i] = nm.charCodeAt(i); b[16 + i] = co.charCodeAt(i); } dv.setUint16(24, cnt); dv.setUint16(26, fi); dv.setUint16(28, total); return b; };
   frames.forEach((f, fi) => {
     const cnt = Math.min(f.n, 65535), body = new Uint8Array(cnt * 8), dv = new DataView(body.buffer);
     for (let i = 0; i < cnt; i++) { const o = i * 8; dv.setInt16(o, Math.round(clamp(f.xy[i * 2], -1, 1) * 32000)); dv.setInt16(o + 2, Math.round(clamp(f.xy[i * 2 + 1], -1, 1) * 32000)); body[o + 4] = (f.bl[i] ? 0x40 : 0) | (i === cnt - 1 ? 0x80 : 0); body[o + 5] = f.col[i * 3 + 2]; body[o + 6] = f.col[i * 3 + 1]; body[o + 7] = f.col[i * 3]; }

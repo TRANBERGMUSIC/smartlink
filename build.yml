@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-14
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,16 +25,18 @@ jobs:
       - name: Byg app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac zip --arm64 --publish never || true
+          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: "true"
+        timeout-minutes: 20
+        run: npx electron-builder --mac zip --arm64 --publish never -c.npmRebuild=false || true
       - name: Signér (ad hoc) og pak
         run: |
-          test -d dist/mac-arm64/LightLink.app
-          codesign --force --deep -s - dist/mac-arm64/LightLink.app
-          cd dist/mac-arm64 && ditto -c -k --sequesterRsrc --keepParent LightLink.app ../../LightLink-Mac.zip
+          test -d dist/mac-arm64/SmartLink.app
+          codesign --force --deep -s - dist/mac-arm64/SmartLink.app
+          cd dist/mac-arm64 && ditto -c -k --sequesterRsrc --keepParent SmartLink.app ../../SmartLink-Mac.zip
       - name: Udgiv release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
-          name: LightLink ${{ steps.v.outputs.version }}
+          name: SmartLink ${{ steps.v.outputs.version }}
           body: ${{ github.event.head_commit.message }}
-          files: LightLink-Mac.zip
+          files: SmartLink-Mac.zip

@@ -1,4 +1,4 @@
-/* LightLink – automatisk show-designer.
+/* SmartLink – automatisk show-designer.
  * Analyserer hele sangen offline (bas/mellem/diskant-energi, slag, tempo, stille passager, drops)
  * og bygger cues på tidslinjen. Ord fra sangen (hvis fundet) lægges ind som tekst-mønstre.
  */

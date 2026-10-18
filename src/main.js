@@ -1,4 +1,4 @@
-// LightLink – main process: vindue, Art-Net (UDP) og filer
+// SmartLink – main process: vindue, Art-Net (UDP) og filer
 const { app, BrowserWindow, ipcMain, dialog, systemPreferences } = require('electron');
 const dgram = require('dgram');
 const fs = require('fs');
@@ -41,8 +41,8 @@ function artPoll() {
 // ---- netværk: find/opsæt Mac'ens kablede forbindelse til 2.x.x.x ----
 const os = require('os');
 const { execFile } = require('child_process');
-const SERVICE = 'LightLink';
-const OLD_SERVICES = ['LightLink', 'LaserLink', 'LaserStyring'];
+const SERVICE = 'SmartLink';
+const OLD_SERVICES = ['SmartLink', 'LightLink', 'LaserLink', 'LaserStyring'];
 const run = (cmd, args) => new Promise((res) => execFile(cmd, args, { timeout: 15000 }, (err, out, errOut) => res({ err, out: String(out || ''), errOut: String(errOut || '') })));
 
 function laserAddrs() {
@@ -102,7 +102,7 @@ ipcMain.handle('net-setup', async (_e, targetIp) => {
     // Ekstra "service" på samme adapter: internettet via kablet (DHCP) virker stadig, og laseren får sin egen 2.x-adresse.
     script = `/usr/sbin/networksetup -duplicatenetworkservice ${q(wired[0].name)} ${q(SERVICE)} && /usr/sbin/networksetup -setmanual ${q(SERVICE)} ${myIp} ${mask}`;
   }
-  const as = `do shell script "${script.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with administrator privileges with prompt "LightLink vil sætte din netværksadapter op til laseren (${myIp})."`;
+  const as = `do shell script "${script.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with administrator privileges with prompt "SmartLink vil sætte din netværksadapter op til laseren (${myIp})."`;
   const r = await run('/usr/bin/osascript', ['-e', as]);
   if (r.err) return { ok: false, msg: /User canceled|-128/.test(r.errOut) ? 'Annulleret.' : 'Det lykkedes ikke: ' + (r.errOut || r.err.message).trim() };
   return { ok: true };
@@ -318,9 +318,10 @@ function remoteStart() {
     if (u.pathname === '/' || u.pathname === '/index.html') return sendFile(res, path.join(__dirname, 'remote.html'), 'text/html; charset=utf-8');
     if (u.pathname === '/touch-icon.png') return sendFile(res, path.join(__dirname, 'touch-icon.png'), 'image/png');
     if (u.pathname === '/logo-star.png') return sendFile(res, path.join(__dirname, 'logo-star.png'), 'image/png');
+    if (u.pathname === '/logo.svg') return sendFile(res, path.join(__dirname, 'logo.svg'), 'image/svg+xml');
     if (u.pathname === '/manifest.json') {
       res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
-      return res.end(JSON.stringify({ name: 'LightLink', short_name: 'LightLink', display: 'standalone', background_color: '#050505', theme_color: '#050505', start_url: '/?k=' + (u.searchParams.get('k') || ''), icons: [{ src: '/touch-icon.png', sizes: '180x180', type: 'image/png' }] }));
+      return res.end(JSON.stringify({ name: 'SmartLink', short_name: 'SmartLink', display: 'standalone', background_color: '#050505', theme_color: '#050505', start_url: '/?k=' + (u.searchParams.get('k') || ''), icons: [{ src: '/touch-icon.png', sizes: '180x180', type: 'image/png' }] }));
     }
     if (!ok) { res.writeHead(403, { 'Content-Type': 'application/json' }); return res.end('{"error":"bad key"}'); }
     if (u.pathname === '/events') {
@@ -387,7 +388,7 @@ function createWindow() {
     minWidth: 1180,
     minHeight: 860,
     backgroundColor: '#07080c',
-    title: 'LightLink',
+    title: 'SmartLink',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -400,13 +401,13 @@ function createWindow() {
 }
 
 // ---------- opdateringer fra GitHub Releases ----------
-// Appen tjekker den nyeste release, henter LightLink-Mac.zip, pakker den ud og bytter sig selv ud (uden Apple-signatur).
-const UPDATE_REPO = 'TRANBERGMUSIC/lightlink';
+// Appen tjekker den nyeste release, henter SmartLink-Mac.zip, pakker den ud og bytter sig selv ud (uden Apple-signatur).
+const UPDATE_REPO = 'TRANBERGMUSIC/lightlink'; // repo-navnet er uændret
 const https = require('https');
 function httpsGet(url, { onProgress, toFile } = {}, hops = 0) {
   return new Promise((resolve, reject) => {
     if (hops > 6) return reject(new Error('for mange omdirigeringer'));
-    const req = https.get(url, { headers: { 'User-Agent': 'LightLink/' + app.getVersion(), Accept: 'application/vnd.github+json, application/octet-stream' } }, (res) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'SmartLink/' + app.getVersion(), Accept: 'application/vnd.github+json, application/octet-stream' } }, (res) => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) { res.resume(); return resolve(httpsGet(new URL(res.headers.location, url).href, { onProgress, toFile }, hops + 1)); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
       const total = +res.headers['content-length'] || 0; let got = 0;
@@ -426,7 +427,7 @@ ipcMain.handle('update-check', async () => {
   try {
     const r = await httpsGet(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`);
     const j = JSON.parse(r.body); const latest = String(j.tag_name || '').replace(/^v/, '');
-    const asset = (j.assets || []).find((a) => /LightLink-Mac\.zip$/i.test(a.name));
+    const asset = (j.assets || []).find((a) => /(SmartLink|LightLink)-Mac\.zip$/i.test(a.name));
     return { ok: true, current: app.getVersion(), latest, newer: newer(latest, app.getVersion()) && !!asset, url: asset ? asset.browser_download_url : null, notes: j.body || '', page: j.html_url || `https://github.com/${UPDATE_REPO}/releases` };
   } catch (e) { return { ok: false, current: app.getVersion(), error: String(e.message || e) }; }
 });
@@ -434,19 +435,19 @@ ipcMain.handle('update-install', async (_e, url) => {
   try {
     const appPath = path.resolve(app.getPath('exe'), '..', '..', '..');
     if (!appPath.endsWith('.app')) return { ok: false, error: 'Kører ikke som installeret app (udviklingstilstand).' };
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lightlink-upd-')); const zip = path.join(tmp, 'LightLink-Mac.zip');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lightlink-upd-')); const zip = path.join(tmp, 'SmartLink-Mac.zip');
     await httpsGet(url, { toFile: zip, onProgress: (p) => { try { win.webContents.send('update-progress', p); } catch (_) {} } });
     await new Promise((res, rej) => execFile('ditto', ['-x', '-k', zip, tmp], (err) => (err ? rej(err) : res())));
     const found = fs.readdirSync(tmp).find((f) => f.endsWith('.app')); if (!found) throw new Error('Ingen .app i den hentede fil');
     const newApp = path.join(tmp, found);
     const script = path.join(tmp, 'swap.sh');
     fs.writeFileSync(script, `#!/bin/bash
-# vent til LightLink er lukket, byt app'en ud og start igen
+# vent til SmartLink er lukket, byt app'en ud og start igen
 for i in $(seq 1 100); do kill -0 ${process.pid} 2>/dev/null || break; sleep 0.2; done
 rm -rf "${appPath}"
-ditto "${newApp}" "${appPath}"
-xattr -dr com.apple.quarantine "${appPath}" 2>/dev/null
-open "${appPath}"
+ditto "${newApp}" "${path.join(path.dirname(appPath), found)}"
+xattr -dr com.apple.quarantine "${path.join(path.dirname(appPath), found)}" 2>/dev/null
+open "${path.join(path.dirname(appPath), found)}"
 `, { mode: 0o755 });
     const { spawn } = require('child_process');
     spawn('/bin/bash', [script], { detached: true, stdio: 'ignore' }).unref();
@@ -456,6 +457,15 @@ open "${appPath}"
 });
 
 app.whenReady().then(() => {
+  // flyt indstillinger og mønstre med fra LightLink (det gamle navn), første gang SmartLink starter
+  try {
+    const oldDir = path.join(app.getPath('appData'), 'LightLink'), newDir = app.getPath('userData');
+    if (fs.existsSync(oldDir) && !fs.existsSync(path.join(newDir, 'patterns')) && !fs.existsSync(path.join(newDir, '.migrated'))) {
+      fs.mkdirSync(newDir, { recursive: true });
+      for (const f of fs.readdirSync(oldDir)) { if (/lock|Cache|GPUCache|Code Cache|DawnCache/i.test(f)) continue; try { fs.cpSync(path.join(oldDir, f), path.join(newDir, f), { recursive: true, force: false, errorOnExist: false }); } catch (_) {} }
+      fs.writeFileSync(path.join(newDir, '.migrated'), 'fra LightLink');
+    }
+  } catch (_) {}
   createSocket();
   startPolling();
   remoteLoad();

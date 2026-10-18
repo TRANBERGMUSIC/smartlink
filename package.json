@@ -1,8 +1,8 @@
 {
-  "name": "lightlink",
-  "productName": "LightLink",
-  "version": "3.10.0",
-  "description": "Art-Net styring af Laserworld DS-3000RGB MK5",
+  "name": "smartlink",
+  "productName": "SmartLink",
+  "version": "4.0.0",
+  "description": "SmartLink – Art-Net styring af Laserworld DS-3000RGB MK5",
   "main": "src/main.js",
   "author": "Willads",
   "license": "UNLICENSED",
@@ -15,8 +15,8 @@
     "electron-builder": "26.0.12"
   },
   "build": {
-    "appId": "dk.willads.lightlink",
-    "productName": "LightLink",
+    "appId": "dk.willads.smartlink",
+    "productName": "SmartLink",
     "files": [
       "src/**/*",
       "!src/remote.template.html",
@@ -44,9 +44,12 @@
       ],
       "identity": null,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "LightLink lytter til musikken for at skifte laser-scener i takt."
+        "NSMicrophoneUsageDescription": "SmartLink lytter til musikken for at skifte laser-scener i takt."
       }
-    }
+    },
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false
   },
   "dependencies": {
     "@huggingface/transformers": "^3.5.2",

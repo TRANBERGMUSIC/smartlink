@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build_keep/
+.DS_Store
+# genereres fra assets/*.b64 og remote.template.html
+build/icon.png
+src/logo-star.png
+src/touch-icon.png
+src/remote.html

@@ -1,4 +1,4 @@
-/* LightLink – ord fra sangen (lokal tale-til-tekst med Whisper via transformers.js).
+/* SmartLink – ord fra sangen (lokal tale-til-tekst med Whisper via transformers.js).
  * Kører helt på Mac'en. Første gang hentes modellen fra internettet (ca. 75–250 MB) og gemmes lokalt.
  */
 'use strict';

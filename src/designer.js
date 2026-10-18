@@ -1,4 +1,4 @@
-/* LightLink – Designer: tekst, figurer og frihåndstegning → .ild-filer til laserens SD-kort.
+/* SmartLink – Designer: tekst, figurer og frihåndstegning → .ild-filer til laserens SD-kort.
  * Alle figurer laves som "strokes": lister af punkter i -1..1 (x til højre, y op). Blank (slukket) mellem strokes.
  */
 'use strict';
@@ -187,7 +187,7 @@ function encodeIld(frames, rgb, name = 'LIGHTLNK') {
   const header = (n, fi, total) => {
     const b = new Uint8Array(32); const dv = new DataView(b.buffer);
     b.set([0x49, 0x4c, 0x44, 0x41], 0); b[7] = 5;
-    const nm = (name + '        ').slice(0, 8), co = 'LightLnk';
+    const nm = (name + '        ').slice(0, 8), co = 'SmartLnk';
     for (let i = 0; i < 8; i++) { b[8 + i] = nm.charCodeAt(i); b[16 + i] = co.charCodeAt(i); }
     dv.setUint16(24, n); dv.setUint16(26, fi); dv.setUint16(28, total); b[30] = 0; return b;
   };
