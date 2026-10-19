@@ -31,7 +31,7 @@ const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 if (!cfg.mig1810) { cfg.posScaled = false; cfg.mig1810 = true; }
 if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; }
 if (!cfg.mig1810c) { cfg.sizeFlip = false; cfg.mig1810c = true; }
-if (!cfg.mig1810e) { cfg.sizeFlip = false; cfg.mig1810e = true; } // retningen kommer nu fra målingen – nulstil manuel vending // målt: størrelses-kanalen vender modsat af hvad jeg antog
+if (!cfg.mig1810f) { cfg.sizeFlip = true; cfg.mig1810f = true; } // 19/10 19:35: stadig omvendt på væggen → vend // målt: størrelses-kanalen vender modsat af hvad jeg antog
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
 cfg.calib = Object.assign({ T: 0.9, B: -0.9, L: -0.9, R: 0.9 }, cfg.calib || {});
@@ -566,8 +566,10 @@ async function camAuto() {
   if (!fit || camCal.pts.length < 6) { camCal.state = 'idle'; camStatus(t('cam.tooFew', { n: camCal.pts.length, d: camCal.dropped })); return; }
   camCal.H = fit.H; camCal.Hi = hInv(fit.H); camCal.err = fit.err;
   // 5) område = hele det målte (største |sendt| der blev set) – gemmes med det samme; hjørnerne kan stadig trækkes
-  const R = Math.max(0.5, ...camCal.pts.map((p) => Math.max(Math.abs(p[0]), Math.abs(p[1]))));
-  camCal.corners = [[-R, R], [R, R], [R, -R], [-R, -R]].map(([x, y]) => hApply(fit.H, x, y).map((v, i) => clamp(v, 0, i ? CAM_H : CAM_W)));
+  // LIVE-feltet = laserens FULDE rækkevidde (sendt ±1), også uden for kamerabilledet – ikke kun det kameraet nåede at se.
+  // Ellers bliver LIVE for lille, og mønsteret kan ikke komme helt ud til højre/toppen selv om laseren kan.
+  const R = 1.0;
+  camCal.corners = [[-R, R], [R, R], [R, -R], [-R, -R]].map(([x, y]) => hApply(fit.H, x, y));
   camCal.state = 'corners'; $('#camSave').hidden = false;
   const map = camBuildMap(camCal.pts, camCal.corners, camCal.sizes, { size: camCal.size, pattern: camCal.pattern, smallCh4: camCal.gridCh4, smallExt: camCal.smallExt || null, big: camCal.big || null });
   if (map && camCal.zoneRaw && camCal.zoneRaw.length >= 2) {
@@ -577,7 +579,7 @@ async function camAuto() {
     arr.sort((a, b) => a.z - b.z); const mono = []; for (const q of arr) if (!mono.length || q.f > mono[mono.length - 1].f) mono.push(q);
     cfg.zoneMap = mono.length >= 2 ? mono : null; saveCfg();
   }
-  camStatus(map ? t('cam.autoDone', { n: map.pts.length, e: map.err.toFixed(1), r: Math.round(R * 100) }) : t('cam.fitFail'));
+  camStatus(map ? t('cam.autoDone', { n: map.pts.length, e: map.err.toFixed(1), r: 100 }) : t('cam.fitFail'));
 }
 // ---- størrelses-test: laseren kører selv faderen igennem, kameraet måler, og retningen rettes automatisk ----
 async function camSizeTest() {
@@ -675,7 +677,7 @@ function camDrawLoop() {
     if (pi >= 0 && pd < 10 && pd <= cd) { camCal.drag = 100 + pi; cv.setPointerCapture(e.pointerId); }
     else if (cd < 30) { camCal.drag = ci; cv.setPointerCapture(e.pointerId); }
   });
-  cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); const P = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; if (camCal.drag === 200) { if (camCal.cur) { camCal.cur.x = P[0]; camCal.cur.y = P[1]; } } else if (camCal.drag >= 100) { const p = camCal.pts[camCal.drag - 100]; if (p) { p[2] = P[0]; p[3] = P[1]; const rf = hFit(camCal.pts); if (rf) { camCal.H = rf.H; camCal.err = rf.err; } } } else camCal.corners[camCal.drag] = P; });
+  cv.addEventListener('pointermove', (e) => { if (camCal.drag < 0) return; const [x, y] = pos(e); const P = [clamp(x, 0, CAM_W), clamp(y, 0, CAM_H)]; if (camCal.drag === 200) { if (camCal.cur) { camCal.cur.x = P[0]; camCal.cur.y = P[1]; } } else if (camCal.drag >= 100) { const p = camCal.pts[camCal.drag - 100]; if (p) { p[2] = P[0]; p[3] = P[1]; const rf = hFit(camCal.pts); if (rf) { camCal.H = rf.H; camCal.err = rf.err; } } } else camCal.corners[camCal.drag] = [x, y]; });
   const up = () => { camCal.drag = -1; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   $('#camOpen').onclick = camOpen; $('#camClose').onclick = camClose; $('#camRun').onclick = camMeasure; $('#camSave').onclick = camSave;
   $('#camPat').value = cfg.camPattern || 38; $('#camPat').onchange = () => { cfg.camPattern = clamp(+$('#camPat').value || 38, 1, 255); cfg.camPatternUser = true; saveCfg(); };
