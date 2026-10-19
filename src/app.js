@@ -31,7 +31,7 @@ const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 if (!cfg.mig1810) { cfg.posScaled = false; cfg.mig1810 = true; }
 if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; }
 if (!cfg.mig1810c) { cfg.sizeFlip = false; cfg.mig1810c = true; }
-if (!cfg.mig1810f) { cfg.sizeFlip = true; cfg.mig1810f = true; } // 19/10 19:35: stadig omvendt på væggen → vend // målt: størrelses-kanalen vender modsat af hvad jeg antog
+if (!cfg.mig1810g) { cfg.sizeFlip = false; cfg.mig1810g = true; } // 19/10 20:15: fast retning i koden – kontakten nulstilles // målt: størrelses-kanalen vender modsat af hvad jeg antog
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
 cfg.calib = Object.assign({ T: 0.9, B: -0.9, L: -0.9, R: 0.9 }, cfg.calib || {});
@@ -421,7 +421,7 @@ function camPatHalfSent(size) { // mønsterets halve udstrækning i sendte enhed
   const scale = (Math.hypot(s1x - s0x, s1y - s0y) + Math.hypot(s2x - s0x, s2y - s0y)) / 2; // sendte enheder pr. kamera-pixel
   // kurven blev målt med ét bestemt mønster – skalér til det aktuelle mønsters egen udstrækning i filen
   const pe = patExtent(st.pattern), rel = cfg.sizeMapExt ? Math.max(0.05, Math.max(pe.x, pe.y)) / cfg.sizeMapExt : 1;
-  return clamp(extPx / 2 * scale * rel * 1.08, 0, 0.95); // lille margen så kanten aldrig klemmes
+  return clamp(extPx / 2 * scale * rel, 0, 0.6); // højst 0,6 så midten altid kan komme mindst 40 % ud – hellere lidt klip i hjørnet end en låst figur
 }
 function camAppToSend(ax, ay, size) { // app (-1..1, y op) → sendt: via kamerabilledet + rest-korrektion
   const m = cfg.camMap; if (!m || !m.Hac) return hApply(m.H, ax, ay);
@@ -793,11 +793,12 @@ function sizeCh4(size) {
   const sm_ = cfg.sizeMap; if (sm_ && sm_.filter((p) => p.ext).length >= 3) {
     const r = sizeRange(sm_); if (!r) return 64;
     // 0 % = mindste synlige, 100 % = største UDEN forvrængning. 'Vend størrelses-faderen' bytter om.
-    let f = clamp(size, 0, 1); if (r.bigAtLow) f = 1 - f; // retningen aflæses af målingen (stor ende = lav eller høj værdi)
-    if (cfg.sizeFlip) f = 1 - f; // manuel vending oveni, hvis det alligevel er omvendt
+    // DS-3000 (set på væggen 19/10): LAV værdi = STORT mønster. 0 % skal være lille → høj værdi; 100 % → lav værdi.
+    // Ingen automatik – kun én kontakt ('Vend størrelses-faderen') hvis en anden laser gør det modsat.
+    let f = clamp(size, 0, 1); if (!cfg.sizeFlip) f = 1 - f;
     return Math.round(r.lo + f * (r.hi - r.lo));
   }
-  size = Math.max(0.15, size); const r = clamp(cfg.sizeRange || 1, 0.2, 1); let v = (1 - size) * 127 * r; if (cfg.sizeInv) { v = 127 * r - v; return clamp(v, 19, 127); } return clamp(v, 0, 108); } // aldrig helt lukket – så mønsteret ikke forsvinder (målt 18/10: på DS-3000 er høj værdi = stort)
+  { let f = clamp(size, 0, 1); if (cfg.sizeFlip) f = 1 - f; return Math.round(clamp(118 - f * 100, 0, 127)); } } // uden kamera-kurve: 0 % → 118 (lille), 100 % → 18 (stort); lav værdi = stort på DS-3000 // aldrig helt lukket – så mønsteret ikke forsvinder (målt 18/10: på DS-3000 er høj værdi = stort)
 // 'max'-visning: laseren tegner én kant ad gangen (top, bund, venstre, højre) – 450 ms pr. kant, så scanneren når at flytte sig
 const maxEdge = () => Math.floor(performance.now() / 450) % 4;
 function specialFrame(on) {
