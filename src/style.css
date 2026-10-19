@@ -714,3 +714,8 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .wctl .wfader { width: 100%; height: 90px; border-radius: 6px; background: #000; border: 1px solid #262c38; position: relative; overflow: hidden; }
 .wctl .wfader i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, var(--accent), var(--accent2)); opacity: .85; }
 .wctl select { width: 100%; height: 24px; font-size: 11px; }
+.pv-raw { border-color: rgba(255,170,60,.5); }
+.pv-raw label { display: grid; grid-template-columns: 70px 1fr 36px; align-items: center; gap: 6px; margin: 4px 0; }
+.pv-raw label input { width: 100%; }
+.pv-raw .mono { font-family: ui-monospace, Menlo, monospace; font-size: 9.5px; white-space: pre-wrap; opacity: .7; }
+#pvRaw.on { border-color: #ffaa3c; color: #ffaa3c; }

@@ -53,6 +53,22 @@
         <button class="ghost small pv-tool" id="pvCalBtn" data-i18n="pv.cal" data-i18n-title="pv.calTip"></button>
         <button class="ghost small pv-tool" id="pvMeasure" data-i18n="pv.ms" data-i18n-title="pv.msTip"></button>
         <button class="ghost small pv-tool" id="camOpen" data-i18n="cam.btn" data-i18n-title="cam.tip"></button>
+        <button class="ghost small pv-tool" id="pvRaw" data-i18n="raw.btn" data-i18n-title="raw.tip"></button>
+      </div>
+      <div class="pv-cal pv-raw" id="pvRawPanel" hidden>
+        <h3 data-i18n="raw.title"></h3>
+        <p class="cal-instr" data-i18n="raw.intro"></p>
+        <label><span>X</span><input type="range" id="rawX" min="-100" max="100" value="0"><output>0</output></label>
+        <label><span>Y</span><input type="range" id="rawY" min="-100" max="100" value="0"><output>0</output></label>
+        <div class="cal-r1"><button class="ghost small" data-corner="TL">↖ <span data-i18n="raw.isTL"></span></button><button class="ghost small" data-corner="TR">↗ <span data-i18n="raw.isTR"></span></button></div>
+        <div class="cal-r1"><button class="ghost small" data-corner="BL">↙ <span data-i18n="raw.isBL"></span></button><button class="ghost small" data-corner="BR">↘ <span data-i18n="raw.isBR"></span></button></div>
+        <div class="cal-r1"><button class="small primary" id="rawLearnBtn" data-i18n="raw.learn"></button><button class="ghost small" id="rawFit" data-i18n="raw.fit"></button><button class="ghost small" id="rawClear" data-i18n="raw.clear"></button></div>
+        <p class="cal-instr" id="rawN"></p>
+        <label><span data-i18n="raw.size"></span><input type="range" id="rawSize" min="0" max="127" value="64"><output>64</output></label>
+        <div class="cal-r1"><button class="ghost small" id="rawSizeMin" data-i18n="raw.sizeMinBtn"></button><button class="ghost small" id="rawSizeMax" data-i18n="raw.sizeMaxBtn"></button></div>
+        <label><span data-i18n="raw.zone"></span><input type="range" id="rawZone" min="0" max="255" value="0"><output>0</output></label>
+        <div class="cal-r1"><button class="ghost small" id="rawZoneLo" data-i18n="raw.zoneLoBtn"></button><button class="ghost small" id="rawZoneHi" data-i18n="raw.zoneHiBtn"></button><button class="ghost small" id="rawZoneOff" data-i18n="raw.zoneOff"></button></div>
+        <p class="cal-instr mono" id="rawDmx"></p>
       </div>
       <div class="pv-ms" id="pvMeasurePanel" hidden>
         <b id="msStep"></b><span id="msInfo"></span>

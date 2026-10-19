@@ -96,9 +96,11 @@ function setCh(ch, v) { const i = cfg.address - 1 + ch - 1; if (i >= 0 && i < 51
 // sikkerhedszone: 0–63 bund, 64–127 top, 128–191 venstre, 192–255 højre
 // NB: målt på laseren – 0–63 dækker TOPPEN og 64–127 BUNDEN (modsat Laserworlds tabel). Venstre/højre uændret.
 function zoneVal() {
+  if (raw.on && raw.zone != null) return clamp(Math.round(raw.zone), 0, 255);
   if (!(cfg.zone > 0)) return 0;
   // målt på DS-3000 (bund): værdierne under ~104 giver zonen igen fra midten – det brugbare område er zoneLo…zoneHi
   const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64;
+  if (raw.on && raw.zone != null) return clamp(Math.round(raw.zone), 0, 255);
   const lo = clamp(cfg.zoneLo ?? 40, 1, 63), hi = clamp(cfg.zoneHi ?? 63, lo + 1, 63);
   return base + Math.round(lo + cfg.zone * (hi - lo));
 }
@@ -207,6 +209,51 @@ function wolfTouched(i, v) { // kaldes når en kanal ændrer sig
   renderWolf(); setInterval(wolfTick, 120);
   const tb = $('#wolfTest'); if (tb) tb.onclick = () => { const c = $('#wolfConn'); if (c) c.textContent = t('wolf.testing'); if (wolfUI.test) clearTimeout(wolfUI.test); wolfUI.test = setTimeout(() => { wolfUI.test = null; toast(t('wolf.testFail'), 9000); }, 8000); };
   const sb = $('#wolfSettings'); if (sb) sb.onclick = () => { $$('.tab').forEach((x) => x.classList.toggle('active', x.dataset.tab === 'settings')); $$('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-settings')); const w = $('.wmpanel'); if (w) w.scrollIntoView({ behavior: 'smooth' }); };
+})();
+// ---- Rå/Lær-panelet ----
+function rawSync() {
+  const set = (id, v) => { const el = $('#' + id); if (el && +el.value !== v) el.value = v; const o = el && el.parentElement.querySelector('output'); if (o) o.textContent = String(v); };
+  set('rawX', Math.round(raw.x)); set('rawY', Math.round(raw.y)); set('rawSize', Math.round(raw.size)); set('rawZone', raw.zone == null ? 0 : Math.round(raw.zone));
+  const n = $('#rawN'); if (n) n.textContent = t('raw.pts', { n: raw.pts.length });
+  const d = $('#rawDmx'); if (d) { const base = cfg.address - 1; d.textContent = Array.from({ length: 19 }, (_, i) => `${i + 1}:${dmx[base + i]}`).join('  '); }
+}
+function rawToggle(on) {
+  raw.on = on == null ? !raw.on : on; $('#pvRaw').classList.toggle('on', raw.on); $('#pvRawPanel').hidden = !raw.on;
+  if (raw.on) { if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off'); raw.size = sizeCh4(st.size); raw.x = Math.round(out.sendX * 100) || 0; raw.y = Math.round(out.sendY * 100) || 0; raw.zone = null; }
+  rawSync(); sendNow();
+}
+function rawLearn(appX, appY) { // "laseren rammer HER i LIVE" ved de rå værdier der sendes lige nu
+  raw.pts = raw.pts.filter((p) => Math.hypot(p[0] - raw.x / 100, p[1] - raw.y / 100) > 0.02); raw.pts.push([raw.x / 100, raw.y / 100, appX, appY]);
+  store.set('rawPts', raw.pts); rawFit(); rawSync();
+}
+function rawCorner(k) { const c = { TL: [-1, 1], TR: [1, 1], BR: [1, -1], BL: [-1, -1] }[k]; const idx = { TL: 1, TR: 2, BR: 3, BL: 4 }[k]; rawLearn(c[0], c[1]); toast(t('raw.cornerSet', { k: t('pv.calP' + idx) })); }
+function rawFit() { // app↔sendt-par → samme omsætning som kameraet laver (app-firkanten er "kameraet")
+  if (raw.pts.length < 4) { toast(t('raw.needMore', { n: 4 - raw.pts.length })); return false; }
+  const pts = raw.pts.map((p) => [p[0], p[1], p[2], p[3]]); // [sentX, sentY, "cam"=appX, appY]
+  const map = camBuildMap(pts, [[-1, 1], [1, 1], [1, -1], [-1, -1]], cfg.sizeMap, { manual: true, size: st.size });
+  if (map) { map.res = null; cfg.camMap = map; saveCfg(); toast(t('raw.fitted', { n: pts.length, e: (map.err * 100).toFixed(0) })); return true; }
+  toast(t('cam.fitFail')); return false;
+}
+function rawSizeMark(which) { // 'min' = mindste synlige, 'max' = størst uden forvrængning – ved den rå størrelses-værdi der sendes nu
+  const v = clamp(Math.round(raw.size), 0, 127); const sm_ = (cfg.sizeMap || []).filter((p) => p.manualKeep); const other = sm_.find((p) => p.which !== which);
+  const mine = { ch4: v, ext: which === 'min' ? 10 : 100, manualKeep: true, which };
+  cfg.sizeMap = other ? [other, mine, { ch4: Math.round((other.ch4 + v) / 2), ext: 55, manualKeep: true, which: 'mid' }].filter((p, i, a) => a.findIndex((q) => q.ch4 === p.ch4) === i) : [mine];
+  cfg.sizeMapExt = Math.max(0.05, Math.max(patExtent(st.pattern).x, patExtent(st.pattern).y)); cfg.sizeMapPattern = st.pattern; saveCfg();
+  toast(t(which === 'min' ? 'raw.sizeMin' : 'raw.sizeMax', { v }));
+}
+function rawZoneMark(which) { const v = clamp(Math.round(raw.zone == null ? 0 : raw.zone), 0, 255); const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64; const rel = clamp(v - base, 1, 63); if (which === 'lo') cfg.zoneLo = Math.min(rel, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = Math.max(rel, (cfg.zoneLo ?? 40) + 1); saveCfg(); toast(t(which === 'lo' ? 'raw.zoneLo' : 'raw.zoneHi', { v })); }
+(() => {
+  const b = $('#pvRaw'); if (!b) return; b.onclick = () => rawToggle();
+  const bind = (id, k) => { const el = $('#' + id); if (!el) return; el.addEventListener('input', () => { raw[k] = +el.value; rawSync(); sendNow(); }); };
+  bind('rawX', 'x'); bind('rawY', 'y'); bind('rawSize', 'size'); bind('rawZone', 'zone');
+  $('#rawZoneOff').onclick = () => { raw.zone = null; rawSync(); sendNow(); };
+  $$('#pvRawPanel [data-corner]').forEach((x) => (x.onclick = () => rawCorner(x.dataset.corner)));
+  $('#rawLearnBtn').onclick = () => { raw.learnClick = true; toast(t('raw.clickHint')); };
+  $('#rawFit').onclick = () => rawFit();
+  $('#rawClear').onclick = () => { raw.pts = []; store.set('rawPts', []); rawSync(); toast(t('raw.cleared')); };
+  $('#rawSizeMin').onclick = () => rawSizeMark('min'); $('#rawSizeMax').onclick = () => rawSizeMark('max');
+  $('#rawZoneLo').onclick = () => rawZoneMark('lo'); $('#rawZoneHi').onclick = () => rawZoneMark('hi');
+  setInterval(() => { if (raw.on) rawSync(); }, 300);
 })();
 function wmLearn(fn) { wm.learn = fn ? { fn } : null; renderWmMap(); toast(fn ? t('wm.learnHint', { f: t('wm.f.' + fn) }) : t('wm.learnOff')); }
 (() => {
@@ -413,7 +460,7 @@ function resLookup(res, u, v) { // bilineær mellem felt-midtpunkter; tomme felt
   return [a[0] * (1 - tx) * (1 - ty) + b[0] * tx * (1 - ty) + c[0] * (1 - tx) * ty + d[0] * tx * ty, a[1] * (1 - tx) * (1 - ty) + b[1] * tx * (1 - ty) + c[1] * (1 - tx) * ty + d[1] * tx * ty];
 }
 function camPatHalfSent(size) { // mønsterets halve udstrækning i sendte enheder (fra størrelses-kurven + kameraets skala)
-  const m = cfg.camMap, sm_ = cfg.sizeMap; if (!m || !m.Hcs || !sm_ || sm_.length < 3) return null;
+  const m = cfg.camMap, sm_ = cfg.sizeMap; if (!m || !m.Hcs || m.manual || !sm_ || sm_.length < 3) return null;
   // LIVE-størrelsen følger FADEREN direkte: 0 % = mindste målte figur, 100 % = største målte – så LIVE og fader er altid enige
   const r = sizeRange(sm_); if (!r) return null;
   const extPx = r.minExt + clamp(size, 0, 1) * (r.maxExt - r.minExt);
@@ -693,6 +740,8 @@ function camDrawLoop() {
 // ---- måling af placering: laseren viser mønsteret på 9 kendte rå værdier, brugeren trykker hvor det ramte ----
 const MEASURE_GRID = [[0, 0], [-0.7, 0], [0.7, 0], [0, 0.7], [0, -0.7], [-0.7, 0.7], [0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
 let measure = null; // { i, obs: [[sentX, sentY, obsX, obsY], …], size }
+// ---- Rå/Lær: brugeren styrer de rå værdier der sendes (X, Y, størrelse, zone) og fortæller appen hvor de rammer ----
+const raw = { on: false, x: 0, y: 0, size: 64, zone: null, pts: (store.get('rawPts', []) || []) };
 function posMapFor(size) { // nærmeste målte omsætning (evt. interpoleret mellem to størrelser)
   const maps = cfg.posMap || []; if (maps.length === 1) return maps[0];
   const srt = [...maps].sort((a, b) => a.size - b.size);
@@ -788,6 +837,7 @@ function sizeRange(sm_) {
 }
 function sizeCh4(size) {
   if (camCal.active && camCal.ch4 != null) return camCal.ch4;
+  if (raw.on) return clamp(Math.round(raw.size), 0, 127);
   // målt med kameraet: faderen går lineært gennem de laser-værdier hvor mønsteret var synligt (15 % = den ene ende,
   // 100 % = den anden). Retningen tages fra målingen (vokser figuren med værdien?) – og kan vendes med 'Vend størrelses-faderen'.
   const sm_ = cfg.sizeMap; if (sm_ && sm_.filter((p) => p.ext).length >= 3) {
@@ -887,7 +937,7 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   setCh(14, autoMode === 'laser' ? 245 : 0); // 245 = laserens egen sound-to-light, ellers ren DMX-styring
   setCh(15, [0, 80, 150, 220][cfg.scan] || 0);
   setCh(16, zoneVal());
-  setCh(17, cfg.zone > 0 ? 255 : 0);
+  setCh(17, (raw.on && raw.zone != null) || cfg.zone > 0 ? 255 : 0);
   setCh(18, 0); setCh(19, 0);
 }
 function rgbHue([r, g, b]) {
@@ -957,18 +1007,19 @@ function computeFrame(now) {
   let wantX = calAxis(lx, 'x'), wantY = calAxis(ly, 'y');
   if (measure) { const g = MEASURE_GRID[measure.i]; wantX = g[0]; wantY = g[1]; } // måling: fast rå værdi, ingen omregning
   if (camCal.active && camCal.send) { wantX = camCal.send[0]; wantY = camCal.send[1]; } // kamera-måling: fast sendt værdi
+  if (raw.on) { wantX = raw.x / 100; wantY = raw.y / 100; } // rå styring: præcis det brugeren har sat
   let rawX = clamp(wantX, -limX, limX), rawY = clamp(wantY, -limY, limY);
   let clamped = Math.abs(wantX - rawX) > 0.003 || Math.abs(wantY - rawY) > 0.003;
   let [axc, ayc] = rawToApp(rawX, rawY); // tilbage til app-koordinater, så LIVE viser hvor mønsteret faktisk ender
   // målt omsætning (Mål placering): det laseren skal have sendt for at ramme det ønskede sted
   let sendX = rawX, sendY = rawY;
-  if (!measure && !camCal.active && cfg.camMap) {
+  if (!measure && !camCal.active && !raw.on && cfg.camMap) {
     // kamera-kalibrering: app-koordinater → det laseren skal have sendt (homografi målt med kameraet)
     const [sx, sy] = camAppToSend(lx, ly / YF(), sizeApp);
     sendX = clamp(sx, -limX, limX); sendY = clamp(sy, -limY, limY);
     clamped = Math.abs(sx - sendX) > 0.003 || Math.abs(sy - sendY) > 0.003;
     const [bx, by] = hApply(cfg.camMap.Hi, sendX, sendY); axc = bx; ayc = by; rawX = sendX; rawY = sendY;
-  } else if (!measure && !camCal.active && cfg.posMap) { const m = posMapFor(size); const d = m.M[0] * m.M[3] - m.M[1] * m.M[2]; if (Math.abs(d) > 1e-6) { const ox = rawX - m.c[0], oy = rawY - m.c[1]; sendX = clamp((m.M[3] * ox - m.M[1] * oy) / d, -1, 1); sendY = clamp((-m.M[2] * ox + m.M[0] * oy) / d, -1, 1); } }
+  } else if (!measure && !camCal.active && !raw.on && cfg.posMap) { const m = posMapFor(size); const d = m.M[0] * m.M[3] - m.M[1] * m.M[2]; if (Math.abs(d) > 1e-6) { const ox = rawX - m.c[0], oy = rawY - m.c[1]; sendX = clamp((m.M[3] * ox - m.M[1] * oy) / d, -1, 1); sendY = clamp((-m.M[2] * ox + m.M[0] * oy) / d, -1, 1); } }
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
   out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
@@ -1379,6 +1430,7 @@ let zoneDrag = false, moveMode = false, posDrag = null, calDrag = null;
   cv.addEventListener('pointerdown', (e) => {
     const [u, v] = rel(e);
     if (measure) { measureRecord(u * 2 - 1, 1 - v * 2); return; }
+    if (raw.on && raw.learnClick) { raw.learnClick = false; rawLearn(u * 2 - 1, 1 - v * 2); return; }
     { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < 16) { centerDrag = true; cv.setPointerCapture(e.pointerId); return; } }
     if (special === 'cal') { const p = calPt(); calDrag = { u0: u, v0: v, x0: p.x, y0: p.y, sx: cfg.cal.sx, sy: cfg.cal.sy }; cv.setPointerCapture(e.pointerId); return; }
     if (nearEdge(u, v) || special === 'zone') { zoneDrag = true; cv.setPointerCapture(e.pointerId); applyZoneDrag(u, v); return; }
@@ -1531,6 +1583,10 @@ function previewTick(now) {
       if (vertical) { g.moveTo(px, py - hl); g.lineTo(px, py + hl); } else { g.moveTo(px - hl, py); g.lineTo(px + hl, py); }
       g.stroke(); g.restore();
     };
+    if (raw.on) {
+      for (const p of raw.pts) { const [px, py] = boxPt(B, p[2], p[3]); g.save(); g.fillStyle = '#31f3ac'; g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(255,255,255,.7)'; g.font = '10px -apple-system'; g.textAlign = 'left'; g.fillText(`${Math.round(p[0] * 100)},${Math.round(p[1] * 100)}`, px + 8, py + 3); g.restore(); }
+      g.fillStyle = '#ffaa3c'; g.font = '700 13px -apple-system'; g.textAlign = 'center'; g.fillText(t(raw.learnClick ? 'raw.clickHint' : 'raw.live', { x: Math.round(raw.x), y: Math.round(raw.y), s: Math.round(raw.size) }), W / 2, B.y + 22);
+    }
     if (measure && out.on) {
       // alle 9 målepunkter: grå = kommer, grøn = målt, rød = nu. Brugeren trykker hvor laseren ramte.
       MEASURE_GRID.forEach((gp, i) => { const [ax, ay] = rawToApp(gp[0], gp[1]), [px, py] = boxPt(B, ax, ay); g.save(); g.strokeStyle = i === measure.i ? '#ff3b5c' : i < measure.i ? 'rgba(49,243,172,.6)' : 'rgba(255,255,255,.18)'; g.lineWidth = i === measure.i ? 2.5 : 1; g.setLineDash(i === measure.i ? [] : [3, 4]); g.beginPath(); g.arc(px, py, i === measure.i ? 14 : 9, 0, Math.PI * 2); g.stroke(); g.fillStyle = g.strokeStyle; g.font = '600 10px -apple-system'; g.textAlign = 'center'; g.fillText(String(i + 1), px, py + 4); g.restore(); });
