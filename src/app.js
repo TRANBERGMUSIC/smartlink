@@ -227,6 +227,7 @@ function wmLearn(fn) { wm.learn = fn ? { fn } : null; renderWmMap(); toast(fn ? 
     out.textContent = lines.join('\n') || t('usb.scanning');
   };
   if (window.laser.onUsbList) window.laser.onUsbList((d) => { found[d.kind] = d.list; render(); });
+  const db = $('#usbDiag'); if (db) db.onclick = async () => { out.textContent = t('usb.diagRun'); try { const r = await window.laser.usbDiag(); const wolf = (r.text.match(/[^\n]*(wolf|nicolaudie|w1)[^\n]*/gi) || []).slice(0, 12).join('\n'); out.textContent = (r.saved ? t('usb.diagSaved', { f: r.saved }) + '\n\n' : '') + (wolf ? t('usb.diagWolf') + '\n' + wolf + '\n\n' : t('usb.diagNoWolf') + '\n\n') + r.text.slice(0, 6000); } catch (e) { out.textContent = t('usb.diagFail') + ' ' + e.message; } };
   btn.onclick = async () => {
     found.usb = null; found.serial = null; out.textContent = t('usb.scanning');
     try { await navigator.usb.requestDevice({ filters: [] }); } catch (_) {}

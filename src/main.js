@@ -390,6 +390,22 @@ function remoteStop() {
   remote.server.close(); remote.server = null; if (remote.https) { try { remote.https.close(); } catch (_) {} remote.https = null; } notifyRemoteCount();
 }
 function notifyRemoteCount() { if (win && !win.isDestroyed()) win.webContents.send('remote-count', remote.clients.size); }
+// USB-diagnose: kør macOS' egne værktøjer og gem resultatet i den delte SmartLink-mappe (så det kan læses udefra)
+ipcMain.handle('usb-diag', async () => {
+  const { execSync } = require('child_process'); const run = (c) => { try { return execSync(c, { encoding: 'utf8', timeout: 20000, stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { return '(fejl: ' + (e.message || e) + ')'; } };
+  const parts = [];
+  parts.push('# ' + new Date().toISOString() + ' · ' + os.hostname() + ' · ' + process.platform + ' ' + os.release());
+  parts.push('\n## USB-enheder (system_profiler SPUSBDataType)\n' + run('system_profiler SPUSBDataType 2>/dev/null'));
+  parts.push('\n## Netværksporte (networksetup -listallhardwareports)\n' + run('networksetup -listallhardwareports 2>/dev/null'));
+  parts.push('\n## Serielle porte (/dev/cu.*)\n' + run('ls -la /dev/cu.* 2>/dev/null'));
+  parts.push('\n## ioreg USB (kort)\n' + run('ioreg -p IOUSB -l -w0 2>/dev/null | grep -E "\\+-o |USB Vendor Name|USB Product Name|idVendor|idProduct|bDeviceClass|USB Serial Number" | head -200'));
+  parts.push('\n## Netværksinterfaces (ifconfig)\n' + run("ifconfig 2>/dev/null | grep -E '^[a-z0-9]+:|inet |status' | head -80"));
+  parts.push('\n## Midi/HID (ioreg)\n' + run("ioreg -r -c IOUSBHostDevice -l 2>/dev/null | grep -E 'kUSBProductString|kUSBVendorString|bInterfaceClass|bInterfaceSubClass|bInterfaceProtocol' | head -80"));
+  const txt = parts.join('\n');
+  const outs = [path.join(os.homedir(), 'Desktop', 'SmartLink', 'diagnose-usb.txt'), path.join(app.getPath('userData'), 'diagnose-usb.txt')];
+  let saved = null; for (const f of outs) { try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, txt); saved = saved || f; } catch (_) {} }
+  return { text: txt, saved };
+});
 ipcMain.handle('cam-access', async () => { try { if (process.platform === 'darwin') { const { systemPreferences } = require('electron'); return await systemPreferences.askForMediaAccess('camera'); } } catch (e) { return false; } return true; });
 ipcMain.on('remote-state', (_e, json) => {
   if (json === remote.state) return;
