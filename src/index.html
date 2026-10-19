@@ -277,6 +277,21 @@
     <div class="row"><span class="muted" id="updVersion"></span><div class="spacer"></div><button class="ghost small" id="updCheck" data-i18n="upd.check"></button><button class="primary small" id="updGo" hidden></button></div>
     <p class="hint" id="updStatus"></p>
   </div>
+  <div class="panel wmpanel">
+    <h2 data-i18n="wm.title"></h2>
+    <p class="hint" data-i18n="wm.intro"></p>
+    <div class="form">
+      <label class="row"><span data-i18n="wm.on"></span><input type="checkbox" id="wmOn"></label>
+      <label class="row"><span data-i18n="wm.universe"></span><input type="number" id="wmUniverse" min="0" max="32767" value="1" style="width:80px"></label>
+      <label class="row"><span data-i18n="wm.address"></span><input type="number" id="wmAddress" min="1" max="512" value="1" style="width:80px"></label>
+      <p class="hint wm-status" id="wmStatus"></p>
+      <div class="row"><span data-i18n="wm.learnLbl"></span><select id="wmLearnSel"></select><button class="ghost small" id="wmLearnBtn" data-i18n="wm.learn"></button><div class="spacer"></div><button class="ghost small" id="wmReset" data-i18n="wm.reset"></button></div>
+      <div class="wm-map" id="wmMap"></div>
+      <p class="hint" data-i18n="wm.fixtureHint"></p>
+      <div class="row"><span data-i18n="usb.title"></span><button class="ghost small" id="usbScan" data-i18n="usb.scan"></button></div>
+      <pre class="hint usb-list" id="usbList"></pre>
+    </div>
+  </div>
   <div class="panel">
     <h2 data-i18n="set.conn"></h2>
     <div class="form">

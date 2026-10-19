@@ -23,7 +23,7 @@ const DEFAULT_LOOK = {
   pattern: 1, color: { mode: 'orig', rgb: [255, 255, 255] }, colorCycle: false, colorCycleSpeed: 0.3,
   move: 'none', moveAmt: 0.4, moveSpeed: 0.3, size: 0.8, rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, fps: 0.5, posX: 0, posY: 0, freeze: false,
 };
-const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, sizeFlip: false, quadFix: true, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
+const DEFAULT_SETTINGS = { linePattern: 112, testPattern: 112, yFlip: true, autoUniverse: true, startLow: true, dmxMode: 'dj', ip: '2.255.255.255', universe: 0, address: 1, rate: 44, zone: 0, zoneSide: 'bottom', maxInt: 1, invX: false, invY: false, scan: 0, patCount: 128, posFmt: 's', sizeInv: true, sizeRange: 1, posScaled: false, camPattern: 38, wmOn: false, wmUniverse: 1, wmAddress: 1, sizeFlip: false, quadFix: true, zoneLo: 40, zoneHi: 63, lineThin: 0.3, dotPattern: 250, boxPattern: 251, quadPattern: 252 };
 
 const st = Object.assign(structuredClone(DEFAULT_LOOK), store.get('look', {}));
 Object.assign(st, { move: 'none', rotSpeed: 0, rotAngle: 0, pulse: 0, strobe: 0, freeze: false }); // appen starter altid stille – bevægelse vælges aktivt
@@ -117,6 +117,87 @@ function setLaserCenterApp(ax, ay) {
   saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
 }
 let centerDrag = false;
+// ---- Wolfmix / DMX-ind: en DMX-konsol (Wolfmix W1 MK3) sender DMX → Art-Net-node med DMX-indgang → SmartLink lytter
+// og oversætter kanaler til funktioner. Kanal-kortet kan ændres og læres (Lær: rør en knap/encoder på konsollen).
+const WM_FUNCS = ['none', 'master', 'blackout', 'pattern', 'size', 'posX', 'posY', 'rotAngle', 'rotSpeed', 'color', 'move', 'moveAmt', 'moveSpeed', 'strobe', 'pulse', 'fps', 'zone', 'scene', 'auto', 'tap', 'colorCycle'];
+const WM_DEFAULT = ['master', 'blackout', 'pattern', 'size', 'posX', 'posY', 'rotAngle', 'rotSpeed', 'color', 'move', 'moveAmt', 'moveSpeed', 'strobe', 'pulse', 'zone', 'scene']; // kanal 1–16
+const wm = { last: null, seen: 0, learn: null, prevVals: new Int16Array(512).fill(-1), act: {} };
+function wmMap() { if (!cfg.wmMap || !cfg.wmMap.length) cfg.wmMap = WM_DEFAULT.slice(); return cfg.wmMap; }
+function wmApply(ch, v, prev) { // én kanal ændrede sig
+  const fn = wmMap()[ch]; if (!fn || fn === 'none') return; const f = v / 255;
+  wm.act[fn] = Date.now();
+  switch (fn) {
+    case 'master': setMaster(f); break;
+    case 'blackout': if (v >= 128 && blackout) requestArm(); else if (v < 128 && !blackout) setBlackout(true); break;
+    case 'pattern': { const n = v; if (n !== st.pattern) setPattern(n, true); break; }
+    case 'size': setSize(f); break;
+    case 'posX': setPos('posX', f * 2 - 1); break;
+    case 'posY': setPos('posY', f * 2 - 1); break;
+    case 'rotAngle': st.rotAngle = Math.round(f * 360 - 180); saveLook(); syncLookUI(); break;
+    case 'rotSpeed': st.rotSpeed = v < 8 ? 0 : (f * 2 - 1); saveLook(); syncLookUI(); break;
+    case 'color': { if (v < 8) { setColor({ mode: 'orig' }); break; } const idx = 1 + Math.min(SWATCHES.length - 2, Math.floor((v - 8) / (248 / (SWATCHES.length - 1)))); const sw = SWATCHES[idx]; if (sw && sw.rgb) setColor({ mode: 'rgb', rgb: sw.rgb.slice() }); break; }
+    case 'colorCycle': st.colorCycle = v >= 128; $('#colorCycle').checked = st.colorCycle; saveLook(); break;
+    case 'move': { const m = MOVES[Math.min(MOVES.length - 1, Math.floor(f * MOVES.length))]; if (m !== st.move) { st.move = m; activeScene = -1; saveLook(); syncLookUI(); } break; }
+    case 'moveAmt': st.moveAmt = f; saveLook(); syncLookUI(); break;
+    case 'moveSpeed': st.moveSpeed = f; saveLook(); syncLookUI(); break;
+    case 'strobe': st.strobe = v < 8 ? 0 : f; saveLook(); syncLookUI(); break;
+    case 'pulse': st.pulse = f; saveLook(); syncLookUI(); break;
+    case 'fps': st.fps = f; saveLook(); syncLookUI(); break;
+    case 'zone': cfg.zone = Math.round(f * 90) / 100; saveCfg(); syncZoneUI(); break;
+    case 'scene': { if (v < 8) break; const i = Math.min(8, Math.floor((v - 8) / 28)); if (scenes[i]) recallScene(i); break; }
+    case 'auto': { const m = v < 85 ? 'off' : v < 170 ? 'mic' : 'laser'; if (m !== autoMode) setAuto(m); break; }
+    case 'tap': if (v >= 128 && prev < 128) tap(); break;
+  }
+}
+function wmOnFrame(d) {
+  if (!cfg.wmOn) return; if (d.universe !== (cfg.wmUniverse | 0)) return;
+  wm.seen = Date.now(); wm.from = d.from; const base = Math.max(0, (cfg.wmAddress | 0) - 1), map = wmMap();
+  for (let i = 0; i < Math.max(map.length, 24); i++) {
+    const idx = base + i; if (idx >= d.data.length) break; const v = d.data[idx], prev = wm.prevVals[idx];
+    if (v === prev) continue; wm.prevVals[idx] = v; if (prev < 0) continue; // første billede: kun husk, ikke udfør (ellers hopper alt ved opstart)
+    if (wm.learn) { if (Math.abs(v - prev) >= 4) { const m = wmMap(); const old = m.indexOf(wm.learn.fn); if (old >= 0) m[old] = 'none'; while (m.length <= i) m.push('none'); m[i] = wm.learn.fn; cfg.wmMap = m; saveCfg(); toast(t('wm.learned', { ch: i + 1, f: t('wm.f.' + wm.learn.fn) })); wm.learn = null; renderWmMap(); } continue; }
+    if (i < map.length) wmApply(i, v, prev);
+  }
+}
+function wmStatus() { const el = $('#wmStatus'); if (!el) return; const ok = cfg.wmOn && Date.now() - wm.seen < 3000; el.textContent = cfg.wmOn ? (ok ? t('wm.online', { ip: wm.from || '?', u: cfg.wmUniverse | 0 }) : t('wm.waiting', { u: cfg.wmUniverse | 0 })) : t('wm.off'); el.classList.toggle('ok', ok); }
+function renderWmMap() {
+  const w = $('#wmMap'); if (!w) return; w.innerHTML = ''; const map = wmMap();
+  for (let i = 0; i < 24; i++) {
+    const row = document.createElement('div'); row.className = 'wm-row' + (wm.learn && wm.learn.fn === map[i] ? ' learn' : '');
+    const ch = document.createElement('b'); ch.textContent = String((cfg.wmAddress | 0) + i); const sel = document.createElement('select');
+    for (const f of WM_FUNCS) { const o = document.createElement('option'); o.value = f; o.textContent = t('wm.f.' + f); if ((map[i] || 'none') === f) o.selected = true; sel.appendChild(o); }
+    sel.onchange = () => { while (map.length <= i) map.push('none'); map[i] = sel.value; cfg.wmMap = map; saveCfg(); };
+    const val = document.createElement('span'); val.className = 'wm-val'; const pv = wm.prevVals[Math.max(0, (cfg.wmAddress | 0) - 1) + i]; val.textContent = pv >= 0 ? pv : '–';
+    row.append(ch, sel, val); w.appendChild(row);
+  }
+}
+function wmLearn(fn) { wm.learn = fn ? { fn } : null; renderWmMap(); toast(fn ? t('wm.learnHint', { f: t('wm.f.' + fn) }) : t('wm.learnOff')); }
+(() => {
+  if (window.laser.onDmxIn) window.laser.onDmxIn(wmOnFrame);
+  setInterval(() => { wmStatus(); const w = $('#wmMap'); if (w && w.offsetParent) [...w.querySelectorAll('.wm-val')].forEach((el, i) => { const v = wm.prevVals[Math.max(0, (cfg.wmAddress | 0) - 1) + i]; el.textContent = v >= 0 ? v : '–'; }); }, 500);
+  const sel = $('#wmLearnSel'); if (sel) { for (const f of WM_FUNCS.filter((x) => x !== 'none')) { const o = document.createElement('option'); o.value = f; o.textContent = t('wm.f.' + f); sel.appendChild(o); } }
+  const lb = $('#wmLearnBtn'); if (lb) lb.onclick = () => wmLearn(wm.learn ? null : $('#wmLearnSel').value);
+  const rb = $('#wmReset'); if (rb) rb.onclick = () => { cfg.wmMap = WM_DEFAULT.slice(); saveCfg(); renderWmMap(); };
+  renderWmMap();
+})();
+// ---- USB-diagnose: hvad ser Mac'en når fx Wolfmix sættes i med USB-C? (WebUSB + WebSerial lister enhederne)
+(() => {
+  const btn = $('#usbScan'); if (!btn) return; const out = $('#usbList');
+  const found = { usb: null, serial: null };
+  const render = () => {
+    const lines = [];
+    if (found.usb) lines.push(found.usb.length ? found.usb.map((d) => `USB: ${d.manufacturerName || '?'} – ${d.productName || '?'} (VID ${(d.vendorId || 0).toString(16).padStart(4, '0')} / PID ${(d.productId || 0).toString(16).padStart(4, '0')}) · klasser: ${[...new Set(d.classes || [])].map((c) => ({ 2: 'CDC/seriel', 3: 'HID', 10: 'CDC-data', 8: 'lager', 1: 'lyd', 255: 'vendor' }[c] || c)).join(', ') || '?'}`).join('\n') : t('usb.none'));
+    if (found.serial) lines.push(found.serial.length ? found.serial.map((p) => `Seriel: ${p.displayName || p.portName || '?'} (${p.portName || ''}${p.vendorId ? ' VID ' + p.vendorId.toString(16) : ''}${p.productId ? ' PID ' + p.productId.toString(16) : ''})`).join('\n') : t('usb.noSerial'));
+    out.textContent = lines.join('\n') || t('usb.scanning');
+  };
+  if (window.laser.onUsbList) window.laser.onUsbList((d) => { found[d.kind] = d.list; render(); });
+  btn.onclick = async () => {
+    found.usb = null; found.serial = null; out.textContent = t('usb.scanning');
+    try { await navigator.usb.requestDevice({ filters: [] }); } catch (_) {}
+    try { if (navigator.serial) await navigator.serial.requestPort({ filters: [] }); } catch (_) {}
+    setTimeout(render, 400);
+  };
+})();
 // ---- kamera-kalibrering: Mac-kamera (eller iPhone via Continuity Camera) ser væggen, laseren viser mønsteret
 // på et gitter af kendte sendte værdier, appen finder lyspletten i billedet og regner en homografi sendt→kamera.
 // Brugeren markerer derefter det ønskede område i kamerabilledet → homografi app→sendt (cfg.camMap).
@@ -2053,6 +2134,7 @@ function bindSetting(id, key, conv = (v) => v, outFmt) {
     if (key === 'rate') startSending();
     if (key === 'patCount') { renderPatPages(); renderPatterns(); }
     if (key === 'address') dmx.fill(0);
+    if (key === 'wmAddress' || key === 'wmOn') { if (typeof renderWmMap === 'function') renderWmMap(); if (typeof wmStatus === 'function') wmStatus(); }
   });
 }
 bindSetting('ip', 'ip', (v) => v.trim() || '2.255.255.255');
@@ -2070,7 +2152,8 @@ bindSetting('startLow', 'startLow');
 bindSetting('invX', 'invX'); bindSetting('invY', 'invY');
 bindSetting('posFmt', 'posFmt'); bindSetting('posScaled', 'posScaled');
 bindSetting('zoneLo', 'zoneLo', (v) => +v, (v) => String(v)); bindSetting('zoneHi', 'zoneHi', (v) => +v, (v) => String(v));
-bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeFlip', 'sizeFlip'); bindSetting('quadFix', 'quadFix'); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');
+bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeFlip', 'sizeFlip'); bindSetting('quadFix', 'quadFix');
+bindSetting('wmOn', 'wmOn'); bindSetting('wmUniverse', 'wmUniverse', (v) => clamp(v | 0, 0, 32767)); bindSetting('wmAddress', 'wmAddress', (v) => clamp(v | 0, 1, 512)); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');
 bindSetting('scan', 'scan', (v) => +v);
 bindSetting('patCount', 'patCount', (v) => clamp(+v | 0, 1, 255));
 $('#testBtn').onclick = () => setSpecial('line');

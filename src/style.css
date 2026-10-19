@@ -681,3 +681,12 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 #camOpen.on { border-color: var(--accent); }
 #camFollow.on { border-color: var(--accent); color: var(--accent); }
 .cam-zoom { font-size: 11px; color: var(--muted); opacity: .8; margin: -4px 0 8px; }
+
+.wm-map { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 14px; margin: 8px 0; }
+.wm-row { display: grid; grid-template-columns: 34px 1fr 36px; align-items: center; gap: 6px; font-size: 12px; padding: 2px 4px; border-radius: 6px; }
+.wm-row b { color: var(--muted); font-weight: 600; text-align: right; }
+.wm-row select { height: 24px; font-size: 12px; }
+.wm-row .wm-val { color: var(--accent); font-variant-numeric: tabular-nums; text-align: right; }
+.wm-row.learn { background: rgba(255,170,60,.15); outline: 1px solid rgba(255,170,60,.5); }
+.wm-status.ok { color: var(--accent); }
+.usb-list { white-space: pre-wrap; font-family: ui-monospace, Menlo, monospace; font-size: 11px; background: #000; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 2.4em; }

@@ -11,6 +11,7 @@ let stats = { sent: 0, errors: 0, lastError: '' };
 
 let nodes = {}; // Art-Net enheder der har svaret: ip -> { name, seen }
 
+const dmxInLast = {};
 function createSocket(port = 6454) {
   sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   sock.on('error', (e) => {
@@ -18,6 +19,14 @@ function createSocket(port = 6454) {
     if (port && /EADDRINUSE|EACCES/.test(e.code || e.message)) { try { sock.close(); } catch (_) {} createSocket(0); }
   });
   sock.on('message', (msg, rinfo) => {
+    // ArtDMX (opcode 0x5000) fra en anden enhed – fx Wolfmix via en Art-Net-node med DMX-indgang
+    if (msg.length >= 20 && msg.toString('ascii', 0, 7) === 'Art-Net' && msg.readUInt16LE(8) === 0x5000) {
+      const own = laserAddrs().map((a) => a.address); if (own.includes(rinfo.address)) return; // vores egne pakker
+      const universe = msg.readUInt16LE(14), len = Math.min(msg.readUInt16BE(16), msg.length - 18);
+      const now = Date.now(); if (now - (dmxInLast[universe] || 0) < 20) return; dmxInLast[universe] = now; // max ~50/s pr. universe
+      if (win && !win.isDestroyed()) win.webContents.send('dmx-in', { universe, from: rinfo.address, data: Array.from(msg.subarray(18, 18 + len)) });
+      return;
+    }
     // ArtPollReply (opcode 0x2100) – en laser/node svarer
     if (msg.length > 40 && msg.toString('ascii', 0, 7) === 'Art-Net' && msg.readUInt16LE(8) === 0x2100) {
       const str = (a, b) => msg.toString('ascii', a, Math.min(b, msg.length)).replace(/\0.*$/s, '').trim();
@@ -487,6 +496,14 @@ app.whenReady().then(() => {
   startPolling();
   remoteLoad();
   if (remote.cfg.enabled) remoteStart();
+  // USB/seriel-diagnose (Wolfmix m.fl.): når appen beder om en enhed, sender vi hele listen til vinduet i stedet for en dialog
+  try {
+    const { session } = require('electron');
+    session.defaultSession.on('select-usb-device', (event, details, callback) => { event.preventDefault(); try { win.webContents.send('usb-list', { kind: 'usb', list: (details.deviceList || []).map((d) => ({ vendorId: d.vendorId, productId: d.productId, productName: d.productName, manufacturerName: d.manufacturerName, serialNumber: d.serialNumber, classes: (d.configurations || []).flatMap((c) => (c.interfaces || []).flatMap((i) => (i.alternates || []).map((a) => a.interfaceClass))) })) }); } catch (_) {} callback(); });
+    session.defaultSession.on('select-serial-port', (event, portList, _wc, callback) => { event.preventDefault(); try { win.webContents.send('usb-list', { kind: 'serial', list: portList.map((p) => ({ portName: p.portName, displayName: p.displayName, vendorId: p.vendorId, productId: p.productId })) }); } catch (_) {} callback(''); });
+    session.defaultSession.setPermissionCheckHandler((_wc, permission) => (permission === 'usb' || permission === 'serial' ? true : true));
+    session.defaultSession.setDevicePermissionHandler(() => true);
+  } catch (_) {}
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
