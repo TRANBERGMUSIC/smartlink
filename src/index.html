@@ -13,6 +13,7 @@
     <button data-tab="live" class="tab active" data-i18n="tab.live"></button>
     <button data-tab="show" class="tab" data-i18n="tab.show"></button>
     <button data-tab="keys" class="tab" data-i18n="tab.keys"></button>
+    <button data-tab="wolf" class="tab" data-i18n="tab.wolf"></button>
     <button data-tab="design" class="tab" data-i18n="tab.design"></button>
     <button data-tab="settings" class="tab" data-i18n="tab.settings"></button>
   </nav>
@@ -197,6 +198,18 @@
 
 <!-- ============ SETTINGS ============ -->
 <!-- ============ TASTER ============ -->
+<section class="page" id="page-wolf">
+  <div class="panel wolfpanel">
+    <div class="panel-head"><h2 data-i18n="wolf.title"></h2><span class="wolf-conn" id="wolfConn"></span><div class="spacer"></div><button class="ghost small" id="wolfTest" data-i18n="wolf.test"></button><button class="ghost small" id="wolfSettings" data-i18n="wolf.settings"></button></div>
+    <p class="hint" data-i18n="wolf.hint"></p>
+    <div class="wolf-console">
+      <div class="wolf-row wolf-enc" id="wolfEnc"></div>
+      <div class="wolf-row wolf-pads" id="wolfPads"></div>
+      <div class="wolf-row wolf-faders" id="wolfFaders"></div>
+    </div>
+    <p class="hint" id="wolfLog"></p>
+  </div>
+</section>
 <section class="page" id="page-keys">
   <div class="panel keyspanel">
     <div class="panel-head"><h2 data-i18n="keys.title"></h2><span class="hint" data-i18n="keys.hint"></span><div class="spacer"></div><button class="ghost small" id="keysClear" data-i18n="keys.clear"></button></div>

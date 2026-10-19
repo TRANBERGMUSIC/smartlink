@@ -96,6 +96,11 @@ nav { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px soli
 nav button { border: 0; background: none; height: 62px; border-radius: 0; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
 nav button i { font-style: normal; font-size: 18px; }
 nav button.on { color: var(--accent); }
+.camwrap { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); margin: 8px 0; }
+.camwrap video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.camwrap canvas { display: none; }
+.camstat { position: absolute; left: 8px; bottom: 8px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 6px; }
+#camSel { width: 100%; height: 40px; background: #0b0d12; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; }
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: flex; align-items: center; justify-content: center; text-align: center; padding: 30px; z-index: 5; }
 .overlay[hidden] { display: none; }
 .overlay p { color: var(--muted); }
@@ -173,6 +178,14 @@ nav button.on { color: var(--accent); }
 
     </section>
 
+    <section class="page" id="p-cam">
+      <h2 data-t="camTitle"></h2>
+      <p class="hint" data-t="camHint"></p>
+      <div class="camwrap"><video id="camV" autoplay muted playsinline></video><canvas id="camC" width="320" height="180"></canvas><div class="camstat" id="camStat"></div></div>
+      <div class="seg"><select id="camSel"></select></div>
+      <div class="seg calrow"><button id="camStart" data-t="camStart"></button><button id="camStop" data-t="camStop"></button></div>
+      <p class="hint" id="camSecure" hidden><span data-t="camNeedHttps"></span> <a id="camHttpsLink" href="#"></a></p>
+    </section>
     <section class="page on" id="p-home">
       <div class="home-grid">
         <button class="home-btn" id="hMusic"><i>♪</i><b data-t="hMusic"></b><small id="hMusicState"></small></button>
@@ -224,6 +237,7 @@ nav button.on { color: var(--accent); }
     <button data-p="p-look"><i>◐</i><span data-t="nLook"></span></button>
     <button data-p="p-music"><i>♪</i><span data-t="nMusic"></span></button>
     <button data-p="p-scenes"><i>▦</i><span data-t="nScenes"></span></button>
+    <button data-p="p-cam"><i>📷</i><span data-t="nCam"></span></button>
   </nav>
 </div>
 
@@ -238,12 +252,12 @@ nav button.on { color: var(--accent); }
 'use strict';
 const L = {
   da: { light: 'Lys', color: 'Farve', cycle: 'Farveskift', move: 'Bevægelse', size: 'Størrelse', rot: 'Rotation', speed: 'Fart', pulse: 'Puls på beat', strobe: 'Strobe',
-    reset: 'Nulstil bevægelse', nPat: 'Mønstre', nLook: 'Look', nMusic: 'Musik', nScenes: 'Scener', off: 'Fra', mic: 'Auto (Mac-mik)', laser: 'Auto (laser-mik)',
+    reset: 'Nulstil bevægelse', nPat: 'Mønstre', nLook: 'Look', nMusic: 'Musik', nScenes: 'Scener', nCam: 'Kamera', camTitle: 'Telefonen som kamera', camHint: 'Læg telefonen så den ser hele det område laseren kan ramme. Vælg 0,5× (ultravidvinkel) hvis muligt, tryk Start – og kør derefter 📷 Kamera → ⚡ Automatisk på Mac\'en. Telefonen skal ligge helt stille imens.', camStart: '▶ Start kamera', camStop: '■ Stop', camNeedHttps: 'Kameraet kræver den sikre side (https). Åbn:', camSending: 'Sender billeder til SmartLink …', camNoCam: 'Kunne ikke åbne kameraet', off: 'Fra', mic: 'Auto (Mac-mik)', laser: 'Auto (laser-mik)',
     tapHint: 'Tryk TAP i takt med musikken for at sætte tempoet.', laserInfo: 'Laserens egen mikrofon skifter mønstrene. Spil musik tæt på laseren.',
     still: 'Stille', circle: 'Cirkel', eight: 'Ottetal', sweep: 'Sving', bounce: 'Hop', favs: '★', empty: 'Tom', noKey: 'Mangler kode', noKeyP: "Scan QR-koden i SmartLink på Mac'en igen.",
     presets: 'Presets', line: 'Test-streg', nHome: 'Hjem', nLive: 'Live', move: '✥ Flyt', zoneEdit: 'Zone', zoneLaser: 'Zone-streg', center: 'Centrér', zone: 'Sikkerhedszone', cal: '⚙ Kalibrér placering', calHint: '', calI1: 'Laseren skyder et punkt. Flyt det hen hvor LIVE-boksens ØVERSTE VENSTRE hjørne skal være.', calI2: 'Flyt punktet til det ØVERSTE HØJRE hjørne.', calI3: 'Flyt punktet til det NEDERSTE HØJRE hjørne.', calI4: 'Flyt punktet til det NEDERSTE VENSTRE hjørne. Tryk Færdig.', calPosY: 'Lodret', calPosX: 'Vandret', calWidth: 'Bredde', calHeight: 'Højde', calDone: '✓ Færdig', calBox: 'Tegn firkant', calCenter: 'Laserens midte', calOx: 'Forskyd X', calOy: 'Forskyd Y', calSx: 'Skala X', calSy: 'Skala Y', invX: 'Spejl X', invY: 'Spejl Y', calReset: 'Nulstil', noPat: 'Intet mønster', liveHint: 'Flyt: træk mønsteret derhen det skal pege. Zone: træk den røde grænse op og ned.', danger: '👁 Kraftigt lys – farligt for øjnene. Hold strålerne over hovedhøjde.', hMusic: 'Auto (musik)', hRandom: 'Tilfældig', hRandomS: 'nyt look nu', hScenes: 'Scener', bass: 'Bas', mid: 'Mellem', hi: 'Diskant', smart: 'Lytter selv: bas = puls og skift · diskant = ryk · pause = roligt · drop = stort skift', stOff: 'fra', stMic: 'Mac-mik', stLaser: 'laser-mik', cancel: 'Annuller', armT: 'Tænd laseren?', armP: 'Laseren sender lys ud med det samme. Tjek at ingen kan rammes i øjnene, og at effekten står lavt.', armC: 'Området er sikkert', armGo: '● Tænd laseren', lost: 'Ingen forbindelse', lostP: "Tjek at Mac'en er tændt, SmartLink kører, og at telefonen er på samme Wi-Fi.", orig: 'Original', bo: '● LASER TÆNDT', boOn: '○ LASER SLUKKET' },
   en: { light: 'Light', color: 'Colour', cycle: 'Colour cycle', move: 'Movement', size: 'Size', rot: 'Rotation', speed: 'Speed', pulse: 'Pulse on beat', strobe: 'Strobe',
-    reset: 'Reset movement', nPat: 'Patterns', nLook: 'Look', nMusic: 'Music', nScenes: 'Scenes', off: 'Off', mic: 'Auto (Mac mic)', laser: 'Auto (laser mic)',
+    reset: 'Reset movement', nPat: 'Patterns', nLook: 'Look', nMusic: 'Music', nScenes: 'Scenes', nCam: 'Camera', camTitle: 'Phone as camera', camHint: 'Place the phone so it sees the whole area the laser can reach. Pick 0.5× (ultra wide) if available, press Start – then run 📷 Camera → ⚡ Automatic on the Mac. Keep the phone perfectly still.', camStart: '▶ Start camera', camStop: '■ Stop', camNeedHttps: 'The camera needs the secure page (https). Open:', camSending: 'Sending frames to SmartLink …', camNoCam: 'Could not open the camera', off: 'Off', mic: 'Auto (Mac mic)', laser: 'Auto (laser mic)',
     tapHint: 'Tap TAP in time with the music to set the tempo.', laserInfo: "The laser's own microphone changes the patterns. Play music close to the laser.",
     still: 'Still', circle: 'Circle', eight: 'Figure 8', sweep: 'Sweep', bounce: 'Bounce', favs: '★', empty: 'Empty', noKey: 'Missing key', noKeyP: 'Scan the QR code in SmartLink on the Mac again.',
     presets: 'Presets', line: 'Test line', nHome: 'Home', nLive: 'Live', move: '✥ Move', zoneEdit: 'Zone', zoneLaser: 'Zone line', center: 'Centre', zone: 'Safety zone', cal: '⚙ Calibrate placement', calHint: '', calI1: 'The cross = the point. Move it to where the TOP LEFT corner of the LIVE box should be.', calI2: 'Move the cross to the TOP RIGHT corner.', calI3: 'Move the cross to the BOTTOM RIGHT corner.', calI4: 'Move the cross to the BOTTOM LEFT corner. Press Done.', calPosY: 'Vertical', calPosX: 'Horizontal', calWidth: 'Width', calHeight: 'Height', calDone: '✓ Done', calBox: 'Draw frame', calCenter: 'Laser centre', calOx: 'Offset X', calOy: 'Offset Y', calSx: 'Scale X', calSy: 'Scale Y', invX: 'Mirror X', invY: 'Mirror Y', calReset: 'Reset', noPat: 'No pattern', liveHint: 'Move: drag the pattern where it should point. Zone: drag the red edge up and down.', danger: '👁 Strong light – dangerous for eyes. Keep beams above head height.', hMusic: 'Auto (music)', hRandom: 'Random', hRandomS: 'new look now', hScenes: 'Scenes', bass: 'Bass', mid: 'Mid', hi: 'Treble', smart: 'Listens by itself: bass = pulse and change · treble = kicks · break = calm · drop = big change', stOff: 'off', stMic: 'Mac mic', stLaser: 'laser mic', cancel: 'Cancel', armT: 'Turn the laser on?', armP: 'The laser will emit light immediately. Make sure nobody can be hit in the eyes and the power is low.', armC: 'The area is safe', armGo: '● Turn laser on', lost: 'No connection', lostP: 'Check that the Mac is on, SmartLink is running and the phone is on the same Wi-Fi.', orig: 'Original', bo: '● LASER ON', boOn: '○ LASER OFF' },
@@ -508,6 +522,37 @@ function connect() {
     fetch(q('/patlist')).then((r) => { if (r.status === 403) { es.close(); overlay('noKey', 'noKeyP'); } else if (!alive) overlay('lost', 'lostP'); }).catch(() => overlay('lost', 'lostP'));
   };
 }
+// ---- telefonens kamera → SmartLink (gråtone 320×180, ~7 billeder/s) ----
+(() => {
+  const v = $('#camV'), c = $('#camC'), stat = $('#camStat'), sel = $('#camSel'); let stream = null, timer = null;
+  const secure = location.protocol === 'https:' || location.hostname === 'localhost';
+  if (!secure) { $('#camSecure').hidden = false; fetch(q('/https-url')).then((r) => r.json()).then((j) => { if (j.url) { const a = $('#camHttpsLink'); a.href = j.url; a.textContent = j.url; } }).catch(() => {}); }
+  async function listCams() {
+    try { const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); sel.innerHTML = ''; devs.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Kamera ' + (i + 1)); sel.appendChild(o); });
+      const uw = devs.find((d) => /ultra|0[.,]5|wide/i.test(d.label) && /back|bag|rear/i.test(d.label)) || devs.find((d) => /ultra|0[.,]5/i.test(d.label)); if (uw) sel.value = uw.deviceId; else { const back = devs.find((d) => /back|bag|rear|environment/i.test(d.label)); if (back) sel.value = back.deviceId; } } catch (_) {}
+  }
+  async function start() {
+    if (!secure || !navigator.mediaDevices) { stat.textContent = tt('camNeedHttps'); return; }
+    stop();
+    try {
+      const id = sel.value; stream = await navigator.mediaDevices.getUserMedia({ video: id ? { deviceId: { exact: id }, width: { ideal: 1280 }, height: { ideal: 720 } } : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      v.srcObject = stream; await v.play(); await listCams(); // labels kommer først efter tilladelse
+      try { const tr = stream.getVideoTracks()[0]; const caps = tr.getCapabilities ? tr.getCapabilities() : null; if (caps && caps.zoom) await tr.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (_) {}
+      const g = c.getContext('2d', { willReadFrequently: true }); let n = 0, busy = false;
+      timer = setInterval(async () => {
+        if (busy || !v.videoWidth) return; busy = true;
+        try { g.drawImage(v, 0, 0, 320, 180); const d = g.getImageData(0, 0, 320, 180).data; const out = new Uint8Array(320 * 180); for (let i = 0; i < out.length; i++) out[i] = Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+          await fetch(q('/camframe?w=320&h=180'), { method: 'POST', body: out, headers: { 'Content-Type': 'application/octet-stream' } }); n++; stat.textContent = tt('camSending') + ' ' + n; } catch (_) {}
+        busy = false;
+      }, 140);
+      $('#camStart').classList.add('on');
+    } catch (e) { stat.textContent = tt('camNoCam') + ': ' + e.message; }
+  }
+  function stop() { if (timer) clearInterval(timer); timer = null; if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; v.srcObject = null; $('#camStart').classList.remove('on'); stat.textContent = ''; }
+  $('#camStart').onclick = start; $('#camStop').onclick = stop; sel.onchange = () => { if (stream) start(); };
+  if (secure && navigator.mediaDevices) listCams();
+  try { if ('wakeLock' in navigator) $('#camStart').addEventListener('click', () => navigator.wakeLock.request('screen').catch(() => {})); } catch (_) {}
+})();
 applyLang();
 connect();
 </script>

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('laser', {
   remoteNewKey: () => ipcRenderer.invoke('remote-newkey'),
   remoteState: (json) => ipcRenderer.send('remote-state', json),
   camAccess: () => ipcRenderer.invoke('cam-access'),
+  onCamFrame: (fn) => ipcRenderer.on('cam-frame', (_e, d) => fn(d)),
   onUsbList: (fn) => ipcRenderer.on('usb-list', (_e, d) => fn(d)),
   onDmxIn: (fn) => ipcRenderer.on('dmx-in', (_e, d) => fn(d)),
   onRemoteCmd: (fn) => ipcRenderer.on('remote-cmd', (_e, c) => fn(c)),

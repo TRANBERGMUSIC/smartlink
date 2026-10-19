@@ -309,9 +309,9 @@ function lanIPs() {
   out.sort((a, b) => (a.ifname === 'en0' ? -1 : 0) - (b.ifname === 'en0' ? -1 : 0));
   return out;
 }
-function remoteURL() {
+function remoteURL(secure = false) {
   const ip = lanIPs()[0];
-  return ip ? `http://${ip.address}:${REMOTE_PORT}/?k=${remote.cfg.token}` : null;
+  return ip ? `${secure ? 'https' : 'http'}://${ip.address}:${REMOTE_PORT + (secure ? 1 : 0)}/?k=${remote.cfg.token}` : null;
 }
 function sendFile(res, file, type) {
   fs.readFile(file, (err, buf) => {
@@ -319,10 +319,27 @@ function sendFile(res, file, type) {
     res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' }); res.end(buf);
   });
 }
-function remoteStart() {
-  if (remote.server) return;
-  remote.server = http.createServer((req, res) => {
+// selvsigneret certifikat til HTTPS (telefonens kamera kræver en sikker side) – laves én gang med macOS' openssl
+function ensureCert() {
+  const dir = app.getPath('userData'), key = path.join(dir, 'remote-key.pem'), crt = path.join(dir, 'remote-cert.pem');
+  try { if (fs.existsSync(key) && fs.existsSync(crt)) return { key: fs.readFileSync(key), cert: fs.readFileSync(crt) }; } catch (_) {}
+  try {
+    const ips = lanIPs().map((a) => 'IP:' + a.address).join(',');
+    const san = 'subjectAltName=DNS:smartlink.local' + (ips ? ',' + ips : '');
+    require('child_process').execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '3650', '-keyout', key, '-out', crt, '-subj', '/CN=SmartLink', '-addext', san], { stdio: 'ignore' });
+    return { key: fs.readFileSync(key), cert: fs.readFileSync(crt) };
+  } catch (e) { remote.lastError = 'cert: ' + e.message; return null; }
+}
+let camFrameLast = 0;
+function remoteHandler(req, res) {
     const u = new URL(req.url, 'http://x');
+    if (u.pathname === '/camframe' && req.method === 'POST') { // telefonens kamera: gråtone 320×180 (57 600 bytes)
+      if (u.searchParams.get('k') !== remote.cfg.token) { res.writeHead(403); return res.end(); }
+      const chunks = []; let len = 0;
+      req.on('data', (c) => { chunks.push(c); len += c.length; if (len > 200000) req.destroy(); });
+      req.on('end', () => { const now = Date.now(); if (now - camFrameLast >= 60 && win && !win.isDestroyed()) { camFrameLast = now; const buf = Buffer.concat(chunks); win.webContents.send('cam-frame', { w: +u.searchParams.get('w') || 320, h: +u.searchParams.get('h') || 180, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }); } res.writeHead(204); res.end(); });
+      return;
+    }
     const ok = u.searchParams.get('k') === remote.cfg.token;
     if (u.pathname === '/' || u.pathname === '/index.html') return sendFile(res, path.join(__dirname, 'remote.html'), 'text/html; charset=utf-8');
     if (u.pathname === '/touch-icon.png') return sendFile(res, path.join(__dirname, 'touch-icon.png'), 'image/png');
@@ -354,17 +371,23 @@ function remoteStart() {
     const m = /^\/pat\/(\d{1,3})$/.exec(u.pathname);
     if (m) return sendFile(res, path.join(patDir(), String(+m[1]).padStart(3, '0') + '.ild'), 'application/octet-stream');
     if (u.pathname === '/patlist') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(listPatterns())); }
+    if (u.pathname === '/https-url') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ url: remoteURL(true) })); }
     res.writeHead(404); res.end();
-  });
+}
+function remoteStart() {
+  if (remote.server) return;
+  remote.server = http.createServer(remoteHandler);
   remote.server.on('error', (e) => { remote.lastError = e.message; remote.server = null; });
   remote.server.listen(REMOTE_PORT, '0.0.0.0');
+  // HTTPS-spejl til telefonens kamera (port + 1)
+  try { const cert = ensureCert(); if (cert) { remote.https = require('https').createServer(cert, remoteHandler); remote.https.on('error', (e) => { remote.lastError = 'https: ' + e.message; remote.https = null; }); remote.https.listen(REMOTE_PORT + 1, '0.0.0.0'); } } catch (e) { remote.lastError = 'https: ' + e.message; }
   setInterval(() => { for (const c of remote.clients) c.write(': ping\n\n'); }, 15000).unref();
 }
 function remoteStop() {
   if (!remote.server) return;
   for (const c of remote.clients) { try { c.end(); } catch (_) {} }
   remote.clients.clear();
-  remote.server.close(); remote.server = null; notifyRemoteCount();
+  remote.server.close(); remote.server = null; if (remote.https) { try { remote.https.close(); } catch (_) {} remote.https = null; } notifyRemoteCount();
 }
 function notifyRemoteCount() { if (win && !win.isDestroyed()) win.webContents.send('remote-count', remote.clients.size); }
 ipcMain.handle('cam-access', async () => { try { if (process.platform === 'darwin') { const { systemPreferences } = require('electron'); return await systemPreferences.askForMediaAccess('camera'); } } catch (e) { return false; } return true; });
@@ -377,7 +400,7 @@ ipcMain.handle('remote-info', async () => {
   const url = remoteURL();
   let qr = null;
   if (url) { try { qr = await require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#000000', light: '#ffffff' } }); } catch (_) {} }
-  return { enabled: remote.cfg.enabled && !!remote.server, url, qr, clients: remote.clients.size, error: remote.lastError || null, ips: lanIPs() };
+  return { enabled: remote.cfg.enabled && !!remote.server, url, httpsUrl: remote.https ? remoteURL(true) : null, qr, clients: remote.clients.size, error: remote.lastError || null, ips: lanIPs() };
 });
 ipcMain.handle('remote-enable', (_e, on) => {
   remote.cfg.enabled = !!on; remoteSave();

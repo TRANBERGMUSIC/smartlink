@@ -690,3 +690,27 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .wm-row.learn { background: rgba(255,170,60,.15); outline: 1px solid rgba(255,170,60,.5); }
 .wm-status.ok { color: var(--accent); }
 .usb-list { white-space: pre-wrap; font-family: ui-monospace, Menlo, monospace; font-size: 11px; background: #000; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 2.4em; }
+#mobUrl { white-space: pre-wrap; }
+
+/* virtuel Wolfmix */
+.wolfpanel { display: flex; flex-direction: column; gap: 10px; }
+.wolf-conn { font-size: 12px; color: var(--muted); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); }
+.wolf-conn.ok { color: var(--accent); border-color: var(--accent); }
+.wolf-console { background: linear-gradient(180deg, #15171d, #0b0d12); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+.wolf-row { display: grid; gap: 12px; }
+.wolf-enc { grid-template-columns: repeat(4, 1fr); }
+.wolf-pads { grid-template-columns: repeat(8, 1fr); }
+.wolf-faders { grid-template-columns: repeat(4, 1fr); }
+.wctl { position: relative; background: #0f1218; border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; transition: box-shadow .15s, border-color .15s; user-select: none; }
+.wctl:hover { border-color: #3a4152; }
+.wctl.active { border-color: var(--accent); box-shadow: 0 0 18px rgba(49,243,172,.45); }
+.wctl .wch { position: absolute; top: 6px; left: 8px; font-size: 10px; color: var(--muted); }
+.wctl .wname { font-size: 11px; color: var(--text); text-align: center; min-height: 2.4em; display: flex; align-items: center; }
+.wctl .wval { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.wctl .wknob { width: 54px; height: 54px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #2a2f3a, #111318); border: 2px solid #2b3140; position: relative; }
+.wctl .wknob::after { content: ""; position: absolute; left: 50%; top: 4px; width: 3px; height: 16px; margin-left: -1.5px; border-radius: 2px; background: var(--accent); transform-origin: 50% 23px; transform: rotate(var(--a, -135deg)); }
+.wctl .wpad { width: 100%; height: 46px; border-radius: 8px; background: #161a22; border: 1px solid #262c38; }
+.wctl.active .wpad { background: rgba(49,243,172,.25); border-color: var(--accent); }
+.wctl .wfader { width: 100%; height: 90px; border-radius: 6px; background: #000; border: 1px solid #262c38; position: relative; overflow: hidden; }
+.wctl .wfader i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, var(--accent), var(--accent2)); opacity: .85; }
+.wctl select { width: 100%; height: 24px; font-size: 11px; }

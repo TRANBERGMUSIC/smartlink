@@ -120,7 +120,7 @@ let centerDrag = false;
 // ---- Wolfmix / DMX-ind: en DMX-konsol (Wolfmix W1 MK3) sender DMX → Art-Net-node med DMX-indgang → SmartLink lytter
 // og oversætter kanaler til funktioner. Kanal-kortet kan ændres og læres (Lær: rør en knap/encoder på konsollen).
 const WM_FUNCS = ['none', 'master', 'blackout', 'pattern', 'size', 'posX', 'posY', 'rotAngle', 'rotSpeed', 'color', 'move', 'moveAmt', 'moveSpeed', 'strobe', 'pulse', 'fps', 'zone', 'scene', 'auto', 'tap', 'colorCycle'];
-const WM_DEFAULT = ['master', 'blackout', 'pattern', 'size', 'posX', 'posY', 'rotAngle', 'rotSpeed', 'color', 'move', 'moveAmt', 'moveSpeed', 'strobe', 'pulse', 'zone', 'scene']; // kanal 1–16
+const WM_DEFAULT = ['size', 'posX', 'posY', 'rotAngle', 'blackout', 'pattern', 'color', 'move', 'strobe', 'tap', 'auto', 'colorCycle', 'scene', 'none', 'none', 'none', 'none', 'none', 'none', 'none', 'master', 'moveAmt', 'moveSpeed', 'zone']; // encodere 1–4, knapper 5–20, fadere 21–24
 const wm = { last: null, seen: 0, learn: null, prevVals: new Int16Array(512).fill(-1), act: {} };
 function wmMap() { if (!cfg.wmMap || !cfg.wmMap.length) cfg.wmMap = WM_DEFAULT.slice(); return cfg.wmMap; }
 function wmApply(ch, v, prev) { // én kanal ændrede sig
@@ -155,7 +155,8 @@ function wmOnFrame(d) {
   for (let i = 0; i < Math.max(map.length, 24); i++) {
     const idx = base + i; if (idx >= d.data.length) break; const v = d.data[idx], prev = wm.prevVals[idx];
     if (v === prev) continue; wm.prevVals[idx] = v; if (prev < 0) continue; // første billede: kun husk, ikke udfør (ellers hopper alt ved opstart)
-    if (wm.learn) { if (Math.abs(v - prev) >= 4) { const m = wmMap(); const old = m.indexOf(wm.learn.fn); if (old >= 0) m[old] = 'none'; while (m.length <= i) m.push('none'); m[i] = wm.learn.fn; cfg.wmMap = m; saveCfg(); toast(t('wm.learned', { ch: i + 1, f: t('wm.f.' + wm.learn.fn) })); wm.learn = null; renderWmMap(); } continue; }
+    wolfTouched(i, v);
+    if (wm.learn) { if (Math.abs(v - prev) >= 4) { const m = wmMap(); const old = m.indexOf(wm.learn.fn); if (old >= 0) m[old] = 'none'; while (m.length <= i) m.push('none'); m[i] = wm.learn.fn; cfg.wmMap = m; saveCfg(); toast(t('wm.learned', { ch: i + 1, f: t('wm.f.' + wm.learn.fn) })); wm.learn = null; renderWmMap(); renderWolf(); } continue; }
     if (i < map.length) wmApply(i, v, prev);
   }
 }
@@ -171,13 +172,48 @@ function renderWmMap() {
     row.append(ch, sel, val); w.appendChild(row);
   }
 }
+// ---- virtuel Wolfmix (fanen) ----
+const wolfUI = { els: [], lastAct: new Int32Array(24), test: null };
+function renderWolf() {
+  const enc = $('#wolfEnc'), pads = $('#wolfPads'), fad = $('#wolfFaders'); if (!enc) return;
+  enc.innerHTML = ''; pads.innerHTML = ''; fad.innerHTML = ''; wolfUI.els = []; const map = wmMap();
+  for (let i = 0; i < 24; i++) {
+    const kind = i < 4 ? 'enc' : i < 20 ? 'pad' : 'fader';
+    const el = document.createElement('div'); el.className = 'wctl'; el.dataset.i = i;
+    const ch = document.createElement('span'); ch.className = 'wch'; ch.textContent = String((cfg.wmAddress | 0) + i);
+    const vis = document.createElement('div'); vis.className = kind === 'enc' ? 'wknob' : kind === 'pad' ? 'wpad' : 'wfader'; if (kind === 'fader') vis.appendChild(document.createElement('i'));
+    const name = document.createElement('div'); name.className = 'wname'; name.textContent = t('wm.f.' + (map[i] || 'none'));
+    const val = document.createElement('div'); val.className = 'wval'; val.textContent = '–';
+    const sel = document.createElement('select'); for (const f of WM_FUNCS) { const o = document.createElement('option'); o.value = f; o.textContent = t('wm.f.' + f); if ((map[i] || 'none') === f) o.selected = true; sel.appendChild(o); }
+    sel.onchange = () => { const m = wmMap(); while (m.length <= i) m.push('none'); m[i] = sel.value; cfg.wmMap = m; saveCfg(); name.textContent = t('wm.f.' + sel.value); renderWmMap(); };
+    el.append(ch, vis, name, val, sel); (kind === 'enc' ? enc : kind === 'pad' ? pads : fad).appendChild(el); wolfUI.els[i] = { el, vis, val, kind };
+  }
+}
+function wolfTick() {
+  const conn = $('#wolfConn'); if (!conn) return;
+  const ok = cfg.wmOn && Date.now() - wm.seen < 3000; conn.textContent = !cfg.wmOn ? t('wolf.off') : ok ? t('wolf.connected', { ip: wm.from || '?' }) : t('wolf.disconnected'); conn.classList.toggle('ok', ok);
+  if (!$('#page-wolf').classList.contains('active')) return;
+  const base = Math.max(0, (cfg.wmAddress | 0) - 1), now = Date.now();
+  for (let i = 0; i < 24; i++) { const u = wolfUI.els[i]; if (!u) continue; const v = wm.prevVals[base + i]; u.val.textContent = v >= 0 ? v : '–'; const f = v >= 0 ? v / 255 : 0;
+    if (u.kind === 'enc') u.vis.style.setProperty('--a', (-135 + f * 270) + 'deg'); else if (u.kind === 'fader') u.vis.firstChild.style.height = (f * 100) + '%';
+    u.el.classList.toggle('active', now - wolfUI.lastAct[i] < 400 || (u.kind === 'pad' && v >= 128)); }
+}
+function wolfTouched(i, v) { // kaldes når en kanal ændrer sig
+  if (i < 24) wolfUI.lastAct[i] = Date.now(); const fn = wmMap()[i] || 'none'; const log = $('#wolfLog'); if (log) log.textContent = t('wolf.last', { ch: i + 1, v, f: t('wm.f.' + fn) });
+  if (wolfUI.test) { clearTimeout(wolfUI.test); wolfUI.test = null; toast(t('wolf.testOk', { ch: i + 1, v })); const c = $('#wolfConn'); if (c) c.textContent = t('wolf.testOk', { ch: i + 1, v }); }
+}
+(() => {
+  renderWolf(); setInterval(wolfTick, 120);
+  const tb = $('#wolfTest'); if (tb) tb.onclick = () => { const c = $('#wolfConn'); if (c) c.textContent = t('wolf.testing'); if (wolfUI.test) clearTimeout(wolfUI.test); wolfUI.test = setTimeout(() => { wolfUI.test = null; toast(t('wolf.testFail'), 9000); }, 8000); };
+  const sb = $('#wolfSettings'); if (sb) sb.onclick = () => { $$('.tab').forEach((x) => x.classList.toggle('active', x.dataset.tab === 'settings')); $$('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-settings')); const w = $('.wmpanel'); if (w) w.scrollIntoView({ behavior: 'smooth' }); };
+})();
 function wmLearn(fn) { wm.learn = fn ? { fn } : null; renderWmMap(); toast(fn ? t('wm.learnHint', { f: t('wm.f.' + fn) }) : t('wm.learnOff')); }
 (() => {
   if (window.laser.onDmxIn) window.laser.onDmxIn(wmOnFrame);
   setInterval(() => { wmStatus(); const w = $('#wmMap'); if (w && w.offsetParent) [...w.querySelectorAll('.wm-val')].forEach((el, i) => { const v = wm.prevVals[Math.max(0, (cfg.wmAddress | 0) - 1) + i]; el.textContent = v >= 0 ? v : '–'; }); }, 500);
   const sel = $('#wmLearnSel'); if (sel) { for (const f of WM_FUNCS.filter((x) => x !== 'none')) { const o = document.createElement('option'); o.value = f; o.textContent = t('wm.f.' + f); sel.appendChild(o); } }
   const lb = $('#wmLearnBtn'); if (lb) lb.onclick = () => wmLearn(wm.learn ? null : $('#wmLearnSel').value);
-  const rb = $('#wmReset'); if (rb) rb.onclick = () => { cfg.wmMap = WM_DEFAULT.slice(); saveCfg(); renderWmMap(); };
+  const rb = $('#wmReset'); if (rb) rb.onclick = () => { cfg.wmMap = WM_DEFAULT.slice(); saveCfg(); renderWmMap(); if (typeof renderWolf === 'function') renderWolf(); };
   renderWmMap();
 })();
 // ---- USB-diagnose: hvad ser Mac'en når fx Wolfmix sættes i med USB-C? (WebUSB + WebSerial lister enhederne)
@@ -236,7 +272,8 @@ async function camOpen() {
   try {
     if (window.laser.camAccess) { const ok = await window.laser.camAccess(); if (ok === false) { camStatus(t('cam.denied')); return; } }
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
-    const sel = $('#camSel'); sel.innerHTML = ''; devs.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || t('cam.dev', { n: i + 1 }); sel.appendChild(o); });
+    const sel = $('#camSel'); sel.innerHTML = ''; { const o = document.createElement('option'); o.value = 'phone'; o.textContent = t('cam.phone'); sel.appendChild(o); } devs.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || t('cam.dev', { n: i + 1 }); sel.appendChild(o); });
+    if (!cfg.camId && devs.length) sel.value = devs[0].deviceId;
     if (cfg.camId && devs.some((d) => d.deviceId === cfg.camId)) sel.value = cfg.camId;
     if (!devs.length) { camStatus(t('cam.none')); }
     await camStart();
@@ -246,6 +283,7 @@ async function camOpen() {
 async function camStart() {
   if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop());
   const id = $('#camSel').value; cfg.camId = id; saveCfg();
+  if (id === 'phone') { camCal.stream = { phone: true, getTracks: () => [] }; $('#camVideo').srcObject = null; $('#camZoom').textContent = ''; camStatus(t('cam.phoneHint')); camDrawLoop(); return; }
   camStatus(t('cam.opening'));
   try { camCal.stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
   catch (e) { // iPhone væk / gammelt id → prøv et hvilket som helst kamera
@@ -268,7 +306,11 @@ async function camStart() {
 function camClose() { camCal.state = 'idle'; camConfirmDone(false); $('#camAuto').hidden = false; $('#camRun').hidden = false; $('#camSize').hidden = false; if (camCal.follow) { clearInterval(camCal.follow); camCal.follow = null; camCal.track = null; $('#camFollow').classList.remove('on'); $('#camFix').hidden = true; } if (camCal.stream) camCal.stream.getTracks().forEach((tr) => tr.stop()); camCal.stream = null; camCal.active = false; camCal.send = null; camCal.ch4 = null; camCal.state = 'idle'; $('#camModal').hidden = true; sendNow(); }
 function camStatus(msg) { $('#camStatus').textContent = msg; }
 const CAM_W = 320, CAM_H = 180;
+const phoneCam = { frame: null, at: 0, n: 0 }; // billeder fra telefonen (mobil-siden → /camframe)
+if (window.laser.onCamFrame) window.laser.onCamFrame((d) => { if (d && d.data && d.data.length >= CAM_W * CAM_H) { phoneCam.frame = d.data; phoneCam.at = Date.now(); phoneCam.n++; } });
+const usingPhoneCam = () => $('#camSel') && $('#camSel').value === 'phone';
 function camGrab() { // nedskaleret gråtone-lignende (max-kanal) billede
+  if (usingPhoneCam()) { const out = new Float32Array(CAM_W * CAM_H); if (phoneCam.frame) for (let i = 0; i < out.length; i++) out[i] = phoneCam.frame[i]; return out; }
   const v = $('#camVideo'); const c = camCal.work || (camCal.work = document.createElement('canvas')); c.width = CAM_W; c.height = CAM_H;
   const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(v, 0, 0, CAM_W, CAM_H);
   const d = g.getImageData(0, 0, CAM_W, CAM_H).data, out = new Float32Array(CAM_W * CAM_H);
@@ -576,7 +618,10 @@ function camDrawLoop() {
   const cv = $('#camCanvas'); if (!cv || $('#camModal').hidden) return;
   const v = $('#camVideo'); const W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = cv.getContext('2d'); g.clearRect(0, 0, W, H);
-  if (v.videoWidth) g.drawImage(v, 0, 0, W, H);
+  if (usingPhoneCam()) {
+    if (phoneCam.frame) { const im = camCal.imgC || (camCal.imgC = document.createElement('canvas')); im.width = CAM_W; im.height = CAM_H; const ig = im.getContext('2d'); const id = ig.createImageData(CAM_W, CAM_H); for (let i = 0; i < CAM_W * CAM_H; i++) { const p = phoneCam.frame[i]; id.data[i * 4] = p; id.data[i * 4 + 1] = p; id.data[i * 4 + 2] = p; id.data[i * 4 + 3] = 255; } ig.putImageData(id, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(im, 0, 0, W, H); }
+    const fresh = Date.now() - phoneCam.at < 1500; g.fillStyle = fresh ? 'rgba(49,243,172,.9)' : 'rgba(255,59,92,.9)'; g.font = '600 11px -apple-system'; g.textAlign = 'left'; g.fillText(fresh ? t('cam.phoneLive', { n: phoneCam.n }) : t('cam.phoneNo'), 10, 16);
+  } else if (v.videoWidth) g.drawImage(v, 0, 0, W, H);
   const fx = W / CAM_W, fy = H / CAM_H;
   // målte pletter
   for (const p of camCal.pts) { g.fillStyle = 'rgba(49,243,172,.9)'; g.beginPath(); g.arc(p[2] * fx, p[3] * fy, camCal.state === 'corners' ? 6 : 4, 0, Math.PI * 2); g.fill(); if (camCal.state === 'corners') { g.fillStyle = '#031'; g.font = '700 8px -apple-system'; g.textAlign = 'center'; g.fillText(String(CAM_GRID.findIndex((q) => q[0] === p[0] && q[1] === p[1]) + 1), p[2] * fx, p[3] * fy + 3); } }
@@ -2134,7 +2179,7 @@ function bindSetting(id, key, conv = (v) => v, outFmt) {
     if (key === 'rate') startSending();
     if (key === 'patCount') { renderPatPages(); renderPatterns(); }
     if (key === 'address') dmx.fill(0);
-    if (key === 'wmAddress' || key === 'wmOn') { if (typeof renderWmMap === 'function') renderWmMap(); if (typeof wmStatus === 'function') wmStatus(); }
+    if (key === 'wmAddress' || key === 'wmOn') { if (typeof renderWmMap === 'function') renderWmMap(); if (typeof wmStatus === 'function') wmStatus(); if (typeof renderWolf === 'function') renderWolf(); }
   });
 }
 bindSetting('ip', 'ip', (v) => v.trim() || '2.255.255.255');
@@ -2452,7 +2497,7 @@ async function refreshMobile() {
   $('#mobEnable').checked = info.enabled;
   $('#mobBody').classList.toggle('off', !info.enabled);
   if (info.qr) $('#mobQr').src = info.qr;
-  $('#mobUrl').textContent = info.url || t('mob.noWifi');
+  $('#mobUrl').textContent = (info.url || t('mob.noWifi')) + (info.httpsUrl ? '\n' + t('mob.httpsUrl', { u: info.httpsUrl }) : '');
   $('#mobStatus').textContent = info.error ? t('mob.err', { e: info.error }) : t('mob.count', { n: info.clients });
   setMobCount(info.clients);
 }
