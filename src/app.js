@@ -31,6 +31,7 @@ const cfg = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
 if (!cfg.mig1810) { cfg.posScaled = false; cfg.mig1810 = true; }
 if (!cfg.mig1810b) { cfg.sizeInv = true; cfg.mig1810b = true; }
 if (!cfg.mig1810c) { cfg.sizeFlip = false; cfg.mig1810c = true; }
+if (!cfg.mig1910c) { cfg.mig1910c = true; cfg._needCenter = true; }
 if (!cfg.mig1810g) { cfg.sizeFlip = false; cfg.mig1810g = true; } // 19/10 20:15: fast retning i koden – kontakten nulstilles // målt: størrelses-kanalen vender modsat af hvad jeg antog
 // kalibrering af laserens placering ift. LIVE: forskydning, skala og vending pr. akse
 cfg.cal = Object.assign({ ox: 0, oy: 0, sx: 1, sy: 1, ix: false, iy: false }, cfg.cal || {});
@@ -102,7 +103,7 @@ function zoneVal() {
   const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64;
   if (raw.on && raw.zone != null) return clamp(Math.round(raw.zone), 0, 255);
   const lo = clamp(cfg.zoneLo ?? 40, 1, 63), hi = clamp(cfg.zoneHi ?? 63, lo + 1, 63);
-  return base + Math.round(lo + cfg.zone * (hi - lo));
+  return base + Math.round(lo + (cfg.zoneFlip ? 1 - cfg.zone : cfg.zone) * (hi - lo));
 }
 const YF = () => (cfg.yFlip ? -1 : 1); // laserens Y-akse vender modsat skærmens
 // ---------- særlige billeder: test-streg og zonegrænse tegnet af laseren ----------
@@ -110,15 +111,27 @@ const YF = () => (cfg.yFlip ? -1 : 1); // laserens Y-akse vender modsat skærmen
 let special = null; // null | 'line' | 'zone'
 let selVb = null; // den parameter der er valgt til piletaster (klik på navnet)
 // laserens midte (sendt 0,0) i app-koordinater – og flyt den (brugeren trækker markøren i LIVE)
-function laserCenterApp() { return cfg.camMap ? hApply(cfg.camMap.Hi, 0, 0) : rawToApp(0, 0); }
-function setLaserCenterApp(ax, ay) {
-  if (cfg.camMap) { // flyt hele omsætningen i app-rummet så (ax,ay) → sendt (0,0): H' = H · T(-d)
-    const [x0, y0] = hApply(cfg.camMap.Hi, 0, 0), dx = ax - x0, dy = ay - y0, H = cfg.camMap.H;
-    const Hn = [H[0], H[1], H[2] - H[0] * dx - H[1] * dy, H[3], H[4], H[5] - H[3] * dx - H[4] * dy, H[6], H[7], H[8] - H[6] * dx - H[7] * dy];
-    const Hi = hInv(Hn); if (!Hi) return; cfg.camMap.H = Hn; cfg.camMap.Hi = Hi;
-  } else { cfg.cal.ox = clamp(-ax * cfg.cal.sx, -1, 1); cfg.cal.oy = clamp(-ay * cfg.cal.sy, -1, 1); }
-  saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
+// laserens midte (sendt 0,0) i app-koordinater. LIVE holdes altid centreret på laserens midte (app 0,0 = sendt 0,0);
+// "hvor er midten IRL" justeres kun i det der sendes (cfg.ctrX/ctrY), ikke i LIVE.
+const hShift = (H, dx, dy) => [H[0], H[1], H[2] - H[0] * dx - H[1] * dy, H[3], H[4], H[5] - H[3] * dx - H[4] * dy, H[6], H[7], H[8] - H[6] * dx - H[7] * dy]; // H'(a) = H(a - d)
+function camCenterApp() { // løs camAppToSend(a) = (0,0) numerisk (fuld vej inkl. kamera + rest-korrektion)
+  const m = cfg.camMap; let [ax, ay] = hApply(m.Hi, 0, 0); const sz = st.size;
+  for (let i = 0; i < 8; i++) {
+    const f = camAppToSend(ax, ay, sz), e = 0.01, fx = camAppToSend(ax + e, ay, sz), fy = camAppToSend(ax, ay + e, sz);
+    const a = (fx[0] - f[0]) / e, b = (fy[0] - f[0]) / e, c = (fx[1] - f[1]) / e, d = (fy[1] - f[1]) / e, det = a * d - b * c; if (Math.abs(det) < 1e-9) break;
+    const dx = (d * f[0] - b * f[1]) / det, dy = (-c * f[0] + a * f[1]) / det; ax -= dx; ay -= dy; if (Math.hypot(dx, dy) < 1e-5) break;
+  }
+  return [ax, ay];
 }
+function laserCenterApp() { return cfg.camMap ? camCenterApp() : rawToApp(0, 0); }
+function setLaserCenterApp(ax, ay, quiet) { // flyt omsætningen i app-rummet så (ax,ay) → sendt (0,0)
+  if (cfg.camMap) {
+    const m = cfg.camMap, [x0, y0] = camCenterApp(), dx = ax - x0, dy = ay - y0; if (Math.hypot(dx, dy) < 1e-6) return;
+    const Hn = hShift(m.H, dx, dy), Hi = hInv(Hn); if (!Hi) return; m.H = Hn; m.Hi = Hi; if (m.Hac) m.Hac = hShift(m.Hac, dx, dy);
+  } else { cfg.cal.ox = clamp(-ax * cfg.cal.sx, -1, 1); cfg.cal.oy = clamp(-ay * cfg.cal.sy, -1, 1); }
+  if (!quiet) { saveCfg(); if (typeof syncCalUI === 'function') syncCalUI(); }
+}
+function centerLive() { setLaserCenterApp(0, 0, true); } // laserens midte = midten af LIVE
 let centerDrag = false;
 // ---- Wolfmix / DMX-ind: en DMX-konsol (Wolfmix W1 MK3) sender DMX → Art-Net-node med DMX-indgang → SmartLink lytter
 // og oversætter kanaler til funktioner. Kanal-kortet kan ændres og læres (Lær: rør en knap/encoder på konsollen).
@@ -211,6 +224,7 @@ function wolfTouched(i, v) { // kaldes når en kanal ændrer sig
   const sb = $('#wolfSettings'); if (sb) sb.onclick = () => { $$('.tab').forEach((x) => x.classList.toggle('active', x.dataset.tab === 'settings')); $$('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-settings')); const w = $('.wmpanel'); if (w) w.scrollIntoView({ behavior: 'smooth' }); };
 })();
 // ---- Rå/Lær-panelet ----
+function rawOverrides() { if (!raw.on) return; for (const k in raw.ch) { const v = raw.ch[k]; if (v !== '' && v != null && !isNaN(+v)) setCh(+k, +v); } }
 function rawSync() {
   const set = (id, v) => { const el = $('#' + id); if (el && +el.value !== v) el.value = v; const o = el && el.parentElement.querySelector('output'); if (o) o.textContent = String(v); };
   set('rawX', Math.round(raw.x)); set('rawY', Math.round(raw.y)); set('rawSize', Math.round(raw.size)); set('rawZone', raw.zone == null ? 0 : Math.round(raw.zone));
@@ -231,7 +245,7 @@ function rawFit() { // app↔sendt-par → samme omsætning som kameraet laver (
   if (raw.pts.length < 4) { toast(t('raw.needMore', { n: 4 - raw.pts.length })); return false; }
   const pts = raw.pts.map((p) => [p[0], p[1], p[2], p[3]]); // [sentX, sentY, "cam"=appX, appY]
   const map = camBuildMap(pts, [[-1, 1], [1, 1], [1, -1], [-1, -1]], cfg.sizeMap, { manual: true, size: st.size });
-  if (map) { map.res = null; cfg.camMap = map; saveCfg(); toast(t('raw.fitted', { n: pts.length, e: (map.err * 100).toFixed(0) })); return true; }
+  if (map) { map.res = null; cfg.camMap = map; centerLive(); saveCfg(); toast(t('raw.fitted', { n: pts.length, e: (map.err * 100).toFixed(0) })); return true; }
   toast(t('cam.fitFail')); return false;
 }
 function rawSizeMark(which) { // 'min' = mindste synlige, 'max' = størst uden forvrængning – ved den rå størrelses-værdi der sendes nu
@@ -242,6 +256,60 @@ function rawSizeMark(which) { // 'min' = mindste synlige, 'max' = størst uden f
   toast(t(which === 'min' ? 'raw.sizeMin' : 'raw.sizeMax', { v }));
 }
 function rawZoneMark(which) { const v = clamp(Math.round(raw.zone == null ? 0 : raw.zone), 0, 255); const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64; const rel = clamp(v - base, 1, 63); if (which === 'lo') cfg.zoneLo = Math.min(rel, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = Math.max(rel, (cfg.zoneLo ?? 40) + 1); saveCfg(); toast(t(which === 'lo' ? 'raw.zoneLo' : 'raw.zoneHi', { v })); }
+// ---------- Retnings-test: appen sender en kommando, viser hvad den sender og hvad den TROR sker – du retter hvis det er forkert ----------
+const DIR_CMDS = [
+  { k: 'up', run: () => setPos('posY', st.posY + 0.1), fix: 'dirY' },
+  { k: 'down', run: () => setPos('posY', st.posY - 0.1), fix: 'dirY' },
+  { k: 'left', run: () => setPos('posX', st.posX - 0.1), fix: 'dirX' },
+  { k: 'right', run: () => setPos('posX', st.posX + 0.1), fix: 'dirX' },
+  { k: 'bigger', run: () => setSize(clamp(st.size + 0.1, 0, 1)), fix: 'sizeFlip' },
+  { k: 'smaller', run: () => setSize(clamp(st.size - 0.1, 0, 1)), fix: 'sizeFlip' },
+  { k: 'cw', run: () => { st.rotSpeed = 0; st.rotAngle = ((st.rotAngle + 15 + 180) % 360) - 180; saveLook(); syncLookUI(); }, fix: 'rotDir' },
+  { k: 'ccw', run: () => { st.rotSpeed = 0; st.rotAngle = ((st.rotAngle - 15 + 540) % 360) - 180; saveLook(); syncLookUI(); }, fix: 'rotDir' },
+  { k: 'zoneUp', run: () => { cfg.zone = clamp(Math.round((cfg.zone + 0.1) * 100) / 100, 0, 0.9); saveCfg(); if (typeof syncZoneUI === 'function') syncZoneUI(); }, fix: 'zoneFlip' },
+  { k: 'zoneDown', run: () => { cfg.zone = clamp(Math.round((cfg.zone - 0.1) * 100) / 100, 0, 0.9); saveCfg(); if (typeof syncZoneUI === 'function') syncZoneUI(); }, fix: 'zoneFlip' },
+  { k: 'center', run: () => { setPos('posX', 0); setPos('posY', 0); }, fix: 'center' },
+];
+const dirRes = {}; // k → 'ok' | 'fixed'
+const DMX_NAMES = { 1: 'lys', 2: 'mønster', 3: 'fps', 4: 'størrelse', 6: 'rotation', 7: 'X', 8: 'X fin', 9: 'Y', 10: 'Y fin', 11: 'farve', 13: 'strobe', 16: 'zone', 17: 'zone til' };
+function dirSnap() { sendNow(); const a = []; for (let c = 1; c <= 19; c++) a.push(dmx[cfg.address - 2 + c] | 0); return a; }
+function dirRun(cmd) {
+  if (raw.on) rawToggle(false); if (special) setSpecial(special);
+  st.move = 'none'; const before = dirSnap(); const appBefore = [out.x, out.y, out.size];
+  cmd.run(); sm.x = st.posX; sm.y = st.posY; sm.size = st.size; const after = dirSnap();
+  const diff = []; after.forEach((v, i) => { if (v !== before[i]) diff.push(`${t('dir.ch')} ${i + 1}${DMX_NAMES[i + 1] ? ' (' + DMX_NAMES[i + 1] + ')' : ''}: ${before[i]} → ${v}`); });
+  const row = document.querySelector(`.dir-row[data-k="${cmd.k}"]`); if (!row) return;
+  row.querySelector('.dir-sent').textContent = diff.length ? diff.join(' · ') : t('dir.noChange');
+  row.classList.add('ran'); delete dirRes[cmd.k]; dirPaint();
+}
+function dirFix(cmd, ok) {
+  if (ok) { dirRes[cmd.k] = 'ok'; dirPaint(); return; }
+  if (cmd.fix === 'center') { toast(t('dir.centerFix')); return; }
+  cfg[cmd.fix] = !cfg[cmd.fix]; saveCfg(); if (cmd.fix === 'sizeFlip') { const el = $('#sizeFlip'); if (el) el.checked = !!cfg.sizeFlip; }
+  DIR_CMDS.filter((c) => c.fix === cmd.fix).forEach((c) => (dirRes[c.k] = 'fixed'));
+  sendNow(); dirPaint(); toast(t('dir.fixed.' + cmd.fix, { s: t(cfg[cmd.fix] ? 'dir.flipped' : 'dir.normal') }));
+}
+function dirPaint() {
+  $$('.dir-row').forEach((r) => { const k = r.dataset.k; r.classList.toggle('ok', dirRes[k] === 'ok'); r.classList.toggle('fixed', dirRes[k] === 'fixed'); });
+  const st_ = $('#dirState'); if (st_) st_.textContent = t('dir.state', { x: t(cfg.dirX ? 'dir.flipped' : 'dir.normal'), y: t(cfg.dirY ? 'dir.flipped' : 'dir.normal'), s: t(cfg.sizeFlip ? 'dir.flipped' : 'dir.normal'), r: t(cfg.rotDir ? 'dir.flipped' : 'dir.normal'), z: t(cfg.zoneFlip ? 'dir.flipped' : 'dir.normal') });
+}
+function dirBuild() {
+  const box = $('#dirRows'); if (!box || box.childElementCount) return;
+  DIR_CMDS.forEach((cmd) => {
+    const r = document.createElement('div'); r.className = 'dir-row'; r.dataset.k = cmd.k;
+    const go = document.createElement('button'); go.className = 'ghost small dir-go'; go.textContent = t('dir.cmd.' + cmd.k); go.onclick = () => dirRun(cmd);
+    const info = document.createElement('div'); info.className = 'dir-info';
+    const th = document.createElement('div'); th.className = 'dir-think'; th.textContent = t('dir.think') + ' ' + t('dir.exp.' + cmd.k);
+    const se = document.createElement('div'); se.className = 'dir-sent mono'; se.textContent = '–'; info.append(th, se);
+    const ok = document.createElement('button'); ok.className = 'ghost small dir-ok'; ok.textContent = '✓'; ok.title = t('dir.okTip'); ok.onclick = () => dirFix(cmd, true);
+    const no = document.createElement('button'); no.className = 'ghost small dir-no'; no.textContent = '✗'; no.title = t('dir.noTip'); no.onclick = () => dirFix(cmd, false);
+    r.append(go, info, ok, no); box.appendChild(r);
+  });
+  dirPaint();
+}
+function dirToggle(on) { const p = $('#pvDirPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvDir').classList.toggle('on', show); if (show) { dirBuild(); dirPaint(); } }
+{ const b = $('#pvDir'); if (b) b.onclick = () => dirToggle(); const c = $('#dirClose'); if (c) c.onclick = () => dirToggle(false);
+  const r = $('#dirReset'); if (r) r.onclick = () => { ['dirX', 'dirY', 'rotDir', 'zoneFlip'].forEach((k) => (cfg[k] = false)); cfg.sizeFlip = false; saveCfg(); for (const k in dirRes) delete dirRes[k]; sendNow(); dirPaint(); toast(t('dir.resetDone')); }; }
 (() => {
   const b = $('#pvRaw'); if (!b) return; b.onclick = () => rawToggle();
   const bind = (id, k) => { const el = $('#' + id); if (!el) return; el.addEventListener('input', () => { raw[k] = +el.value; rawSync(); sendNow(); }); };
@@ -253,6 +321,11 @@ function rawZoneMark(which) { const v = clamp(Math.round(raw.zone == null ? 0 : 
   $('#rawClear').onclick = () => { raw.pts = []; store.set('rawPts', []); rawSync(); toast(t('raw.cleared')); };
   $('#rawSizeMin').onclick = () => rawSizeMark('min'); $('#rawSizeMax').onclick = () => rawSizeMark('max');
   $('#rawZoneLo').onclick = () => rawZoneMark('lo'); $('#rawZoneHi').onclick = () => rawZoneMark('hi');
+  $('#rawCenter').onclick = () => { cfg.ctrX = clamp(raw.x / 100, -0.5, 0.5); cfg.ctrY = clamp(raw.y / 100, -0.5, 0.5); saveCfg(); syncCtrUI(); toast(t('raw.centerSet', { x: Math.round(raw.x), y: Math.round(raw.y) })); };
+  $('#rawRotZero').onclick = () => { const v = raw.ch[6]; cfg.rotZero = v === '' || v == null ? 96 : clamp(+v, 0, 192); saveCfg(); toast(t('raw.rotSet', { v: cfg.rotZero })); };
+  // kanal-felter: tomt = appen styrer, tal = sendes præcis sådan mens panelet er åbent
+  const grid = $('#rawCh'); if (grid) { for (let k = 1; k <= 19; k++) { const w = document.createElement('label'); w.className = 'rawch'; const sp = document.createElement('span'); sp.textContent = k; const inp = document.createElement('input'); inp.type = 'number'; inp.min = 0; inp.max = 255; inp.placeholder = '–'; inp.addEventListener('input', () => { raw.ch[k] = inp.value; sendNow(); }); w.append(sp, inp); grid.appendChild(w); } }
+  $('#rawChClear').onclick = () => { raw.ch = {}; $$('#rawCh input').forEach((i) => (i.value = '')); sendNow(); };
   setInterval(() => { if (raw.on) rawSync(); }, 300);
 })();
 function wmLearn(fn) { wm.learn = fn ? { fn } : null; renderWmMap(); toast(fn ? t('wm.learnHint', { f: t('wm.f.' + fn) }) : t('wm.learnOff')); }
@@ -498,7 +571,7 @@ function camBuildMap(pts, corners, sizes, meta) { // sendt→kamera-punkter + va
   cfg.camMap = map;
   cfg.calPts = { TL: { x: sent[0][0], y: sent[0][1] }, TR: { x: sent[1][0], y: sent[1][1] }, BR: { x: sent[2][0], y: sent[2][1] }, BL: { x: sent[3][0], y: sent[3][1] } };
   if (sizes && sizes.length >= 3) { cfg.sizeMap = sizes; const pe = patExtent(meta && meta.pattern || st.pattern); cfg.sizeMapExt = Math.max(0.05, Math.max(pe.x, pe.y)); cfg.sizeMapPattern = meta && meta.pattern || st.pattern; }
-  cfg.cal.ix = false; cfg.cal.iy = false; calApply(); cfg.calibDone = true; cfg.posMap = null; saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
+  cfg.cal.ix = false; cfg.cal.iy = false; calApply(); cfg.calibDone = true; cfg.posMap = null; centerLive(); saveCfg(); if (typeof syncCalUI === 'function') syncCalUI();
   return map;
 }
 // ---- helt automatisk: appen flytter selv mønsteret rundt, kameraet finder det, og omsætningen udvides trin for trin
@@ -741,7 +814,7 @@ function camDrawLoop() {
 const MEASURE_GRID = [[0, 0], [-0.7, 0], [0.7, 0], [0, 0.7], [0, -0.7], [-0.7, 0.7], [0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
 let measure = null; // { i, obs: [[sentX, sentY, obsX, obsY], …], size }
 // ---- Rå/Lær: brugeren styrer de rå værdier der sendes (X, Y, størrelse, zone) og fortæller appen hvor de rammer ----
-const raw = { on: false, x: 0, y: 0, size: 64, zone: null, pts: (store.get('rawPts', []) || []) };
+const raw = { on: false, x: 0, y: 0, size: 64, zone: null, ch: {}, pts: (store.get('rawPts', []) || []) };
 function posMapFor(size) { // nærmeste målte omsætning (evt. interpoleret mellem to størrelser)
   const maps = cfg.posMap || []; if (maps.length === 1) return maps[0];
   const srt = [...maps].sort((a, b) => a.size - b.size);
@@ -906,7 +979,8 @@ function setSpecial(v) {
 // DJ-tilstand (19 kanaler) – laserens standard
 function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   const show = on && st.pattern > 0 && (cfg.calibDone || camCal.active); // intet mønster = helt slukket (nogle kort har en 000.ild); ingen mønstre før området er kalibreret
-  const qf = quadrantFix(st.pattern, out.sendX, out.sendY);
+  const oX = out.sendX * (cfg.dirX ? -1 : 1), oY = out.sendY * (cfg.dirY ? -1 : 1); // Retnings-test: rettet fortolkning af X/Y-signalet
+  const qf = quadrantFix(st.pattern, oX, oY);
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? qf.pat : 0);
   // 3: 0–15 = 50 fps standard, 16–255 = 0…100 fps (16 ≈ 0 fps = frosset billede)
@@ -916,13 +990,14 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   setCh(5, 0);
   // 6: rotation – 0–192 manuel vinkel (-180…+180°, 96 = 0°), 193–224 auto mod uret, 225–255 auto med uret
   const flip180 = (patFlip.has(st.pattern) ? 180 : 0) + (qf.rot180 ? 180 : 0);
-  if (st.rotSpeed > 0.02 && !flip180) setCh(6, 225 + st.rotSpeed * 30);
-  else if (st.rotSpeed < -0.02 && !flip180) setCh(6, 193 + -st.rotSpeed * 31);
-  else { let a = (ang + flip180) % 360; if (a > 180) a -= 360; if (a < -180) a += 360; setCh(6, (a + 180) / 360 * 192); }
+  const rs = cfg.rotDir ? -st.rotSpeed : st.rotSpeed; if (cfg.rotDir) ang = -ang;
+  if (rs > 0.02 && !flip180) setCh(6, 225 + rs * 30);
+  else if (rs < -0.02 && !flip180) setCh(6, 193 + -rs * 31);
+  else { let a = (ang + flip180) % 360; if (a > 180) a -= 360; if (a < -180) a += 360; setCh(6, (((a + 180) / 360 * 192 + ((cfg.rotZero ?? 96) - 96)) % 193 + 193) % 193); }
   // 7–10 position: appen styrer selv bevægelsen (rigtig cirkel, ottetal …) + hvor mønsteret peger hen
   // laseren lægger positionen til FØR den skalerer størrelsen → kompensér, så 'Flyt' passer med LIVE
   const psc = cfg.posScaled ? 1 / Math.max(size, 0.08) : 1;
-  pos16(7, out.sendX * psc, true); pos16(9, out.sendY * psc, true);
+  pos16(7, oX * psc, true); pos16(9, oY * psc, true);
   // 11: farve – 0–15 original, 16–79 ensfarvet, 144–255 automatisk farveskift
   if (st.colorCycle) setCh(11, 144 + st.colorCycleSpeed * 111);
   else if (mode === 'orig') setCh(11, 8);
@@ -1020,11 +1095,13 @@ function computeFrame(now) {
     clamped = Math.abs(sx - sendX) > 0.003 || Math.abs(sy - sendY) > 0.003;
     const [bx, by] = hApply(cfg.camMap.Hi, sendX, sendY); axc = bx; ayc = by; rawX = sendX; rawY = sendY;
   } else if (!measure && !camCal.active && !raw.on && cfg.posMap) { const m = posMapFor(size); const d = m.M[0] * m.M[3] - m.M[1] * m.M[2]; if (Math.abs(d) > 1e-6) { const ox = rawX - m.c[0], oy = rawY - m.c[1]; sendX = clamp((m.M[3] * ox - m.M[1] * oy) / d, -1, 1); sendY = clamp((-m.M[2] * ox + m.M[0] * oy) / d, -1, 1); } }
+  // laserens midte IRL: kun det der sendes flyttes (LIVE uændret)
+  if (!measure && !camCal.active && !raw.on && (cfg.ctrX || cfg.ctrY)) { sendX = clamp(sendX + (cfg.ctrX || 0), -1, 1); sendY = clamp(sendY + (cfg.ctrY || 0), -1, 1); }
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
   out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
-  if (special) { specialFrame(on); return; }
-  if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); return; }
+  if (special) { specialFrame(on); rawOverrides(); return; }
+  if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); rawOverrides(); return; }
   const show = on && st.pattern > 0;
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? st.pattern : 0);
@@ -1431,20 +1508,20 @@ let zoneDrag = false, moveMode = false, posDrag = null, calDrag = null;
     const [u, v] = rel(e);
     if (measure) { measureRecord(u * 2 - 1, 1 - v * 2); return; }
     if (raw.on && raw.learnClick) { raw.learnClick = false; rawLearn(u * 2 - 1, 1 - v * 2); return; }
-    { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); if (Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < 16) { centerDrag = true; cv.setPointerCapture(e.pointerId); return; } }
+    { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); }
     if (special === 'cal') { const p = calPt(); calDrag = { u0: u, v0: v, x0: p.x, y0: p.y, sx: cfg.cal.sx, sy: cfg.cal.sy }; cv.setPointerCapture(e.pointerId); return; }
     if (nearEdge(u, v) || special === 'zone') { zoneDrag = true; cv.setPointerCapture(e.pointerId); applyZoneDrag(u, v); return; }
     if (special !== 'max') { posDrag = { u0: u, v0: v, x0: st.posX, y0: st.posY }; cv.setPointerCapture(e.pointerId); }
   });
   cv.addEventListener('pointermove', (e) => {
     const [u, v] = rel(e);
-    { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); cv.style.cursor = centerDrag || Math.hypot(e.clientX - r.left - px, e.clientY - r.top - py) < 16 ? 'grab' : zoneDrag || nearEdge(u, v) ? (['left', 'right'].includes(cfg.zoneSide) ? 'ew-resize' : 'ns-resize') : 'move'; }
-    if (centerDrag) { setLaserCenterApp(clamp(u * 2 - 1, -1.5, 1.5), clamp(1 - v * 2, -1.5, 1.5)); return; }
+    { const [cx, cy] = laserCenterApp(); const r = cv.getBoundingClientRect(), b = pvBox(r.width, r.height), [px, py] = boxPt(b, cx, cy); cv.style.cursor = zoneDrag || nearEdge(u, v) ? (['left', 'right'].includes(cfg.zoneSide) ? 'ew-resize' : 'ns-resize') : 'move'; }
+    if (centerDrag) { return; }
     if (calDrag) { const p = calPt(); p.x = clamp(calDrag.x0 + (u - calDrag.u0) * 2 * calDrag.sx, -1, 1); p.y = clamp(calDrag.y0 - (v - calDrag.v0) * 2 * calDrag.sy, -1, 1); cfg.quadSaved = false; calApply(); syncCalUI(); }
     else if (zoneDrag) applyZoneDrag(u, v);
     else if (posDrag) { st.posX = clamp(posDrag.x0 + (u - posDrag.u0) * 2, -1, 1); st.posY = clamp(posDrag.y0 - (v - posDrag.v0) * 2, -1, 1); saveLook(); syncSizeUI(); }
   });
-  const up = () => { zoneDrag = false; posDrag = null; calDrag = null; if (centerDrag) { centerDrag = false; toast(t('pv.centerMoved')); } };
+  const up = () => { zoneDrag = false; posDrag = null; calDrag = null; centerDrag = false; };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', (e) => { if (!moveMode) return; e.preventDefault(); setSize(st.size - Math.sign(e.deltaY) * 0.03); }, { passive: false });
 })();
@@ -2292,6 +2369,11 @@ $('#maxInt').addEventListener('input', () => updatePowerUI());
 bindSetting('startLow', 'startLow');
 bindSetting('invX', 'invX'); bindSetting('invY', 'invY');
 bindSetting('posFmt', 'posFmt'); bindSetting('posScaled', 'posScaled');
+function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.value = Math.round((cfg[k] || 0) * 100); const o = el.parentElement.querySelector('output'); if (o) o.textContent = (cfg[k] > 0 ? '+' : '') + Math.round((cfg[k] || 0) * 100); }); }
+['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
+{ const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
+syncCtrUI();
+if (cfg._needCenter) { delete cfg._needCenter; try { centerLive(); } catch (e) {} saveCfg(); }
 bindSetting('zoneLo', 'zoneLo', (v) => +v, (v) => String(v)); bindSetting('zoneHi', 'zoneHi', (v) => +v, (v) => String(v));
 bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeFlip', 'sizeFlip'); bindSetting('quadFix', 'quadFix');
 bindSetting('wmOn', 'wmOn'); bindSetting('wmUniverse', 'wmUniverse', (v) => clamp(v | 0, 0, 32767)); bindSetting('wmAddress', 'wmAddress', (v) => clamp(v | 0, 1, 512)); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');

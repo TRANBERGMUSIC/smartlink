@@ -54,6 +54,14 @@
         <button class="ghost small pv-tool" id="pvMeasure" data-i18n="pv.ms" data-i18n-title="pv.msTip"></button>
         <button class="ghost small pv-tool" id="camOpen" data-i18n="cam.btn" data-i18n-title="cam.tip"></button>
         <button class="ghost small pv-tool" id="pvRaw" data-i18n="raw.btn" data-i18n-title="raw.tip"></button>
+        <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
+      </div>
+      <div class="pv-cal pv-dir" id="pvDirPanel" hidden>
+        <h3 data-i18n="dir.title"></h3>
+        <p class="cal-instr" data-i18n="dir.intro"></p>
+        <div id="dirRows"></div>
+        <p class="cal-instr mono" id="dirState"></p>
+        <div class="cal-r1"><button class="ghost small" id="dirReset" data-i18n="dir.reset"></button><button class="ghost small" id="dirClose" data-i18n="dir.close"></button></div>
       </div>
       <div class="pv-cal pv-raw" id="pvRawPanel" hidden>
         <h3 data-i18n="raw.title"></h3>
@@ -68,6 +76,10 @@
         <div class="cal-r1"><button class="ghost small" id="rawSizeMin" data-i18n="raw.sizeMinBtn"></button><button class="ghost small" id="rawSizeMax" data-i18n="raw.sizeMaxBtn"></button></div>
         <label><span data-i18n="raw.zone"></span><input type="range" id="rawZone" min="0" max="255" value="0"><output>0</output></label>
         <div class="cal-r1"><button class="ghost small" id="rawZoneLo" data-i18n="raw.zoneLoBtn"></button><button class="ghost small" id="rawZoneHi" data-i18n="raw.zoneHiBtn"></button><button class="ghost small" id="rawZoneOff" data-i18n="raw.zoneOff"></button></div>
+        <div class="cal-r1"><button class="ghost small" id="rawCenter" data-i18n="raw.center"></button><button class="ghost small" id="rawRotZero" data-i18n="raw.rotZero"></button></div>
+        <p class="cal-instr" data-i18n="raw.chIntro"></p>
+        <div class="rawch-grid" id="rawCh"></div>
+        <div class="cal-r1"><button class="ghost small" id="rawChClear" data-i18n="raw.chClear"></button></div>
         <p class="cal-instr mono" id="rawDmx"></p>
       </div>
       <div class="pv-ms" id="pvMeasurePanel" hidden>
@@ -327,6 +339,9 @@
       <label><span data-i18n="set.dmxMode"></span> <select id="dmxMode"><option value="dj" data-i18n="set.modeDj"></option><option value="pro" data-i18n="set.modePro"></option></select></label>
     <label class="row"><span data-i18n="set.posFmt"></span><select id="posFmt"><option value="u" data-i18n="set.posU"></option><option value="s" data-i18n="set.posS"></option><option value="t" data-i18n="set.posT"></option></select></label>
     <label class="row"><span data-i18n="set.posScaled"></span><input type="checkbox" id="posScaled"></label>
+    <label class="row"><span data-i18n="set.ctrX"></span><input type="range" id="ctrX" min="-50" max="50" value="0"><output></output></label>
+    <label class="row"><span data-i18n="set.ctrY"></span><input type="range" id="ctrY" min="-50" max="50" value="0"><output></output></label>
+    <div class="row"><span class="hint" data-i18n="set.ctrHint"></span><button class="ghost small" id="ctrReset" data-i18n="set.ctrReset"></button></div>
     <label class="row"><span data-i18n="set.zoneLo"></span><input type="range" id="zoneLo" min="1" max="62" value="40"><output></output></label>
     <label class="row"><span data-i18n="set.zoneHi"></span><input type="range" id="zoneHi" min="2" max="63" value="63"><output></output></label>
     <label class="row"><span data-i18n="set.lineThin"></span><input type="range" id="lineThin" min="0" max="50" value="30"><output></output></label>
