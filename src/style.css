@@ -734,3 +734,13 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .dir-think { color: var(--text, #eee); }
 .dir-sent { color: var(--muted); font-size: 10px; word-break: break-word; }
 .dir-ok { color: #31f3ac; } .dir-no { color: #ff3b5c; }
+.pv-lim { width: 440px; }
+.lim-onrow { display: flex !important; gap: 6px; align-items: center; margin: 4px 0 6px !important; color: var(--text); }
+.lim-row { display: grid; grid-template-columns: 1fr 26px 28px 24px 24px 28px; grid-template-areas: "n s a b c d" "v v v v v v"; gap: 3px 4px; align-items: center; padding: 4px; border-radius: 6px; border: 1px solid rgba(255,255,255,.07); margin-bottom: 3px; }
+.lim-row .lim-name { grid-area: n; display: flex; gap: 6px; align-items: baseline; color: var(--text); font-size: 11.5px; }
+.lim-row .lim-who { font-size: 9.5px; color: var(--muted); }
+.lim-row.mine .lim-who { color: #ffaa3c; }
+.lim-row .lim-v { grid-area: v; font-size: 10px; color: var(--muted); }
+.lim-row.showing { border-color: #7ab4ff; background: rgba(122,180,255,.08); }
+.lim-row button { padding: 2px 0; min-width: 0; }
+#pvLim.on { border-color: #7ab4ff; color: #9cc8ff; }

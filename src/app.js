@@ -98,7 +98,8 @@ function setCh(ch, v) { const i = cfg.address - 1 + ch - 1; if (i >= 0 && i < 51
 // NB: målt på laseren – 0–63 dækker TOPPEN og 64–127 BUNDEN (modsat Laserworlds tabel). Venstre/højre uændret.
 function zoneVal() {
   if (raw.on && raw.zone != null) return clamp(Math.round(raw.zone), 0, 255);
-  if (!(cfg.zone > 0)) return 0;
+  if (limShow && limShow.zone != null) return limShow.zone;
+  if (!(cfg.zone > 0) && !(limShow && limShow.zone != null)) return 0;
   // målt på DS-3000 (bund): værdierne under ~104 giver zonen igen fra midten – det brugbare område er zoneLo…zoneHi
   const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64;
   if (raw.on && raw.zone != null) return clamp(Math.round(raw.zone), 0, 255);
@@ -123,7 +124,7 @@ function camCenterApp() { // løs camAppToSend(a) = (0,0) numerisk (fuld vej ink
   }
   return [ax, ay];
 }
-function laserCenterApp() { return cfg.camMap ? camCenterApp() : rawToApp(0, 0); }
+function laserCenterApp() { if (cfg.lim && cfg.lim.on) return [0, 0]; return cfg.camMap ? camCenterApp() : rawToApp(0, 0); }
 function setLaserCenterApp(ax, ay, quiet) { // flyt omsætningen i app-rummet så (ax,ay) → sendt (0,0)
   if (cfg.camMap) {
     const m = cfg.camMap, [x0, y0] = camCenterApp(), dx = ax - x0, dy = ay - y0; if (Math.hypot(dx, dy) < 1e-6) return;
@@ -256,6 +257,71 @@ function rawSizeMark(which) { // 'min' = mindste synlige, 'max' = størst uden f
   toast(t(which === 'min' ? 'raw.sizeMin' : 'raw.sizeMax', { v }));
 }
 function rawZoneMark(which) { const v = clamp(Math.round(raw.zone == null ? 0 : raw.zone), 0, 255); const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64; const rel = clamp(v - base, 1, 63); if (which === 'lo') cfg.zoneLo = Math.min(rel, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = Math.max(rel, (cfg.zoneLo ?? 40) + 1); saveCfg(); toast(t(which === 'lo' ? 'raw.zoneLo' : 'raw.zoneHi', { v })); }
+// ---------- Grænser: se og ret de værdier appen TROR er laserens yderpunkter (top/bund/venstre/højre, mindste/største, zone) ----------
+var limShow = null; // { pos:[x,y] } | { ch4 } | { zone } – sendes præcis mens du ser på den
+const LIM_ROWS = [
+  { k: 'top', kind: 'pos', axis: 1, sign: 1 }, { k: 'bottom', kind: 'pos', axis: 1, sign: -1 },
+  { k: 'left', kind: 'pos', axis: 0, sign: -1 }, { k: 'right', kind: 'pos', axis: 0, sign: 1 },
+  { k: 'small', kind: 'size' }, { k: 'big', kind: 'size' },
+  { k: 'zoneLo', kind: 'zone' }, { k: 'zoneHi', kind: 'zone' },
+];
+function limBelief() { // kør appens egen omregning og aflæs hvad den sender i yderpunkterne
+  const keep = { x: st.posX, y: st.posY, s: st.size, mv: st.move, sx: sm.x, sy: sm.y, ss: sm.size }, was = cfg.lim && cfg.lim.on; if (cfg.lim) cfg.lim.on = false;
+  const at = (px, py) => { st.posX = px; st.posY = py; sm.x = px; sm.y = py; st.move = 'none'; computeFrame(performance.now()); return [out.sendX, out.sendY]; };
+  const b = { top: at(0, 1)[1], bottom: at(0, -1)[1], left: at(-1, 0)[0], right: at(1, 0)[0] };
+  if (cfg.lim) cfg.lim.on = was; Object.assign(st, { posX: keep.x, posY: keep.y, size: keep.s, move: keep.mv }); Object.assign(sm, { x: keep.sx, y: keep.sy, size: keep.ss });
+  b.small = sizeCh4(0); b.big = sizeCh4(1);
+  for (const k in b) if (typeof b[k] === 'number') b[k] = Math.round(b[k] * (['small', 'big'].includes(k) ? 1 : 100)) / (['small', 'big'].includes(k) ? 1 : 100);
+  return b;
+}
+function limEnsure() { if (!cfg.lim || cfg.lim.top == null) { const b = limBelief(); cfg.lim = { on: false, ...b, set: {} }; saveCfg(); } if (!cfg.lim.set) cfg.lim.set = {}; }
+const zoneBase = () => ({ bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64);
+function limVal(r) { if (r.kind === 'zone') return zoneBase() + (r.k === 'zoneLo' ? (cfg.zoneLo ?? 40) : (cfg.zoneHi ?? 63)); return cfg.lim[r.k]; }
+function limShowRow(r) {
+  if (r.kind === 'pos') { const p = [0, 0]; p[r.axis] = cfg.lim[r.k]; limShow = { pos: p, k: r.k }; }
+  else if (r.kind === 'size') limShow = { ch4: cfg.lim[r.k], k: r.k };
+  else limShow = { zone: limVal(r), k: r.k };
+  if (raw.on) rawToggle(false); sendNow(); limPaint();
+}
+function limStep(r, d) {
+  limEnsure();
+  if (r.kind === 'pos') { const v = clamp(Math.round((cfg.lim[r.k] + d / 100) * 100) / 100, -1, 1); cfg.lim[r.k] = v; }
+  else if (r.kind === 'size') cfg.lim[r.k] = clamp(cfg.lim[r.k] + d, 0, 127);
+  else { if (r.k === 'zoneLo') cfg.zoneLo = clamp((cfg.zoneLo ?? 40) + d, 1, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = clamp((cfg.zoneHi ?? 63) + d, (cfg.zoneLo ?? 40) + 1, 63); }
+  cfg.lim.set[r.k] = true; if (r.kind !== 'zone') cfg.lim.on = true; saveCfg(); limShowRow(r);
+}
+function limDmxText(r) {
+  const v = limVal(r);
+  if (r.kind === 'pos') { const oX = r.axis === 0 ? v * (cfg.dirX ? -1 : 1) : 0, oY = r.axis === 1 ? v * (cfg.dirY ? -1 : 1) : 0; const keep = [dmx[cfg.address + 5], dmx[cfg.address + 6], dmx[cfg.address + 7], dmx[cfg.address + 8]]; pos16(7, oX, true); pos16(9, oY, true); const ch = r.axis === 0 ? 7 : 9; const a = dmx[cfg.address - 2 + ch], b = dmx[cfg.address - 1 + ch]; [7, 8, 9, 10].forEach((c, i) => (dmx[cfg.address - 2 + c] = keep[i])); return `${(v > 0 ? '+' : '') + Math.round(v * 100)} %  →  ${t('dir.ch')} ${ch}: ${a} / ${ch + 1}: ${b}${Math.abs(v) >= 1 ? '  ' + t('lim.max') : ''}`; }
+  if (r.kind === 'size') return `${t('dir.ch')} 4 = ${v}`;
+  return `${t('dir.ch')} 16 = ${v}`;
+}
+function limPaint() {
+  $$('.lim-row').forEach((el) => { const r = LIM_ROWS.find((q) => q.k === el.dataset.k); el.querySelector('.lim-v').textContent = limDmxText(r); el.querySelector('.lim-who').textContent = t(cfg.lim.set && cfg.lim.set[r.k] ? 'lim.yours' : 'lim.app'); el.classList.toggle('showing', !!(limShow && limShow.k === r.k)); el.classList.toggle('mine', !!(cfg.lim.set && cfg.lim.set[r.k])); });
+  const o = $('#limOn'); if (o) o.checked = !!cfg.lim.on;
+}
+function limBuild() {
+  const box = $('#limRows'); if (!box || box.childElementCount) return;
+  LIM_ROWS.forEach((r) => {
+    const el = document.createElement('div'); el.className = 'lim-row'; el.dataset.k = r.k;
+    const nm = document.createElement('div'); nm.className = 'lim-name'; nm.innerHTML = `<b>${t('lim.' + r.k)}</b><span class="lim-who"></span>`;
+    const v = document.createElement('div'); v.className = 'lim-v mono';
+    const mk = (txt, fn, cls) => { const b = document.createElement('button'); b.className = 'ghost small ' + (cls || ''); b.textContent = txt; b.onclick = fn; return b; };
+    const big = r.kind === 'pos' ? 5 : 4;
+    el.append(nm, v, mk('👁', () => limShowRow(r), 'lim-show'), mk('−−', () => limStep(r, -big)), mk('−', () => limStep(r, -1)), mk('+', () => limStep(r, 1)), mk('++', () => limStep(r, big)));
+    box.appendChild(el);
+  });
+}
+function limToggle(on) {
+  const p = $('#pvLimPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvLim').classList.toggle('on', show);
+  if (show) { limEnsure(); limBuild(); limPaint(); } else { limShow = null; sendNow(); }
+}
+{ const b = $('#pvLim'); if (b) b.onclick = () => limToggle();
+  const c = $('#limClose'); if (c) c.onclick = () => limToggle(false);
+  const st_ = $('#limStop'); if (st_) st_.onclick = () => { limShow = null; sendNow(); limPaint(); };
+  const o = $('#limOn'); if (o) o.onchange = () => { limEnsure(); cfg.lim.on = o.checked; saveCfg(); sendNow(); };
+  const re = $('#limReread'); if (re) re.onclick = () => { const was = cfg.lim && cfg.lim.on; if (cfg.lim) cfg.lim.on = false; const b = limBelief(); cfg.lim = { on: false, ...b, set: {} }; saveCfg(); limPaint(); toast(t('lim.reread')); if (was) {} };
+}
 // ---------- Retnings-test: appen sender en kommando, viser hvad den sender og hvad den TROR sker – du retter hvis det er forkert ----------
 const DIR_CMDS = [
   { k: 'up', run: () => setPos('posY', st.posY + 0.1), fix: 'dirY' },
@@ -911,6 +977,8 @@ function sizeRange(sm_) {
 function sizeCh4(size) {
   if (camCal.active && camCal.ch4 != null) return camCal.ch4;
   if (raw.on) return clamp(Math.round(raw.size), 0, 127);
+  if (limShow && limShow.ch4 != null) return limShow.ch4;
+  if (cfg.lim && cfg.lim.on && cfg.lim.small != null && cfg.lim.big != null) return Math.round(clamp(cfg.lim.small + clamp(size, 0, 1) * (cfg.lim.big - cfg.lim.small), 0, 127));
   // målt med kameraet: faderen går lineært gennem de laser-værdier hvor mønsteret var synligt (15 % = den ene ende,
   // 100 % = den anden). Retningen tages fra målingen (vokser figuren med værdien?) – og kan vendes med 'Vend størrelses-faderen'.
   const sm_ = cfg.sizeMap; if (sm_ && sm_.filter((p) => p.ext).length >= 3) {
@@ -1012,7 +1080,7 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   setCh(14, autoMode === 'laser' ? 245 : 0); // 245 = laserens egen sound-to-light, ellers ren DMX-styring
   setCh(15, [0, 80, 150, 220][cfg.scan] || 0);
   setCh(16, zoneVal());
-  setCh(17, (raw.on && raw.zone != null) || cfg.zone > 0 ? 255 : 0);
+  setCh(17, (raw.on && raw.zone != null) || (limShow && limShow.zone != null) || cfg.zone > 0 ? 255 : 0);
   setCh(18, 0); setCh(19, 0);
 }
 function rgbHue([r, g, b]) {
@@ -1079,6 +1147,7 @@ function computeFrame(now) {
   let limX = Math.max(0, cfg.posScaled ? Math.min(size, 1 - size * ext.x) : 1 - size * ext.x), limY = Math.max(0, cfg.posScaled ? Math.min(size, 1 - size * ext.y) : 1 - size * ext.y);
   // med kamera-kalibrering kender vi mønsterets FAKTISKE halvbredde (målt i kameraet ved den aktuelle størrelses-værdi)
   const half = camPatHalfSent(size); if (half != null) { limX = Math.max(0, 1 - half); limY = Math.max(0, 1 - half); }
+  if (cfg.lim && cfg.lim.on) { limX = 1; limY = 1; }
   let wantX = calAxis(lx, 'x'), wantY = calAxis(ly, 'y');
   if (measure) { const g = MEASURE_GRID[measure.i]; wantX = g[0]; wantY = g[1]; } // måling: fast rå værdi, ingen omregning
   if (camCal.active && camCal.send) { wantX = camCal.send[0]; wantY = camCal.send[1]; } // kamera-måling: fast sendt værdi
@@ -1088,13 +1157,19 @@ function computeFrame(now) {
   let [axc, ayc] = rawToApp(rawX, rawY); // tilbage til app-koordinater, så LIVE viser hvor mønsteret faktisk ender
   // målt omsætning (Mål placering): det laseren skal have sendt for at ramme det ønskede sted
   let sendX = rawX, sendY = rawY;
-  if (!measure && !camCal.active && !raw.on && cfg.camMap) {
+  const limOn = !measure && !camCal.active && !raw.on && cfg.lim && cfg.lim.on;
+  if (limOn) { // Grænser: app-kant ↔ den sendte værdi brugeren har sat (stykkevis lineært, laserens midte = app 0,0)
+    const L = cfg.lim, ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
+    sendX = ax_ >= 0 ? ax_ * L.right : -ax_ * L.left; sendY = ay_ >= 0 ? ay_ * L.top : -ay_ * L.bottom;
+    clamped = Math.abs(lx) > 1.003 || Math.abs(ly) > 1.003; axc = ax_; ayc = ay_; rawX = sendX; rawY = sendY;
+  } else if (!measure && !camCal.active && !raw.on && cfg.camMap) {
     // kamera-kalibrering: app-koordinater → det laseren skal have sendt (homografi målt med kameraet)
     const [sx, sy] = camAppToSend(lx, ly / YF(), sizeApp);
     sendX = clamp(sx, -limX, limX); sendY = clamp(sy, -limY, limY);
     clamped = Math.abs(sx - sendX) > 0.003 || Math.abs(sy - sendY) > 0.003;
     const [bx, by] = hApply(cfg.camMap.Hi, sendX, sendY); axc = bx; ayc = by; rawX = sendX; rawY = sendY;
   } else if (!measure && !camCal.active && !raw.on && cfg.posMap) { const m = posMapFor(size); const d = m.M[0] * m.M[3] - m.M[1] * m.M[2]; if (Math.abs(d) > 1e-6) { const ox = rawX - m.c[0], oy = rawY - m.c[1]; sendX = clamp((m.M[3] * ox - m.M[1] * oy) / d, -1, 1); sendY = clamp((-m.M[2] * ox + m.M[0] * oy) / d, -1, 1); } }
+  if (limShow && limShow.pos) { sendX = limShow.pos[0]; sendY = limShow.pos[1]; }
   // laserens midte IRL: kun det der sendes flyttes (LIVE uændret)
   if (!measure && !camCal.active && !raw.on && (cfg.ctrX || cfg.ctrY)) { sendX = clamp(sendX + (cfg.ctrX || 0), -1, 1); sendY = clamp(sendY + (cfg.ctrY || 0), -1, 1); }
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
