@@ -800,3 +800,4 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .pv-foot .pv-sizebar { position: static; }
 .pv-foot .pv-zone { position: static; margin-left: auto; }
 .pv-ms.pv-float { position: fixed; top: 90px; right: 24px; z-index: 50; }
+.wiz-fmt { margin-top: 8px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 6px; } .wiz-fmt summary { cursor: pointer; color: #ffcf8a; font-size: 12px; } .wiz-fl { min-width: 120px; font-size: 11px; color: var(--text); align-self: center; }

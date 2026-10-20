@@ -86,7 +86,7 @@ const MOVES = ['none', 'circle', 'eight', 'sweep', 'bounce'];
 const MOVE_DA = new Proxy({}, { get: (_o, k) => t('move.' + String(k)) });
 
 const saveLook = debounce(() => store.set('look', st), 300);
-const saveCfg = debounce(() => store.set('settings', cfg), 300);
+const saveCfg = debounce(() => { store.set('settings', cfg); try { if (window.laser.stateDump) window.laser.stateDump(JSON.stringify({ at: new Date().toISOString(), cfg, look: st }, null, 1)); } catch (_) {} }, 300); // kopi til ~/Desktop/SmartLink/smartlink-state.json (til fejlsøgning)
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 // ---------- effekt-motor ----------
@@ -272,7 +272,7 @@ function fbEnsureLim() { if (!cfg.lim || !cfg.lim.on) { limEnsure(); cfg.lim.on 
 function fbAxis(a, c, keyPos, keyNeg, ctrKey) { // a = hvor appen tror (app-enheder), c = hvor den faktisk står
   const L = cfg.lim; if (Math.abs(c - a) < 0.01) return null;
   if (Math.abs(a) < 0.08 || Math.sign(a) !== Math.sign(c)) { // ved midten: flyt midten (kun det der sendes)
-    const d = c - a, per = d > 0 ? Math.abs(L[keyPos]) : Math.abs(L[keyNeg]); cfg[ctrKey] = clamp((cfg[ctrKey] || 0) - d * per, -0.6, 0.6); return 'ctr';
+    const d = c - a, per = d > 0 ? Math.abs(L[keyPos]) : Math.abs(L[keyNeg]); cfg[ctrKey] = clamp((cfg[ctrKey] || 0) - d * per, -1, 1); return 'ctr';
   }
   const k = a > 0 ? keyPos : keyNeg; L[k] = clamp(L[k] * a / c, -1, 1); if (Math.abs(L[k]) < 0.05) L[k] = 0.05 * Math.sign(L[k] || 1); L.set[k] = true; return k;
 }
@@ -286,13 +286,14 @@ function fbDominant() { const ax = st.posX, ay = st.posY; return Math.abs(ax) > 
 function fbFix(v) {
   if (!v) return; const ax = st.posX, ay = st.posY, n = 0.05;
   if (v === 'ok') return fbSay(t('dir.res.ok'));
+  if (v === 'reverse') { fbToggle(false); wiz.step = 1; wizToggle(true); setTimeout(() => { const d = document.querySelector('.wiz-fmt'); if (d) d.open = true; }, 50); return toast(t('fb.reverseHint')); }
   if (v === 'higher') return fbCorrect(ax, ay + n); if (v === 'lower') return fbCorrect(ax, ay - n);
   if (v === 'lefter') return fbCorrect(ax - n, ay); if (v === 'righter') return fbCorrect(ax + n, ay);
   if (v === 'rot' || v === 'lr' || v === 'ud') { // vender/spejler her → regel halvvejs mellem midten og her (præcist punkt: Opsætning trin 3)
     const o = posOut(out.sendX, out.sendY), axis = Math.abs(o[0]) >= Math.abs(o[1]) ? 0 : 1; if (Math.abs(o[axis]) < 0.04) { cfg.flipLearn = cfg.flipLearn || { base: [0, 0], rules: [] }; const f = { rot: [1, 1], lr: [1, 0], ud: [0, 1] }[v]; cfg.flipLearn.base = [cfg.flipLearn.base[0] ^ f[0], cfg.flipLearn.base[1] ^ f[1]]; saveCfg(); sendNow(); return fbSay(t('wiz.baseFixed')); }
     cfg.flipLearn = cfg.flipLearn || { base: [0, 0], rules: [] }; const side = Math.sign(o[axis]); cfg.flipLearn.rules.push({ axis, side, at: o[axis] / 2, f: { rot: [1, 1], lr: [1, 0], ud: [0, 1] }[v], dir: fbDominant() }); saveCfg(); sendNow(); return fbSay(t('fb.flipAdded'));
   }
-  if (v === 'bent') { const d = fbDominant(), a = Math.abs(d === 'up' || d === 'down' ? st.posY : st.posX); cfg.bend = cfg.bend || {}; const arr = (cfg.bend[d] || []).filter((p) => Math.abs(p.s - st.size) > 0.08); arr.push({ s: st.size, at: Math.max(0.05, a - 0.03) }); arr.sort((x, y) => x.s - y.s); cfg.bend[d] = arr; fbEnsureLim(); saveCfg(); sendNow(); return fbSay(t('wiz.bendSaved', { d: t('wiz.d.' + d), a: Math.round(a * 100) })); }
+  if (v === 'bent') { const d = fbDominant(), a = Math.abs(d === 'up' || d === 'down' ? st.posY : st.posX); cfg.bend = cfg.bend || {}; const arr = (cfg.bend[d] || []).filter((p) => Math.abs(p.s - st.size) > 0.08); arr.push({ s: st.size, at: Math.max(0.05, a - 0.03) }); arr.sort((x, y) => x.s - y.s); cfg.bend[d] = arr; cfg.bendStop = true; fbEnsureLim(); saveCfg(); sendNow(); return fbSay(t('wiz.bendSaved', { d: t('wiz.d.' + d), a: Math.round(a * 100) })); }
 }
 function fbSay(msg) { const el = $('#fbLast'); if (el) el.textContent = msg; toast(msg); fbPaint(); }
 function fbPaint() {
@@ -301,7 +302,7 @@ function fbPaint() {
   const where = `${t('fb.x')} ${pct(ax)} ${Math.abs(ax) < 0.03 ? t('fb.mid') : ax > 0 ? t('fb.right') : t('fb.left')} · ${t('fb.y')} ${pct(ay)} ${Math.abs(ay) < 0.03 ? t('fb.mid') : ay > 0 ? t('fb.up') : t('fb.down')}`;
   const [oX, oY] = posOut(out.sendX, out.sendY), q = quadrantFix(st.pattern, oX, oY);
   const orient = q.pat !== st.pattern ? t('fb.oMirror', { n: q.pat }) : q.rot180 ? t('fb.oRot') : t('fb.oNone');
-  const d = fbDominant(), lim = cfg.lim && cfg.lim.on ? Math.round(bendAt(d, out.size) * 100) : 100;
+  const d = fbDominant(), lim = cfg.lim && cfg.lim.on && cfg.bendStop ? Math.round(bendAt(d, out.size) * 100) : 100;
   const ch = (c) => dmx[cfg.address - 2 + c] | 0;
   el.innerHTML = `<b>${t('dir.think')}</b> ${where}<br>${t('fb.size', { s: Math.round(st.size * 100), c: ch(4) })} · ${orient}${out.clamped ? ' · <span class="fb-warn">' + t('fb.clamped', { d: t('wiz.d.' + d), a: lim }) + '</span>' : ''}<br><span class="mono">${t('fb.sends', { x: Math.round(oX * 100), y: Math.round(oY * 100), a: ch(7), b: ch(8), c: ch(9), d: ch(10) })}</span>`;
 }
@@ -309,7 +310,7 @@ function fbToggle(on) {
   const p = $('#pvFbPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvFb').classList.toggle('on', show);
   clearInterval(fb.timer); fb.click = false;
   if (show) {
-    const sel = $('#fbSel'); if (sel && !sel.childElementCount) { [['', 'fb.q'], ['ok', 'fb.o.ok'], ['higher', 'fb.o.higher'], ['lower', 'fb.o.lower'], ['lefter', 'fb.o.lefter'], ['righter', 'fb.o.righter'], ['rot', 'fb.o.rot'], ['lr', 'fb.o.lr'], ['ud', 'fb.o.ud'], ['bent', 'fb.o.bent']].forEach(([v, k]) => { const o = document.createElement('option'); o.value = v; o.textContent = t(k); sel.appendChild(o); }); sel.onchange = () => { const v = sel.value; sel.value = ''; fbFix(v); }; }
+    const sel = $('#fbSel'); if (sel && !sel.childElementCount) { [['', 'fb.q'], ['ok', 'fb.o.ok'], ['higher', 'fb.o.higher'], ['lower', 'fb.o.lower'], ['lefter', 'fb.o.lefter'], ['righter', 'fb.o.righter'], ['rot', 'fb.o.rot'], ['lr', 'fb.o.lr'], ['ud', 'fb.o.ud'], ['bent', 'fb.o.bent'], ['reverse', 'fb.o.reverse']].forEach(([v, k]) => { const o = document.createElement('option'); o.value = v; o.textContent = t(k); sel.appendChild(o); }); sel.onchange = () => { const v = sel.value; sel.value = ''; fbFix(v); }; }
     fb.timer = setInterval(fbPaint, 200); fbPaint();
   }
 }
@@ -359,7 +360,7 @@ function wizFlipMark(kind) { // mønsteret vendte/spejlede sig LIGE HER i retnin
   cfg.flipLearn.rules = cfg.flipLearn.rules.filter((r) => !(r.axis === axis && r.side === side && Math.abs(r.at - o[axis]) < 0.06));
   cfg.flipLearn.rules.push({ axis, side, at: o[axis] - side * 0.01, f, dir: sw.dir }); saveCfg(); sendNow(); toast(t('wiz.flipSaved')); wizRender();
 }
-function wizBendMark() { const sw = wiz.sweep; if (!sw) return; wizStopSweep(); const k = sw.dir; cfg.bend = cfg.bend || {}; const arr = (cfg.bend[k] || []).filter((p) => Math.abs(p.s - st.size) > 0.08); arr.push({ s: st.size, at: Math.max(0.05, sw.a - 0.02) }); arr.sort((a, b) => a.s - b.s); cfg.bend[k] = arr; saveCfg(); toast(t('wiz.bendSaved', { d: t('wiz.d.' + k), a: Math.round(sw.a * 100) })); wizRender(); }
+function wizBendMark() { const sw = wiz.sweep; if (!sw) return; wizStopSweep(); const k = sw.dir; cfg.bend = cfg.bend || {}; const arr = (cfg.bend[k] || []).filter((p) => Math.abs(p.s - st.size) > 0.08); arr.push({ s: st.size, at: Math.max(0.05, sw.a - 0.02) }); arr.sort((a, b) => a.s - b.s); cfg.bend[k] = arr; cfg.bendStop = true; saveCfg(); toast(t('wiz.bendSaved', { d: t('wiz.d.' + k), a: Math.round(sw.a * 100) })); wizRender(); }
 function wizSetStep(n) {
   wizStopSweep(); wiz.sweep = null; wiz.step = clamp(n, 1, 6); limShow = null; wiz.noBend = wiz.step === 3 || wiz.step === 4;
   if (wiz.step <= 2) { st.size = 0.3; sm.size = 0.3; wizPlace(0, 0); }
@@ -373,13 +374,13 @@ function wizRender() {
   const b = (id, txt, cls) => `<button class="ghost small ${cls || ''}" data-w="${id}">${txt}</button>`;
   const sel = (id, opts) => `<select class="dir-sel" data-ws="${id}"><option value="">${t('dir.what')}</option>${opts.map((o) => `<option value="${o}">${t('dir.o.' + o)}</option>`).join('')}</select>`;
   const L = lmap(); let h = `<h4>${t('wiz.t' + wiz.step)}</h4><p class="cal-instr">${t('wiz.i' + wiz.step)}</p>`;
-  if (wiz.step === 1) h += `<div class="wiz-pad">${b('cu', '⬆')}<div>${b('cl', '⬅')}${b('cr', '➡')}</div>${b('cd', '⬇')}</div><div class="cal-r1">${b('fine', t(wiz.fine ? 'wiz.fineOn' : 'wiz.fineOff'))}${b('c0', t('wiz.ctrReset'))}</div><p class="cal-instr">${t('wiz.ctrNow', { x: Math.round((cfg.ctrX || 0) * 100), y: Math.round((cfg.ctrY || 0) * 100) })}</p><div class="wiz-q"><span>${t('wiz.upDid')}</span>${sel('qu', ['u', 'd', 'l', 'r'])}</div><div class="wiz-q"><span>${t('wiz.rightDid')}</span>${sel('qr', ['u', 'd', 'l', 'r'])}</div><p class="cal-instr mono">${t('wiz.axes', { x: t('dir.a.' + L.x), y: t('dir.a.' + L.y) })}</p>`;
+  if (wiz.step === 1) h += `<div class="wiz-pad">${b('cu', '⬆')}<div>${b('cl', '⬅')}${b('cr', '➡')}</div>${b('cd', '⬇')}</div><div class="cal-r1">${b('fine', t(wiz.fine ? 'wiz.fineOn' : 'wiz.fineOff'))}${b('c0', t('wiz.ctrReset'))}</div><p class="cal-instr">${t('wiz.ctrNow', { x: Math.round((cfg.ctrX || 0) * 100), y: Math.round((cfg.ctrY || 0) * 100) })}</p><div class="wiz-q"><span>${t('wiz.upDid')}</span>${sel('qu', ['u', 'd', 'l', 'r'])}</div><div class="wiz-q"><span>${t('wiz.rightDid')}</span>${sel('qr', ['u', 'd', 'l', 'r'])}</div><p class="cal-instr mono">${t('wiz.axes', { x: t('dir.a.' + L.x), y: t('dir.a.' + L.y) })}</p><p class="cal-instr mono" id="wizPos"></p><details class="wiz-fmt"><summary>${t('wiz.fmtTitle')}</summary><p class="cal-instr">${t('wiz.fmtIntro')}</p>${['s', 'u', 't'].map((f) => `<div class="cal-r1"><b class="wiz-fl">${t('wiz.fmt.' + f)}</b>${b('ft-' + f + '-l', '⬅ ' + t('wiz.fmtLeft'))}${b('ft-' + f + '-r', t('wiz.fmtRight') + ' ➡')}${b('fs-' + f, t('wiz.fmtSweep'))}${b('fu-' + f, cfg.posFmt === f ? '✓ ' + t('wiz.fmtInUse') : t('wiz.fmtUse'), cfg.posFmt === f ? 'on' : '')}</div>`).join('')}<p class="cal-instr mono" id="wizFmtOut"></p>${b('ft-stop', t('lim.stop'))}</details>`;
   if (wiz.step === 2) h += `<div class="wiz-q"><span>${t('wiz.lookCenter')}</span><select class="dir-sel" data-ws="base"><option value="">${t('dir.what')}</option><option value="ok">${t('wiz.f.ok')}</option><option value="rot">${t('wiz.f.rot')}</option><option value="lr">${t('wiz.f.lr')}</option><option value="ud">${t('wiz.f.ud')}</option></select></div><div class="cal-r1">${b('mirror', t('wiz.mkMirror'))}</div><p class="cal-instr">${t('wiz.mirrorState', { s: mirrorSlots[st.pattern] ? t('wiz.yes') : t('wiz.no') })}</p>`;
   if (wiz.step === 3 || wiz.step === 4) {
     h += `<div class="cal-r1">${['up', 'down', 'left', 'right'].map((d) => b('sw-' + d, t('wiz.go.' + d), wiz.sweep && wiz.sweep.dir === d ? 'on' : '')).join('')}</div>`;
     h += `<div class="cal-r1">${b('n-', '◀ −2')}${b('pause', '⏸')}${b('n+', '+2 ▶')}${b('home', t('wiz.home'))}</div><p class="cal-instr mono" id="wizPos"></p>`;
     if (wiz.step === 3) h += `<div class="cal-r1">${b('fl-rot', t('wiz.nowRot'), 'wiz-hot')}${b('fl-lr', t('wiz.nowLr'), 'wiz-hot')}${b('fl-ud', t('wiz.nowUd'), 'wiz-hot')}</div><p class="cal-instr">${t('wiz.rules', { n: (cfg.flipLearn && cfg.flipLearn.rules.length) || 0 })}</p>${b('flClear', t('wiz.flClear'))}`;
-    else h += `<div class="cal-r1">${b('bend', t('wiz.nowBend'), 'wiz-hot')}</div><p class="cal-instr">${['up', 'down', 'left', 'right'].map((d) => t('wiz.d.' + d) + ': ' + Math.round(bendAt(d, st.size) * 100) + ' %').join(' · ')}</p><div class="cal-r1">${b('sz-', t('wiz.sizeLess'))}${b('sz+', t('wiz.sizeMore'))}${b('bendClear', t('wiz.bendClear'))}</div><p class="cal-instr">${t('wiz.sizeNow', { s: Math.round(st.size * 100) })}</p>`;
+    else h += `<div class="cal-r1">${b('bend', t('wiz.nowBend'), 'wiz-hot')}</div><p class="cal-instr">${['up', 'down', 'left', 'right'].map((d) => t('wiz.d.' + d) + ': ' + Math.round(bendAt(d, st.size) * 100) + ' %').join(' · ')}</p><div class="cal-r1">${b('sz-', t('wiz.sizeLess'))}${b('sz+', t('wiz.sizeMore'))}${b('bendClear', t('wiz.bendClear'))}${b('bendStop', t(cfg.bendStop ? 'wiz.bendStopOn' : 'wiz.bendStopOff'), cfg.bendStop ? 'on' : '')}</div><p class="cal-instr">${t('wiz.sizeNow', { s: Math.round(st.size * 100) })}</p>`;
   }
   if (wiz.step === 5) h += `<div id="wizLimRows"></div>`;
   if (wiz.step === 6) h += `<p class="cal-instr">${t('wiz.summary', { x: Math.round((cfg.ctrX || 0) * 100), y: Math.round((cfg.ctrY || 0) * 100), lx: t('dir.a.' + L.x), ly: t('dir.a.' + L.y), f: (cfg.flipLearn && cfg.flipLearn.rules.length) || 0, b: Object.values(cfg.bend || {}).reduce((a, v) => a + v.length, 0) })}</p>`;
@@ -390,11 +391,21 @@ function wizRender() {
   $('#wizBack').disabled = wiz.step <= 1; $('#wizNext').textContent = t(wiz.step >= 6 ? 'wiz.finish' : wiz.step === 1 ? 'wiz.centerOk' : 'wiz.next');
   wizInfo();
 }
-function wizCtr(dx, dy) { const st_ = wiz.fine ? 0.005 : 0.02; cfg.ctrX = clamp((cfg.ctrX || 0) + dx * st_, -0.6, 0.6); cfg.ctrY = clamp((cfg.ctrY || 0) + dy * st_, -0.6, 0.6); saveCfg(); syncCtrUI(); wizPlace(0, 0); wizRender(); }
+function wizCenterHere() { // dér hvor mønstret står nu (trukket i LIVE / pile) = laserens midte
+  sendNow(); cfg.ctrX = clamp(out.sendX, -1, 1); cfg.ctrY = clamp(out.sendY, -1, 1); st.posX = 0; st.posY = 0; sm.x = 0; sm.y = 0; saveCfg(); syncCtrUI(); wizLimFull(); sendNow();
+}
+function wizFmtSweep(fmt) { // kør langsomt helt fra venstre til højre – det rigtige format bevæger sig jævnt hele vejen uden at hoppe eller vende om
+  clearInterval(wiz.fmtT); let v = -1; wiz.fmtT = setInterval(() => { v += 0.02; if (v > 1.0001) { clearInterval(wiz.fmtT); wiz.fmtT = null; return; } wizFmtTest(fmt, v); const el = $('#wizFmtOut'); if (el) el.textContent = t('wiz.fmtSweepAt', { f: { s: 'A', u: 'B', t: 'C' }[fmt], v: Math.round(v * 100) }) + ' · ' + el.textContent; }, 110);
+}
+function wizFmtTest(fmt, side) { limShow = { pos: [side, 0], fmt, k: 'fmt' }; sendNow(); const ch = (c) => dmx[cfg.address - 2 + c] | 0; const el = $('#wizFmtOut'); if (el) el.textContent = t('wiz.fmtSent', { f: { s: 'A', u: 'B', t: 'C' }[fmt], a: ch(7), b: ch(8), c: ch(9), d: ch(10) }); }
+function wizCtr(dx, dy) { const st_ = wiz.fine ? 0.005 : 0.02; cfg.ctrX = clamp((cfg.ctrX || 0) + dx * st_, -1, 1); cfg.ctrY = clamp((cfg.ctrY || 0) + dy * st_, -1, 1); saveCfg(); syncCtrUI(); sendNow(); wizRender(); }
 function wizAct(a) {
   if (a === 'cu') return wizCtr(0, 1); if (a === 'cd') return wizCtr(0, -1); if (a === 'cl') return wizCtr(-1, 0); if (a === 'cr') return wizCtr(1, 0);
   if (a === 'fine') { wiz.fine = !wiz.fine; return wizRender(); }
   if (a === 'c0') { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); wizPlace(0, 0); return wizRender(); }
+  if (a.startsWith('fs-')) return wizFmtSweep(a.slice(3));
+  if (a.startsWith('ft-')) { clearInterval(wiz.fmtT); if (a === 'ft-stop') { limShow = null; sendNow(); return; } const [, f, sd] = a.split('-'); return wizFmtTest(f, sd === 'r' ? 1 : -1); }
+  if (a.startsWith('fu-')) { cfg.posFmt = a.slice(3); limShow = null; saveCfg(); const el = $('#posFmt'); if (el) el.value = cfg.posFmt; sendNow(); toast(t('wiz.fmtSet', { f: t('wiz.fmt.' + cfg.posFmt) })); return wizRender(); }
   if (a === 'mirror') { makeMirrorCopies(st.pattern).then(() => wizRender()); return; }
   if (a.startsWith('sw-')) { wizSweep(a.slice(3)); return wizRender(); }
   if (a === 'pause') { if (wiz.sweep && wiz.sweep.timer) wizStopSweep(); else if (wiz.sweep) wizSweep(wiz.sweep.dir); return; }
@@ -403,7 +414,8 @@ function wizAct(a) {
   if (a.startsWith('fl-')) return wizFlipMark(a.slice(3));
   if (a === 'flClear') { cfg.flipLearn = { base: (cfg.flipLearn && cfg.flipLearn.base) || [0, 0], rules: [] }; saveCfg(); sendNow(); return wizRender(); }
   if (a === 'bend') return wizBendMark();
-  if (a === 'bendClear') { cfg.bend = {}; saveCfg(); return wizRender(); }
+  if (a === 'bendClear') { cfg.bend = {}; cfg.bendStop = false; saveCfg(); return wizRender(); }
+  if (a === 'bendStop') { cfg.bendStop = !cfg.bendStop; saveCfg(); sendNow(); return wizRender(); }
   if (a === 'sz-' || a === 'sz+') { st.size = clamp(st.size + (a === 'sz+' ? 0.1 : -0.1), 0.05, 1); sm.size = st.size; sendNow(); return wizRender(); }
 }
 function wizSel(k, v) {
@@ -418,16 +430,16 @@ function wizToggle(on) {
     wiz.on = true; wiz.keep = { posX: st.posX, posY: st.posY, size: st.size, move: st.move, rotSpeed: st.rotSpeed };
     if (raw.on) rawToggle(false); if (special) setSpecial(special); if (autoMode !== 'off') setAuto('off'); st.rotSpeed = 0;
     if (!cfg.flipLearn) cfg.flipLearn = { base: [0, 0], rules: [] };
-    wizLimFull(); wizSetStep(wiz.step || 1);
+    wizLimFull(); wizSetStep(wiz.step || 1); clearInterval(wiz.it); wiz.it = setInterval(wizInfo, 200);
   } else {
-    wizStopSweep(); wiz.sweep = null; wiz.on = false; wiz.noBend = false; limShow = null;
+    clearInterval(wiz.it); clearInterval(wiz.fmtT); wizStopSweep(); wiz.sweep = null; wiz.on = false; wiz.noBend = false; limShow = null;
     if (wiz.keep) { Object.assign(st, wiz.keep); sm.x = st.posX; sm.y = st.posY; sm.size = st.size; } saveLook(); syncLookUI(); syncSizeUI(); sendNow();
   }
 }
 { const b = $('#pvWiz'); if (b) b.onclick = () => wizToggle();
   const c = $('#wizClose'); if (c) c.onclick = () => wizToggle(false);
   const bk = $('#wizBack'); if (bk) bk.onclick = () => wizSetStep(wiz.step - 1);
-  const nx = $('#wizNext'); if (nx) nx.onclick = () => { if (wiz.step === 1) wizLimFull(); if (wiz.step >= 6) { cfg.calibDone = true; cfg.setupDone = true; saveCfg(); toast(t('wiz.done')); wizToggle(false); return; } wizSetStep(wiz.step + 1); };
+  const nx = $('#wizNext'); if (nx) nx.onclick = () => { if (wiz.step === 1) wizCenterHere(); if (wiz.step >= 6) { cfg.calibDone = true; cfg.setupDone = true; saveCfg(); toast(t('wiz.done')); wizToggle(false); return; } wizSetStep(wiz.step + 1); };
   document.addEventListener('keydown', (e) => { if (!wiz.on || $('#pvWizPanel').hidden) return; if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
     const m = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key]; if (!m) return; e.preventDefault(); e.stopPropagation();
     if (wiz.step === 1) wizCtr(m[0], m[1]); else if (wiz.sweep) wizNudge((m[0] + m[1]) * 0.01 * (WIZ_DIRS[wiz.sweep.dir][0] + WIZ_DIRS[wiz.sweep.dir][1])); }, true);
@@ -603,7 +615,7 @@ function dirToggle(on) { const p = $('#pvDirPanel'); if (!p) return; const show 
   $('#rawClear').onclick = () => { raw.pts = []; store.set('rawPts', []); rawSync(); toast(t('raw.cleared')); };
   $('#rawSizeMin').onclick = () => rawSizeMark('min'); $('#rawSizeMax').onclick = () => rawSizeMark('max');
   $('#rawZoneLo').onclick = () => rawZoneMark('lo'); $('#rawZoneHi').onclick = () => rawZoneMark('hi');
-  $('#rawCenter').onclick = () => { cfg.ctrX = clamp(raw.x / 100, -0.5, 0.5); cfg.ctrY = clamp(raw.y / 100, -0.5, 0.5); saveCfg(); syncCtrUI(); toast(t('raw.centerSet', { x: Math.round(raw.x), y: Math.round(raw.y) })); };
+  $('#rawCenter').onclick = () => { cfg.ctrX = clamp(raw.x / 100, -1, 1); cfg.ctrY = clamp(raw.y / 100, -1, 1); saveCfg(); syncCtrUI(); toast(t('raw.centerSet', { x: Math.round(raw.x), y: Math.round(raw.y) })); };
   $('#rawRotZero').onclick = () => { const v = raw.ch[6]; cfg.rotZero = v === '' || v == null ? 96 : clamp(+v, 0, 192); saveCfg(); toast(t('raw.rotSet', { v: cfg.rotZero })); };
   // kanal-felter: tomt = appen styrer, tal = sendes præcis sådan mens panelet er åbent
   const grid = $('#rawCh'); if (grid) { for (let k = 1; k <= 19; k++) { const w = document.createElement('label'); w.className = 'rawch'; const sp = document.createElement('span'); sp.textContent = k; const inp = document.createElement('input'); inp.type = 'number'; inp.min = 0; inp.max = 255; inp.placeholder = '–'; inp.addEventListener('input', () => { raw.ch[k] = inp.value; sendNow(); }); w.append(sp, inp); grid.appendChild(w); } }
@@ -1168,11 +1180,12 @@ function calAxis(v, axis) { const c = cfg.cal; const inv = axis === 'x' ? c.ix :
 function pos16(ch, v, raw = false) {
   const axis = ch === 7 || ch === 4 ? 'x' : 'y';
   if (!raw) v = calAxis(v, axis);
-  if (cfg.posFmt === 's') {
+  const fmt = (limShow && limShow.fmt) || cfg.posFmt;
+  if (fmt === 's') {
     // målt på DS-3000: fortegn + størrelse. Grov byte: bit 7 = retning (1 = op/højre), bit 0–6 = udslag 0–127. Fin byte = finjustering.
     v = clamp(v, -1, 1); const mag = Math.abs(v) * 127, coarse = Math.floor(mag), fine = Math.round((mag - coarse) * 255);
     setCh(ch, (v >= 0 ? 128 : 0) | coarse); setCh(ch + 1, fine);
-  } else if (cfg.posFmt === 't') {
+  } else if (fmt === 't') {
     // 16-bit two's complement: 0 = midt, 0x7FFF = max, 0x8000 = min (prøves hvis mønsteret 'flipper' når det krydser midten)
     const val = Math.round(clamp(v, -1, 1) * 32767) & 0xffff; setCh(ch, val >> 8); setCh(ch + 1, val & 255);
   } else put16(ch, 0.5 + clamp(v, -1, 1) / 2);
@@ -1194,7 +1207,7 @@ function sizeCh4(size) {
   if (camCal.active && camCal.ch4 != null) return camCal.ch4;
   if (raw.on) return clamp(Math.round(raw.size), 0, 127);
   if (limShow && limShow.ch4 != null) return limShow.ch4;
-  if (cfg.lim && cfg.lim.on && cfg.lim.small != null && cfg.lim.big != null) return Math.round(clamp(cfg.lim.small + clamp(size, 0, 1) * (cfg.lim.big - cfg.lim.small), 0, 127));
+  if (cfg.lim && (cfg.lim.on || cfg.lim.sizeOn) && cfg.lim.small != null && cfg.lim.big != null) return Math.round(clamp(cfg.lim.small + clamp(size, 0, 1) * (cfg.lim.big - cfg.lim.small), 0, 127));
   // målt med kameraet: faderen går lineært gennem de laser-værdier hvor mønsteret var synligt (15 % = den ene ende,
   // 100 % = den anden). Retningen tages fra målingen (vokser figuren med værdien?) – og kan vendes med 'Vend størrelses-faderen'.
   const sm_ = cfg.sizeMap; if (sm_ && sm_.filter((p) => p.ext).length >= 3) {
@@ -1375,7 +1388,7 @@ function computeFrame(now) {
   let sendX = rawX, sendY = rawY;
   const limOn = !measure && !camCal.active && !raw.on && cfg.lim && cfg.lim.on;
   if (limOn) { // Grænser: app-kant ↔ den sendte værdi brugeren har sat (stykkevis lineært, laserens midte = app 0,0)
-    const L = cfg.lim, bd = (k) => (wiz.noBend ? 1 : bendAt(k, sizeApp)), ax_ = clamp(lx, -bd('left'), bd('right')), ay_ = clamp(ly / YF(), -bd('down'), bd('up'));
+    const L = cfg.lim, bd = (k) => (wiz.noBend || !cfg.bendStop ? 1 : bendAt(k, sizeApp)), ax_ = clamp(lx, -bd('left'), bd('right')), ay_ = clamp(ly / YF(), -bd('down'), bd('up'));
     sendX = ax_ >= 0 ? ax_ * L.right : -ax_ * L.left; sendY = ay_ >= 0 ? ay_ * L.top : -ay_ * L.bottom;
     clamped = Math.abs(lx) > 1.003 || Math.abs(ly) > 1.003; axc = ax_; ayc = ay_; rawX = sendX; rawY = sendY;
   } else if (!measure && !camCal.active && !raw.on && cfg.camMap) {
@@ -2666,6 +2679,8 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2010bend) { cfg.bend = {}; cfg.bendStop = false; cfg.mig2010bend = true; saveCfg(); } // 20/10: gamle bøje-punkter låste mønstret til ~30 % af LIVE
+if (!cfg.mig2010size) { try { const lo = sizeCh4(0.16), hi = sizeCh4(1); limEnsure(); cfg.lim.small = lo; cfg.lim.big = hi; cfg.lim.sizeOn = true; cfg.lim.set.small = true; cfg.lim.set.big = true; } catch (e) {} cfg.mig2010size = true; saveCfg(); }
 if (cfg._needCenter) { delete cfg._needCenter; try { centerLive(); } catch (e) {} saveCfg(); }
 bindSetting('zoneLo', 'zoneLo', (v) => +v, (v) => String(v)); bindSetting('zoneHi', 'zoneHi', (v) => +v, (v) => String(v));
 bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeFlip', 'sizeFlip'); bindSetting('quadFix', 'quadFix');
