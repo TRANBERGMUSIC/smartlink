@@ -310,14 +310,14 @@ function orientToggle(on) {
 var con = { pos: null, ch: {}, sweep: null };
 function conOverrides() { for (const k in con.ch) setCh(+k, con.ch[k]); }
 const CON_CMDS = [
-  ['pos 0 0', 'con.d.pos0'], ['pos 50 0', 'con.d.pos'], ['pos -50 0', 'con.d.pos'], ['pos 0 50', 'con.d.pos'], ['pos 0 -50', 'con.d.pos'], ['pos 100 100', 'con.d.pos'], ['pos -100 -100', 'con.d.pos'],
+  ['dot', 'con.d.dot'], ['ud', 'con.d.ud'], ['pos 0 0', 'con.d.pos0'], ['pos 50 0', 'con.d.pos'], ['pos -50 0', 'con.d.pos'], ['pos 0 50', 'con.d.pos'], ['pos 0 -50', 'con.d.pos'], ['pos 100 100', 'con.d.pos'], ['pos -100 -100', 'con.d.pos'],
   ['x 30', 'con.d.x'], ['y -30', 'con.d.y'], ['move 5 0', 'con.d.move'], ['sweep x -100 100', 'con.d.sweep'], ['sweep y -100 100', 'con.d.sweep'],
   ['size 0', 'con.d.size'], ['size 50', 'con.d.size'], ['size 100', 'con.d.size'], ['ch4 40', 'con.d.ch4'],
   ['pattern 1', 'con.d.pattern'], ['color red', 'con.d.color'], ['color green', 'con.d.color'], ['color blue', 'con.d.color'], ['color white', 'con.d.color'], ['color orig', 'con.d.color'],
   ['rot 0', 'con.d.rot'], ['rot 90', 'con.d.rot'], ['rot 180', 'con.d.rot'], ['spin 50', 'con.d.spin'], ['spin -50', 'con.d.spin'], ['spin 0', 'con.d.spin'],
   ['zone 0', 'con.d.zone'], ['zone 50', 'con.d.zone'], ['zone off', 'con.d.zoneOff'], ['strobe 50', 'con.d.strobe'], ['strobe 0', 'con.d.strobe'], ['fps 50', 'con.d.fps'],
   ['light 100', 'con.d.light'], ['light 0', 'con.d.light'], ['fmt A', 'con.d.fmt'], ['fmt B', 'con.d.fmt'], ['fmt C', 'con.d.fmt'],
-  ['ch 7 200', 'con.d.ch'], ['release', 'con.d.release'], ['help', 'con.d.help'],
+  ['axis 11 15', 'con.d.axis'], ['sync', 'con.d.sync'], ['animspeed 100', 'con.d.animspeed'], ['kpps 30', 'con.d.kpps'], ['ch 7 200', 'con.d.ch'], ['release', 'con.d.release'], ['help', 'con.d.help'],
 ];
 function conLog(cmd, lines) { const box = $('#conLog'); if (!box) return; const el = document.createElement('div'); el.className = 'con-entry'; el.innerHTML = `<b>› ${cmd.replace(/</g, '&lt;')}</b>` + lines.map((l) => `<div>${l}</div>`).join(''); box.prepend(el); while (box.childElementCount > 60) box.lastChild.remove(); }
 function conSnap() { sendNow(); const a = []; for (let c = 1; c <= 19; c++) a.push(dmx[cfg.address - 2 + c] | 0); return a; }
@@ -335,6 +335,12 @@ function conRun(text) {
     con.sweep = setInterval(() => { v += (b > a ? 1 : -1); if ((b > a && v > b) || (b < a && v < b)) { clearInterval(con.sweep); conLog(raw_, [t('con.sweepDone'), conBelief()]); return; } const pp = base.slice(); pp[ax] = v / 100; con.pos = pp; sendNow(); const ch = ax ? 9 : 7; const st_ = $('#conLive'); if (st_) st_.textContent = `${ax ? 'Y' : 'X'} ${v} % → ${t('dir.ch')} ${ch}/${ch + 1} = ${dmx[cfg.address - 2 + ch]}/${dmx[cfg.address - 1 + ch]}`; }, 120); return; }
   const before = conSnap(); let note = '';
   switch (c) {
+    case 'ud': case 'straight': { const a = cfg.axis || { x: 0, y: 0 }; con.pos = [a.x, a.y]; break; }
+    case 'dot': case 'prik': setPattern(cfg.testDot || 238); break;
+    case 'axis': case 'ligeud': if (!isNaN(n(1)) && !isNaN(n(2))) { cfg.axis = { x: clamp(n(1) / 100, -1, 1), y: clamp(n(2) / 100, -1, 1) }; saveCfg(); } else { conLog(raw_, [t('con.bad')]); return; } break;
+    case 'sync': pvFrame = 0; conLog(raw_, [t('con.synced')]); return;
+    case 'animspeed': if (!isNaN(n(1))) { cfg.animScale = clamp(n(1) / 100, 0.1, 5); saveCfg(); syncAnimUI(); } break;
+    case 'kpps': if (!isNaN(n(1))) { cfg.kpps = clamp(n(1), 0, 100); saveCfg(); syncAnimUI(); } break;
     case 'pos': case 'goto': con.pos = [clamp(n(1) / 100, -1, 1), clamp(n(2) / 100, -1, 1)]; if (p.some((w) => w === 'app')) con.pos = null; break;
     case 'x': con.pos = [clamp(n(1) / 100, -1, 1), con.pos ? con.pos[1] : out.sendY]; break;
     case 'y': con.pos = [con.pos ? con.pos[0] : out.sendX, clamp(n(1) / 100, -1, 1)]; break;
@@ -489,7 +495,7 @@ function wizRender() {
   const b = (id, txt, cls) => `<button class="ghost small ${cls || ''}" data-w="${id}">${txt}</button>`;
   const sel = (id, opts) => `<select class="dir-sel" data-ws="${id}"><option value="">${t('dir.what')}</option>${opts.map((o) => `<option value="${o}">${t('dir.o.' + o)}</option>`).join('')}</select>`;
   const L = lmap(); let h = `<h4>${t('wiz.t' + wiz.step)}</h4><p class="cal-instr">${t('wiz.i' + wiz.step)}</p>`;
-  if (wiz.step === 1) h += `<div class="wiz-pad">${b('cu', '⬆')}<div>${b('cl', '⬅')}${b('cr', '➡')}</div>${b('cd', '⬇')}</div><div class="cal-r1">${b('fine', t(wiz.fine ? 'wiz.fineOn' : 'wiz.fineOff'))}${b('c0', t('wiz.ctrReset'))}</div><p class="cal-instr">${t('wiz.ctrNow', { x: Math.round((cfg.ctrX || 0) * 100), y: Math.round((cfg.ctrY || 0) * 100) })}</p><div class="wiz-q"><span>${t('wiz.upDid')}</span>${sel('qu', ['u', 'd', 'l', 'r'])}</div><div class="wiz-q"><span>${t('wiz.rightDid')}</span>${sel('qr', ['u', 'd', 'l', 'r'])}</div><p class="cal-instr mono">${t('wiz.axes', { x: t('dir.a.' + L.x), y: t('dir.a.' + L.y) })}</p><p class="cal-instr mono" id="wizPos"></p><details class="wiz-fmt"><summary>${t('wiz.fmtTitle')}</summary><p class="cal-instr">${t('wiz.fmtIntro')}</p>${['s', 'u', 't'].map((f) => `<div class="cal-r1"><b class="wiz-fl">${t('wiz.fmt.' + f)}</b>${b('ft-' + f + '-l', '⬅ ' + t('wiz.fmtLeft'))}${b('ft-' + f + '-r', t('wiz.fmtRight') + ' ➡')}${b('fs-' + f, t('wiz.fmtSweep'))}${b('fu-' + f, cfg.posFmt === f ? '✓ ' + t('wiz.fmtInUse') : t('wiz.fmtUse'), cfg.posFmt === f ? 'on' : '')}</div>`).join('')}<p class="cal-instr mono" id="wizFmtOut"></p>${b('ft-stop', t('lim.stop'))}</details>`;
+  if (wiz.step === 1) h += `<div class="wiz-pad">${b('cu', '⬆')}<div>${b('cl', '⬅')}${b('cr', '➡')}</div>${b('cd', '⬇')}</div><div class="cal-r1">${b('fine', t(wiz.fine ? 'wiz.fineOn' : 'wiz.fineOff'))}${b('c0', t('wiz.ctrReset'))}${b('dot', t('wiz.useDot', { n: cfg.testDot || 238 }))}${b('axisMid', t('wiz.axisMid', { x: Math.round((cfg.axis || {}).x * 100 || 0), y: Math.round((cfg.axis || {}).y * 100 || 0) }))}</div><p class="cal-instr">${t('wiz.ctrNow', { x: Math.round((cfg.ctrX || 0) * 100), y: Math.round((cfg.ctrY || 0) * 100) })}</p><div class="wiz-q"><span>${t('wiz.upDid')}</span>${sel('qu', ['u', 'd', 'l', 'r'])}</div><div class="wiz-q"><span>${t('wiz.rightDid')}</span>${sel('qr', ['u', 'd', 'l', 'r'])}</div><p class="cal-instr mono">${t('wiz.axes', { x: t('dir.a.' + L.x), y: t('dir.a.' + L.y) })}</p><p class="cal-instr mono" id="wizPos"></p><details class="wiz-fmt"><summary>${t('wiz.fmtTitle')}</summary><p class="cal-instr">${t('wiz.fmtIntro')}</p>${['s', 'u', 't'].map((f) => `<div class="cal-r1"><b class="wiz-fl">${t('wiz.fmt.' + f)}</b>${b('ft-' + f + '-l', '⬅ ' + t('wiz.fmtLeft'))}${b('ft-' + f + '-r', t('wiz.fmtRight') + ' ➡')}${b('fs-' + f, t('wiz.fmtSweep'))}${b('fu-' + f, cfg.posFmt === f ? '✓ ' + t('wiz.fmtInUse') : t('wiz.fmtUse'), cfg.posFmt === f ? 'on' : '')}</div>`).join('')}<p class="cal-instr mono" id="wizFmtOut"></p>${b('ft-stop', t('lim.stop'))}</details>`;
   if (wiz.step === 2) h += `<div class="wiz-q"><span>${t('wiz.lookCenter')}</span><select class="dir-sel" data-ws="base"><option value="">${t('dir.what')}</option><option value="ok">${t('wiz.f.ok')}</option><option value="rot">${t('wiz.f.rot')}</option><option value="lr">${t('wiz.f.lr')}</option><option value="ud">${t('wiz.f.ud')}</option></select></div><div class="cal-r1">${b('mirror', t('wiz.mkMirror'))}</div><p class="cal-instr">${t('wiz.mirrorState', { s: mirrorSlots[st.pattern] ? t('wiz.yes') : t('wiz.no') })}</p>`;
   if (wiz.step === 3 || wiz.step === 4) {
     h += `<div class="cal-r1">${['up', 'down', 'left', 'right'].map((d) => b('sw-' + d, t('wiz.go.' + d), wiz.sweep && wiz.sweep.dir === d ? 'on' : '')).join('')}</div>`;
@@ -516,6 +522,8 @@ function wizFmtTest(fmt, side) { limShow = { pos: [side, 0], fmt, k: 'fmt' }; se
 function wizCtr(dx, dy) { const st_ = wiz.fine ? 0.005 : 0.02; cfg.ctrX = clamp((cfg.ctrX || 0) + dx * st_, -1, 1); cfg.ctrY = clamp((cfg.ctrY || 0) + dy * st_, -1, 1); saveCfg(); syncCtrUI(); sendNow(); wizRender(); }
 function wizAct(a) {
   if (a === 'cu') return wizCtr(0, 1); if (a === 'cd') return wizCtr(0, -1); if (a === 'cl') return wizCtr(-1, 0); if (a === 'cr') return wizCtr(1, 0);
+  if (a === 'dot') { setPattern(cfg.testDot || 238); return wizRender(); }
+  if (a === 'axisMid') { const ax = cfg.axis || { x: 0, y: 0 }; cfg.ctrX = ax.x; cfg.ctrY = ax.y; st.posX = 0; st.posY = 0; sm.x = 0; sm.y = 0; saveCfg(); syncCtrUI(); wizLimFull(); sendNow(); return wizRender(); }
   if (a === 'fine') { wiz.fine = !wiz.fine; return wizRender(); }
   if (a === 'c0') { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); wizPlace(0, 0); return wizRender(); }
   if (a.startsWith('fs-')) return wizFmtSweep(a.slice(3));
@@ -2070,7 +2078,7 @@ $('#pvMove').onclick = () => { moveMode = !moveMode; $('#pvMove').classList.togg
 st.freeze = false; // frys er slået fra indtil videre
 
 // ---------- live forhåndsvisning ----------
-let pvFrame = 0, pvLast = performance.now();
+let pvFrame = 0, pvLast = performance.now(), pvPat = -1;
 function previewTick(now) {
   const cv = $('#preview');
   if (cv.offsetParent) {
@@ -2087,8 +2095,11 @@ function previewTick(now) {
     const real = patData.get(st.pattern);
     const fr = real && real.length ? real : FALLBACK_FRAME;
     const isFallback = fr === FALLBACK_FRAME;
-    const fps = fpsFrac(st.fps) * 100;
-    if (!st.freeze) pvFrame += ((now - pvLast) / 1000) * fps; pvLast = now;
+    // samme tempo som laseren: valgt fps (justérbar), men aldrig hurtigere end scannerne kan tegne frames med så mange punkter
+    if (pvPat !== st.pattern) { pvPat = st.pattern; pvFrame = 0; } // laseren starter animationen forfra ved mønsterskift
+    const curF = fr[Math.floor(pvFrame) % fr.length], pts = curF && curF.xy ? curF.xy.length / 2 : 0;
+    let fps = fpsFrac(st.fps) * 100 * (cfg.animScale || 1); if (pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts);
+    if (!st.freeze) pvFrame += (Math.min(250, now - pvLast) / 1000) * fps; pvLast = now;
     const rawLine = (vertical, rx, ry, len, col, lw) => { // streg i rå laser-koordinater tegnet ind i boksen
       const [ax, ay] = rawToApp(rx, ry); const [px, py] = boxPt(B, ax, ay); const hl = len * B.upl;
       g.save(); g.strokeStyle = col; g.shadowColor = col; g.shadowBlur = 14; g.lineWidth = lw; g.lineCap = 'round'; g.beginPath();
@@ -2177,6 +2188,7 @@ function previewTick(now) {
       if (isFallback) { g.fillStyle = '#5b5b57'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t(patAvail.size ? 'pv.missing' : 'pv.load', { n: st.pattern }), W / 2, B.y + 20); }
     }
     drawZone(g, W, H);
+    if (cfg.lim && cfg.lim.on && cfg.axis) { const [ax, ay] = sentToApp(cfg.axis.x, cfg.axis.y), [px, py] = boxPt(B, ax, ay); g.save(); g.fillStyle = 'rgba(255,170,60,.8)'; g.beginPath(); g.arc(px, py, 3, 0, Math.PI * 2); g.fill(); g.font = '9px -apple-system'; g.textAlign = 'left'; g.fillStyle = 'rgba(255,170,60,.7)'; g.fillText(t('pv.axis'), px + 6, py + 3); g.restore(); }
     if (autoMode === 'laser') {
       g.font = '600 11px -apple-system'; const txt = t('pv.laserMic'); const tw = g.measureText(txt).width;
       g.fillStyle = 'rgba(49,243,172,0.12)'; g.fillRect((W - tw) / 2 - 10, 40, tw + 20, 22);
@@ -2813,6 +2825,14 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2110rot) { // 21/10 00:15: vend ALLE mønstre 180° i det laseren modtager (LIVE uændret) – oven i det der sendes nu
+  const o = (cfg.orient = cfg.orient || {}); o.q = o.q || {}; o.pat = o.pat || {};
+  if (!o.on) { const b = (cfg.flipLearn && cfg.flipLearn.base) || [0, 0]; o.all = b[0] && b[1] ? 'r180' : b[0] ? 'mx' : b[1] ? 'my' : 'n'; o.on = true; }
+  const flip = { n: 'r180', r180: 'n', r90: 'r270', r270: 'r90', mx: 'my', my: 'mx', mxy: 'n', mx90: 'my90', my90: 'mx90', mxy90: 'r270' };
+  o.all = flip[o.all || 'n'] || 'r180'; cfg.mig2110rot = true; saveCfg();
+}
+if (!cfg.mig2110anim) { if (cfg.kpps == null) cfg.kpps = 30; if (cfg.animScale == null) cfg.animScale = 1; cfg.mig2110anim = true; saveCfg(); }
+if (!cfg.mig2110axis) { cfg.axis = cfg.axis || { x: 0.11, y: 0.15 }; cfg.testDot = cfg.testDot || 238; cfg.mig2110axis = true; saveCfg(); } // 21/10: pos 11 15 = laseren skyder lige ud; mønster 238 = prik
 if (!cfg.mig2010fold) { // 20/10 23:18: i format A vender laseren om ved Y −88 (sendt) med mønster 5 på 100 % → mønstrets kant rammer scannerens yderste
   cfg.fold = cfg.fold || { all: 0.12 }; cfg.mig2010fold = true; saveCfg();
 }
@@ -2831,6 +2851,8 @@ if (!cfg.mig2010edge) { // målt 20/10 22:19 (format B, midte 65/65): nedad vend
 if (!cfg.mig2010bend) { cfg.bend = {}; cfg.bendStop = false; cfg.mig2010bend = true; saveCfg(); } // 20/10: gamle bøje-punkter låste mønstret til ~30 % af LIVE
 if (!cfg.mig2010size) { try { const lo = sizeCh4(0.16), hi = sizeCh4(1); limEnsure(); cfg.lim.small = lo; cfg.lim.big = hi; cfg.lim.sizeOn = true; cfg.lim.set.small = true; cfg.lim.set.big = true; } catch (e) {} cfg.mig2010size = true; saveCfg(); }
 if (cfg._needCenter) { delete cfg._needCenter; try { centerLive(); } catch (e) {} saveCfg(); }
+function syncAnimUI() { const a = $('#animScale'), k = $('#kpps'); if (a) { a.value = Math.round((cfg.animScale || 1) * 100); a.parentElement.querySelector('output').textContent = a.value + ' %'; } if (k) { k.value = cfg.kpps || 0; k.parentElement.querySelector('output').textContent = cfg.kpps ? cfg.kpps + 'k' : t('set.off'); } }
+{ const a = $('#animScale'), k = $('#kpps'); if (a) a.addEventListener('input', () => { cfg.animScale = +a.value / 100; saveCfg(); syncAnimUI(); }); if (k) k.addEventListener('input', () => { cfg.kpps = +k.value; saveCfg(); syncAnimUI(); }); const sb = $('#animSync'); if (sb) sb.onclick = () => { pvFrame = 0; toast(t('con.synced')); }; syncAnimUI(); }
 bindSetting('zoneLo', 'zoneLo', (v) => +v, (v) => String(v)); bindSetting('zoneHi', 'zoneHi', (v) => +v, (v) => String(v));
 bindSetting('lineThin', 'lineThin', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%')); bindSetting('sizeInv', 'sizeInv'); bindSetting('sizeFlip', 'sizeFlip'); bindSetting('quadFix', 'quadFix');
 bindSetting('wmOn', 'wmOn'); bindSetting('wmUniverse', 'wmUniverse', (v) => clamp(v | 0, 0, 32767)); bindSetting('wmAddress', 'wmAddress', (v) => clamp(v | 0, 1, 512)); bindSetting('sizeRange', 'sizeRange', (v) => v / 100, (v) => v + '%');
