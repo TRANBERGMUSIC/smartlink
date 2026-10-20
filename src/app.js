@@ -286,6 +286,11 @@ function fbDominant() { const ax = st.posX, ay = st.posY; return Math.abs(ax) > 
 function fbFix(v) {
   if (!v) return; const ax = st.posX, ay = st.posY, n = 0.05;
   if (v === 'ok') return fbSay(t('dir.res.ok'));
+  if (v === 'edge') { // her begynder den at warpe/vende → dette er kanten i den retning (LIVE-kanten flyttes hertil)
+    fbEnsureLim(); const d = fbDominant(), a = Math.abs(d === 'up' || d === 'down' ? st.posY : st.posX); if (a < 0.03) return fbSay(t('fb.edgeTooClose'));
+    const k = { up: 'top', down: 'bottom', left: 'left', right: 'right' }[d]; cfg.lim[k] = cfg.lim[k] * a; cfg.lim.set[k] = true; if (d === 'up' || d === 'down') { st.posY = Math.sign(st.posY); sm.y = st.posY; } else { st.posX = Math.sign(st.posX); sm.x = st.posX; } saveCfg(); saveLook(); syncSizeUI(); sendNow(); return fbSay(t('fb.edgeSet', { d: t('wiz.d.' + d) }));
+  }
+  if (v === 'zone0') { cfg.zoneZeroY = clamp(out.y * 2 - 1, -1, 0.9); saveCfg(); return fbSay(t('fb.zone0Set')); }
   if (v === 'reverse') { fbToggle(false); wiz.step = 1; wizToggle(true); setTimeout(() => { const d = document.querySelector('.wiz-fmt'); if (d) d.open = true; }, 50); return toast(t('fb.reverseHint')); }
   if (v === 'higher') return fbCorrect(ax, ay + n); if (v === 'lower') return fbCorrect(ax, ay - n);
   if (v === 'lefter') return fbCorrect(ax - n, ay); if (v === 'righter') return fbCorrect(ax + n, ay);
@@ -310,7 +315,7 @@ function fbToggle(on) {
   const p = $('#pvFbPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvFb').classList.toggle('on', show);
   clearInterval(fb.timer); fb.click = false;
   if (show) {
-    const sel = $('#fbSel'); if (sel && !sel.childElementCount) { [['', 'fb.q'], ['ok', 'fb.o.ok'], ['higher', 'fb.o.higher'], ['lower', 'fb.o.lower'], ['lefter', 'fb.o.lefter'], ['righter', 'fb.o.righter'], ['rot', 'fb.o.rot'], ['lr', 'fb.o.lr'], ['ud', 'fb.o.ud'], ['bent', 'fb.o.bent'], ['reverse', 'fb.o.reverse']].forEach(([v, k]) => { const o = document.createElement('option'); o.value = v; o.textContent = t(k); sel.appendChild(o); }); sel.onchange = () => { const v = sel.value; sel.value = ''; fbFix(v); }; }
+    const sel = $('#fbSel'); if (sel && !sel.childElementCount) { [['', 'fb.q'], ['ok', 'fb.o.ok'], ['higher', 'fb.o.higher'], ['lower', 'fb.o.lower'], ['lefter', 'fb.o.lefter'], ['righter', 'fb.o.righter'], ['rot', 'fb.o.rot'], ['lr', 'fb.o.lr'], ['ud', 'fb.o.ud'], ['bent', 'fb.o.bent'], ['reverse', 'fb.o.reverse'], ['edge', 'fb.o.edge'], ['zone0', 'fb.o.zone0']].forEach(([v, k]) => { const o = document.createElement('option'); o.value = v; o.textContent = t(k); sel.appendChild(o); }); sel.onchange = () => { const v = sel.value; sel.value = ''; fbFix(v); }; }
     fb.timer = setInterval(fbPaint, 200); fbPaint();
   }
 }
@@ -1763,7 +1768,7 @@ function zoneRect(W, H) {
     case 'top': return [b.x, b.y, b.w, b.h * z];
     case 'left': return [b.x, b.y, b.w * z, b.h];
     case 'right': return [b.x + b.w * (1 - z), b.y, b.w * z, b.h];
-    default: return [b.x, b.y + b.h * (1 - z), b.w, b.h * z];
+    default: { const f0 = clamp(((cfg.zoneZeroY ?? -1) + 1) / 2, 0, 0.95), zz = f0 + z * (1 - f0); return [b.x, b.y + b.h * (1 - zz), b.w, b.h * zz]; }
   }
 }
 function drawZone(g, W, H) {
@@ -2679,6 +2684,10 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2010edge) { // målt 20/10 22:19 (format B, midte 65/65): nedad vender den ved Y -9, venstre warper fra X -11 → det er kanterne
+  try { if (cfg.lim && cfg.lim.on && cfg.posFmt === 'u' && Math.abs((cfg.ctrY || 0) - 0.655) < 0.02 && cfg.lim.bottom < -1.5) { cfg.lim.bottom = cfg.lim.bottom * 0.09; cfg.lim.left = cfg.lim.left * 0.11; cfg.zoneZeroY = -1; cfg.zoneMap = null; } } catch (e) {}
+  cfg.mig2010edge = true; saveCfg();
+}
 if (!cfg.mig2010bend) { cfg.bend = {}; cfg.bendStop = false; cfg.mig2010bend = true; saveCfg(); } // 20/10: gamle bøje-punkter låste mønstret til ~30 % af LIVE
 if (!cfg.mig2010size) { try { const lo = sizeCh4(0.16), hi = sizeCh4(1); limEnsure(); cfg.lim.small = lo; cfg.lim.big = hi; cfg.lim.sizeOn = true; cfg.lim.set.small = true; cfg.lim.set.big = true; } catch (e) {} cfg.mig2010size = true; saveCfg(); }
 if (cfg._needCenter) { delete cfg._needCenter; try { centerLive(); } catch (e) {} saveCfg(); }
