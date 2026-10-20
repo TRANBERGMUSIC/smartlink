@@ -811,3 +811,4 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .con-entry b { font-family: ui-monospace, Menlo, monospace; color: #9cc8ff; }
 .con-entry .mono { font-size: 10.5px; color: var(--muted); }
 .pv-zoom { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-left: auto; } .pv-zoom input { width: 90px; } .pv-foot .pv-zone { margin-left: 8px; }
+.pv-zoom output { white-space: nowrap; min-width: 42px; }

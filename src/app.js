@@ -133,7 +133,7 @@ function camCenterApp() { // løs camAppToSend(a) = (0,0) numerisk (fuld vej ink
   }
   return [ax, ay];
 }
-function laserCenterApp() { if (cfg.lim && cfg.lim.on) return [0, 0]; return cfg.camMap ? camCenterApp() : rawToApp(0, 0); }
+function laserCenterApp() { if (cfg.lim && cfg.lim.on) return sentToApp(cfg.ctrX || 0, cfg.ctrY || 0); return cfg.camMap ? camCenterApp() : rawToApp(0, 0); }
 function setLaserCenterApp(ax, ay, quiet) { // flyt omsætningen i app-rummet så (ax,ay) → sendt (0,0)
   if (cfg.camMap) {
     const m = cfg.camMap, [x0, y0] = camCenterApp(), dx = ax - x0, dy = ay - y0; if (Math.hypot(dx, dy) < 1e-6) return;
@@ -330,12 +330,13 @@ function conToggle(on) {
 var pvAspect = 2;
 { const z = document.getElementById('viewZoom'); if (z) { const o = document.getElementById('viewZoomOut'); const sync = () => { const v = Math.round(100 / (cfg.viewZoom || 1)); z.value = v; if (o) o.textContent = v + ' %'; }; setTimeout(sync, 0); z.addEventListener('input', () => { cfg.viewZoom = 100 / +z.value; saveCfg(); if (o) o.textContent = z.value + ' %'; }); } }
 function patHalfSent(size) { return (cfg.patHalf100 ?? 0.5) * (0.12 + 0.88 * clamp(size, 0, 1)); } // mønster-koordinat 1 → sendte enheder
-function viewHalf() { // LIVE-feltets halve bredde/højde i sendte enheder (samme skala begge veje, så former ikke forvrænges)
-  const L = cfg.lim || {}, m = (cfg.patHalf100 ?? 0.5) * 0.8, z = cfg.viewZoom || 1;
-  const ny = Math.max(L.top ?? 1, -(L.bottom ?? -1)) + m, nx = Math.max(-(L.left ?? -1), L.right ?? 1) + m, A = pvAspect || 2;
-  const hy = Math.max(ny, nx / A); return [hy * A * z, hy * z];
+function viewGeom() { // LIVE = hele laserens rækkevidde (+ plads til mønstret ude ved kanten). Ingen boks – kanten af LIVE er kanten.
+  const L = cfg.lim || {}, m = (cfg.patHalf100 ?? 0.5) * 0.6, z = cfg.viewZoom || 1, l = L.left ?? -1, r = L.right ?? 1, bo = L.bottom ?? -1, tp = L.top ?? 1;
+  return { cx: (l + r) / 2, cy: (bo + tp) / 2, hx: ((r - l) / 2 + m) * z, hy: ((tp - bo) / 2 + m) * z };
 }
-function sentToApp(sx, sy) { const [Hx, Hy] = viewHalf(), G = cfg.viewGain || {}, px = sx - (cfg.ctrX || 0), py = sy - (cfg.ctrY || 0); return [px * (px >= 0 ? G.right || 1 : G.left || 1) / Hx, py * (py >= 0 ? G.top || 1 : G.bottom || 1) / Hy]; }
+function viewHalf() { const v = viewGeom(); return [v.hx, v.hy]; }
+function appToSent(ax, ay) { const v = viewGeom(), G = cfg.viewGain || {}; return [v.cx + ax * v.hx / (ax >= 0 ? G.right || 1 : G.left || 1), v.cy + ay * v.hy / (ay >= 0 ? G.top || 1 : G.bottom || 1)]; } // → sendt (før midte)
+function sentToApp(sx, sy) { const v = viewGeom(), G = cfg.viewGain || {}, px = sx - (cfg.ctrX || 0) - v.cx, py = sy - (cfg.ctrY || 0) - v.cy; return [px * (px >= 0 ? G.right || 1 : G.left || 1) / v.hx, py * (py >= 0 ? G.top || 1 : G.bottom || 1) / v.hy]; }
 // ---------- Ret mens du rykker: appen siger hvad den tror – du retter den direkte i LIVE ----------
 var fb = { click: false, timer: null };
 function fbEnsureLim() { if (!cfg.lim || !cfg.lim.on) { limEnsure(); cfg.lim.on = true; ['top', 'bottom', 'left', 'right'].forEach((k) => (cfg.lim.set[k] = true)); saveCfg(); } }
@@ -1461,13 +1462,11 @@ function computeFrame(now) {
   // målt omsætning (Mål placering): det laseren skal have sendt for at ramme det ønskede sted
   let sendX = rawX, sendY = rawY;
   const limOn = !measure && !camCal.active && !raw.on && cfg.lim && cfg.lim.on;
-  if (limOn) { // LIVE i ægte skala: hele laserens rækkevidde (+ plads til mønstret) vises, midten = din midte
-    const L = cfg.lim, [Hx, Hy] = viewHalf(), G = cfg.viewGain || {};
-    const ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
-    const gx = ax_ >= 0 ? G.right || 1 : G.left || 1, gy = ay_ >= 0 ? G.top || 1 : G.bottom || 1;
-    const sx = ax_ * Hx / gx, sy = ay_ * Hy / gy, cx = clamp(sx, L.left, L.right), cy = clamp(sy, L.bottom, L.top);
+  if (limOn) { // LIVE = hele laserens rækkevidde; mønstret kan stå overalt hvor laseren kan sende det hen
+    const L = cfg.lim, ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
+    const [sx, sy] = appToSent(ax_, ay_), cx = clamp(sx, L.left, L.right), cy = clamp(sy, L.bottom, L.top);
     clamped = Math.abs(cx - sx) > 1e-4 || Math.abs(cy - sy) > 1e-4; sendX = cx; sendY = cy; rawX = cx; rawY = cy;
-    axc = cx * (cx >= 0 ? G.right || 1 : G.left || 1) / Hx; ayc = cy * (cy >= 0 ? G.top || 1 : G.bottom || 1) / Hy;
+    [axc, ayc] = sentToApp(cx + (cfg.ctrX || 0), cy + (cfg.ctrY || 0));
   } else if (!measure && !camCal.active && !raw.on && cfg.camMap) {
     // kamera-kalibrering: app-koordinater → det laseren skal have sendt (homografi målt med kameraet)
     const [sx, sy] = camAppToSend(lx, ly / YF(), sizeApp);
@@ -1480,7 +1479,7 @@ function computeFrame(now) {
   if (!measure && !camCal.active && !raw.on && (cfg.ctrX || cfg.ctrY)) { sendX = clamp(sendX + (cfg.ctrX || 0), -1, 1); sendY = clamp(sendY + (cfg.ctrY || 0), -1, 1); }
   if (con.pos && !measure && !camCal.active) { // kommando-konsol: præcis denne sendte position
     sendX = clamp(con.pos[0], -1, 1); sendY = clamp(con.pos[1], -1, 1);
-    if (cfg.lim && cfg.lim.on) { const [Hx, Hy] = viewHalf(), G = cfg.viewGain || {}, px = sendX - (cfg.ctrX || 0), py = sendY - (cfg.ctrY || 0); axc = px * (px >= 0 ? G.right || 1 : G.left || 1) / Hx; ayc = py * (py >= 0 ? G.top || 1 : G.bottom || 1) / Hy; }
+    if (cfg.lim && cfg.lim.on) [axc, ayc] = sentToApp(sendX, sendY);
   }
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
   out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
@@ -1840,9 +1839,9 @@ function zoneRect(W, H) {
   const b = pvBox(W, H); let z = cfg.zone;
   if (cfg.lim && cfg.lim.on) { // zonens linje i laserens egne (sendte) koordinater → LIVE
     const side = cfg.zoneSide || 'bottom', zs = cfg.zoneSent || {}, d0 = { bottom: -1, top: 1, left: -1, right: 1 }[side], s0 = zs[side + '0'] ?? d0, s1 = zs[side + '1'] ?? -d0;
-    const line = s0 + z * (s1 - s0);
-    if (side === 'bottom' || side === 'top') { const ay = sentToApp(cfg.ctrX || 0, line)[1], py = boxPt(b, 0, ay)[1]; return side === 'bottom' ? [b.x, py, b.w, Math.max(0, b.y + b.h - py)] : [b.x, b.y, b.w, Math.max(0, py - b.y)]; }
-    const ax = sentToApp(line, cfg.ctrY || 0)[0], px = boxPt(b, ax, 0)[0]; return side === 'left' ? [b.x, b.y, Math.max(0, px - b.x), b.h] : [px, b.y, Math.max(0, b.x + b.w - px), b.h];
+    // 0 % = det målte startpunkt (s0), 100 % = helt ude ved LIVE-kanten i den anden ende
+    if (side === 'bottom' || side === 'top') { const y0 = clamp(sentToApp(cfg.ctrX || 0, s0)[1], -1, 1), yEnd = side === 'bottom' ? 1 : -1, ay = y0 + z * (yEnd - y0), py = boxPt(b, 0, ay)[1]; return side === 'bottom' ? [b.x, py, b.w, Math.max(0, b.y + b.h - py)] : [b.x, b.y, b.w, Math.max(0, py - b.y)]; }
+    const x0 = clamp(sentToApp(s0, cfg.ctrY || 0)[0], -1, 1), xEnd = side === 'left' ? 1 : -1, ax = x0 + z * (xEnd - x0), px = boxPt(b, ax, 0)[0]; return side === 'left' ? [b.x, b.y, Math.max(0, px - b.x), b.h] : [px, b.y, Math.max(0, b.x + b.w - px), b.h];
   }
   const zm = cfg.zoneMap; // målt med kameraet: zone-% → hvor kanten faktisk sidder (andel af LIVE-feltet)
   if (zm && zm.length >= 2) { const pts = [...zm].sort((a, b2) => a.z - b2.z); if (z <= pts[0].z) z = pts[0].f; else if (z >= pts[pts.length - 1].z) z = pts[pts.length - 1].f; else for (let i = 1; i < pts.length; i++) if (z <= pts[i].z) { const a = pts[i - 1], c = pts[i]; z = a.f + (c.f - a.f) * (z - a.z) / Math.max(1e-6, c.z - a.z); break; } z = clamp(z, 0.005, 0.98); }
@@ -2114,13 +2113,13 @@ function previewTick(now) {
       // LIVE-størrelse: med kamera-kalibrering tegnes mønsteret så stort som kameraet har målt det ved denne fader-værdi
       let drawScale = out.size * out.calScale;
       { const half = camPatHalfSent(out.laserSize); if (half != null) { const [ax1, ay1] = camAppToSend(0.02, 0, out.size), [ax0, ay0] = camAppToSend(-0.02, 0, out.size), [bx1, by1] = camAppToSend(0, 0.02, out.size), [bx0, by0] = camAppToSend(0, -0.02, out.size); const d = (Math.hypot(ax1 - ax0, ay1 - ay0) + Math.hypot(bx1 - bx0, by1 - by0)) / 2 / 0.04; const e = patExtent(st.pattern, out.ang); if (d > 1e-6) drawScale = (half / 1.08) / d / Math.max(0.05, Math.max(e.x, e.y)) * cfg.cal.sx; } }
-      let BB = B; if (cfg.lim && cfg.lim.on) { const [Hx] = viewHalf(); BB = { ...B, upl: B.w / 2 / Hx }; drawScale = patHalfSent(out.size); }
+      let BB = B; if (cfg.lim && cfg.lim.on) { const [, Hy] = viewHalf(); BB = { ...B, upl: B.h / 2 / Hy }; drawScale = patHalfSent(out.size); }
       const zr = zoneRect(W, H); // laseren slukker alt på den anden side af zonen – det gør LIVE også
       if (zr) { g.save(); g.beginPath(); g.rect(0, 0, W, H); g.rect(zr[0], zr[1], zr[2], zr[3]); g.clip('evenodd'); }
       if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: BB, ...extra });
       if (zr) g.restore();
       if (con.pos) { const [cx_, cy_] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2); g.save(); g.strokeStyle = '#ffaa3c'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx_ - 14, cy_); g.lineTo(cx_ + 14, cy_); g.moveTo(cx_, cy_ - 14); g.lineTo(cx_, cy_ + 14); g.stroke(); g.restore(); }
-      if (moveMode) {
+      if (moveMode && !(cfg.lim && cfg.lim.on)) { // gamle rammer (kun uden Grænser/opsætning)
         const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * drawScale; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]);
         // område hvor mønsterets MIDTE kan stå ved denne størrelse (laseren ganger positionen med størrelsen)
         if (out.reach) {
@@ -2135,10 +2134,6 @@ function previewTick(now) {
       if (isFallback) { g.fillStyle = '#5b5b57'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t(patAvail.size ? 'pv.missing' : 'pv.load', { n: st.pattern }), W / 2, B.y + 20); }
     }
     drawZone(g, W, H);
-    if (cfg.lim && cfg.lim.on) { // laserens yderste rækkevidde (signalets maks) som stiplet ramme
-        const [a1, b1] = sentToApp(-1, 1), [a2, b2] = sentToApp(1, -1), [p1x, p1y] = boxPt(B, a1, b1), [p2x, p2y] = boxPt(B, a2, b2);
-        g.save(); g.strokeStyle = 'rgba(122,180,255,.35)'; g.setLineDash([3, 6]); g.strokeRect(p1x, p1y, p2x - p1x, p2y - p1y); g.setLineDash([]); g.fillStyle = 'rgba(122,180,255,.55)'; g.font = '10px -apple-system'; g.textAlign = 'left'; g.fillText(t('pv.reachMax'), p1x + 4, p1y + 12); g.restore();
-    }
     if (autoMode === 'laser') {
       g.font = '600 11px -apple-system'; const txt = t('pv.laserMic'); const tw = g.measureText(txt).width;
       g.fillStyle = 'rgba(49,243,172,0.12)'; g.fillRect((W - tw) / 2 - 10, 40, tw + 20, 22);
@@ -2775,6 +2770,10 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2010fmtA) { // 20/10 22:53: dine målinger i format B (vender om under signal 0, spejler ved 0) passer præcis med at laseren taler format A
+  if (cfg.posFmt === 'u') { cfg.posFmt = 's'; if (cfg.flipLearn) cfg.flipLearn = { base: cfg.flipLearn.base || [0, 0], rules: [] }; }
+  cfg.mig2010fmtA = true; saveCfg();
+}
 if (!cfg.mig2010view) { // 20/10 22:41: kanterne skal IKKE beskæres – LIVE viser hele laserens rækkevidde i ægte skala. Zonen beholdes hvor den passede.
   try { if (cfg.lim && cfg.mig2010edge && Math.abs(cfg.lim.bottom + 0.1489) < 0.003 && Math.abs(cfg.lim.left + 0.1815) < 0.003) { const top = cfg.lim.top, cy = cfg.ctrY || 0; cfg.zoneSent = { bottom0: cy + cfg.lim.bottom, bottom1: cy + top }; cfg.lim.bottom = cfg.lim.bottom / 0.09; cfg.lim.left = cfg.lim.left / 0.11; } else if (cfg.lim && cfg.posFmt === 'u' && Math.abs((cfg.ctrY || 0) - 0.655) < 0.02 && !cfg.zoneSent) cfg.zoneSent = { bottom0: 0.506, bottom1: 1 }; } catch (e) {}
   cfg.viewGain = cfg.viewGain || {}; cfg.mig2010view = true; cfg.mig2010edge = true; saveCfg();
