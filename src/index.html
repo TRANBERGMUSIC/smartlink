@@ -48,14 +48,33 @@
       <span class="pv-label">LIVE</span>
       <div class="pv-tools">
         <button class="ghost small pv-tool" id="pvMove" data-i18n="pv.move" data-i18n-title="pv.moveTip"></button>
-        <button class="ghost small pv-tool" id="pvZoneLine" data-i18n="pv.zoneLine"></button>
-        <button class="ghost small pv-tool" id="pvMax" data-i18n="pv.max" data-i18n-title="pv.maxTip"></button>
-        <button class="ghost small pv-tool" id="pvCalBtn" data-i18n="pv.cal" data-i18n-title="pv.calTip"></button>
-        <button class="ghost small pv-tool" id="pvMeasure" data-i18n="pv.ms" data-i18n-title="pv.msTip"></button>
-        <button class="ghost small pv-tool" id="camOpen" data-i18n="cam.btn" data-i18n-title="cam.tip"></button>
-        <button class="ghost small pv-tool" id="pvRaw" data-i18n="raw.btn" data-i18n-title="raw.tip"></button>
-        <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
-        <button class="ghost small pv-tool" id="pvLim" data-i18n="lim.btn" data-i18n-title="lim.tip"></button>
+        <button class="ghost small pv-tool" id="pvMenuBtn" data-i18n="pv.menu"></button>
+        <div class="pv-menu" id="pvMenu" hidden>
+          <button class="ghost small pv-tool wiz-btn" id="pvWiz" data-i18n="wiz.btn" data-i18n-title="wiz.tip"></button>
+          <button class="ghost small pv-tool" id="pvFb" data-i18n="fb.btn" data-i18n-title="fb.tip"></button>
+          <button class="ghost small pv-tool" id="pvZoneLine" data-i18n="pv.zoneLine"></button>
+          <button class="ghost small pv-tool" id="pvMax" data-i18n="pv.max" data-i18n-title="pv.maxTip"></button>
+          <button class="ghost small pv-tool" id="pvCalBtn" data-i18n="pv.cal" data-i18n-title="pv.calTip"></button>
+          <button class="ghost small pv-tool" id="pvMeasure" data-i18n="pv.ms" data-i18n-title="pv.msTip"></button>
+          <button class="ghost small pv-tool" id="camOpen" data-i18n="cam.btn" data-i18n-title="cam.tip"></button>
+          <button class="ghost small pv-tool" id="pvRaw" data-i18n="raw.btn" data-i18n-title="raw.tip"></button>
+          <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
+          <button class="ghost small pv-tool" id="pvLim" data-i18n="lim.btn" data-i18n-title="lim.tip"></button>
+        </div>
+      </div>
+      <div class="pv-cal pv-dir pv-fb" id="pvFbPanel" hidden>
+        <h3 data-i18n="fb.title"></h3>
+        <p class="cal-instr" data-i18n="fb.intro"></p>
+        <div class="fb-think" id="fbThink"></div>
+        <div class="cal-r1"><button class="ghost small wiz-hot" id="fbClick" data-i18n="fb.click"></button></div>
+        <div class="wiz-q"><span data-i18n="fb.irl"></span><select class="dir-sel" id="fbSel"></select></div>
+        <p class="cal-instr" id="fbLast"></p>
+        <div class="cal-r1 wiz-nav"><button class="ghost small" id="fbClose" data-i18n="dir.close"></button></div>
+      </div>
+      <div class="pv-cal pv-dir pv-wiz" id="pvWizPanel" hidden>
+        <h3><span data-i18n="wiz.title"></span> · <span id="wizStepNo"></span></h3>
+        <div id="wizBody"></div>
+        <div class="cal-r1 wiz-nav"><button class="ghost small" id="wizBack" data-i18n="wiz.back"></button><button class="small primary" id="wizNext"></button><button class="ghost small" id="wizClose" data-i18n="dir.close"></button></div>
       </div>
       <div class="pv-cal pv-dir pv-lim" id="pvLimPanel" hidden>
         <h3 data-i18n="lim.title"></h3>

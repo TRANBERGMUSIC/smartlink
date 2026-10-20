@@ -748,3 +748,55 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .dir-res { color: #ffaa3c; font-size: 10.5px; }
 .lim-row { grid-template-areas: "n s a b c d" "v v v v v v" "q q q q q q"; }
 .lim-row .lim-sel { grid-area: q; }
+.pv-wiz { border-color: rgba(49,243,172,.5); }
+.pv-wiz h3 { color: #31f3ac; }
+.pv-wiz h4 { margin: 4px 0; font-size: 13px; color: var(--text); }
+#pvWiz { border-color: rgba(49,243,172,.6); color: #31f3ac; }
+#pvWiz.on { background: rgba(49,243,172,.12); }
+.wiz-pad { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 6px 0; }
+.wiz-pad div { display: flex; gap: 46px; }
+.wiz-pad button { width: 46px; height: 34px; font-size: 16px; }
+.wiz-q { display: grid; grid-template-columns: 1fr 170px; gap: 6px; align-items: center; margin: 4px 0; color: var(--text); font-size: 11.5px; }
+.pv-wiz .cal-r1 { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0; }
+.pv-wiz button.on { border-color: #7ab4ff; color: #9cc8ff; }
+.wiz-hot { border-color: #ffaa3c !important; color: #ffcf8a !important; }
+.wiz-nav { border-top: 1px solid rgba(255,255,255,.1); padding-top: 8px; margin-top: 8px !important; }
+.wiz-nav .primary { margin-left: auto; }
+.pv-tools { left: 64px; flex-wrap: wrap; justify-content: flex-end; z-index: 4; }
+.pv-tools button { padding: 4px 8px; font-size: 11.5px; }
+.pv-wiz { bottom: auto; max-height: calc(100% - 60px); }
+.pv-cal { top: 76px; }
+
+/* værktøjs-menu */
+.pv-tools { left: auto !important; flex-wrap: nowrap !important; }
+#pvMenuBtn.on { border-color: #31f3ac; color: #31f3ac; }
+.pv-menu { position: absolute; top: 34px; right: 0; display: flex; flex-direction: column; gap: 3px; padding: 6px; background: rgba(7,8,12,.97); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; z-index: 6; min-width: 190px; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.pv-menu[hidden] { display: none; }
+.pv-menu button { text-align: left; width: 100%; font-size: 12px !important; padding: 6px 10px !important; }
+/* paneler = flytbare vinduer uden for LIVE */
+.pv-cal.pv-float { position: fixed; top: 90px; right: 24px; z-index: 50; max-height: calc(100vh - 110px); overflow-y: auto; bottom: auto !important; box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+.pv-drag { cursor: move; user-select: none; padding-bottom: 4px; }
+.pv-drag::after { content: '  ⠿'; opacity: .45; }
+.pv-fb { border-color: rgba(255,170,60,.55); width: 420px; }
+.pv-fb h3 { color: #ffcf8a; }
+.fb-think { font-size: 12px; line-height: 1.5; color: var(--text); background: rgba(255,255,255,.04); border-radius: 8px; padding: 8px; margin: 6px 0; }
+.fb-think .mono { font-size: 10.5px; color: var(--muted); }
+.fb-warn { color: #ffaa3c; }
+#fbClick.on, #pvFb.on { border-color: #ffaa3c; color: #ffcf8a; }
+.pv-fb .cal-r1 { display: block !important; } #fbClick { width: 100%; white-space: normal; padding: 7px; } .pv-menu button { justify-content: flex-start; }
+.pv-dir .cal-r1 { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* LIVE helt frit for knapper: top- og bundlinje uden for billedet */
+#previewPanel { display: flex !important; flex-direction: column; }
+#previewPanel #preview { flex: 1 1 auto; min-height: 0; height: auto; }
+.pv-head, .pv-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #07080c; position: relative; z-index: 2; }
+.pv-head { border-bottom: 1px solid rgba(255,255,255,.07); flex-wrap: wrap; }
+.pv-foot { border-top: 1px solid rgba(255,255,255,.07); min-height: 34px; }
+.pv-head .pv-label { position: static; }
+.pv-head .pv-tools { position: static !important; margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.pv-head .pv-menu { position: static; flex-direction: row; flex-wrap: wrap; box-shadow: none; border: none; background: none; padding: 0; min-width: 0; width: 100%; order: 3; justify-content: flex-end; }
+.pv-head .pv-menu button { width: auto; text-align: center; font-size: 11.5px !important; padding: 4px 8px !important; }
+.pv-foot .pv-info { position: static; flex: 1; min-width: 0; right: auto; }
+.pv-foot .pv-sizebar { position: static; }
+.pv-foot .pv-zone { position: static; margin-left: auto; }
+.pv-ms.pv-float { position: fixed; top: 90px; right: 24px; z-index: 50; }
