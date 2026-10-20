@@ -266,15 +266,83 @@ function rawSizeMark(which) { // 'min' = mindste synlige, 'max' = størst uden f
   toast(t(which === 'min' ? 'raw.sizeMin' : 'raw.sizeMax', { v }));
 }
 function rawZoneMark(which) { const v = clamp(Math.round(raw.zone == null ? 0 : raw.zone), 0, 255); const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64; const rel = clamp(v - base, 1, 63); if (which === 'lo') cfg.zoneLo = Math.min(rel, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = Math.max(rel, (cfg.zoneLo ?? 40) + 1); saveCfg(); toast(t(which === 'lo' ? 'raw.zoneLo' : 'raw.zoneHi', { v })); }
+// ---------- Kommando-konsol: send én kommando ad gangen og se hvad laseren får, og hvad appen tror ----------
+var con = { pos: null, ch: {}, sweep: null };
+function conOverrides() { for (const k in con.ch) setCh(+k, con.ch[k]); }
+const CON_CMDS = [
+  ['pos 0 0', 'con.d.pos0'], ['pos 50 0', 'con.d.pos'], ['pos -50 0', 'con.d.pos'], ['pos 0 50', 'con.d.pos'], ['pos 0 -50', 'con.d.pos'], ['pos 100 100', 'con.d.pos'], ['pos -100 -100', 'con.d.pos'],
+  ['x 30', 'con.d.x'], ['y -30', 'con.d.y'], ['move 5 0', 'con.d.move'], ['sweep x -100 100', 'con.d.sweep'], ['sweep y -100 100', 'con.d.sweep'],
+  ['size 0', 'con.d.size'], ['size 50', 'con.d.size'], ['size 100', 'con.d.size'], ['ch4 40', 'con.d.ch4'],
+  ['pattern 1', 'con.d.pattern'], ['color red', 'con.d.color'], ['color green', 'con.d.color'], ['color blue', 'con.d.color'], ['color white', 'con.d.color'], ['color orig', 'con.d.color'],
+  ['rot 0', 'con.d.rot'], ['rot 90', 'con.d.rot'], ['rot 180', 'con.d.rot'], ['spin 50', 'con.d.spin'], ['spin -50', 'con.d.spin'], ['spin 0', 'con.d.spin'],
+  ['zone 0', 'con.d.zone'], ['zone 50', 'con.d.zone'], ['zone off', 'con.d.zoneOff'], ['strobe 50', 'con.d.strobe'], ['strobe 0', 'con.d.strobe'], ['fps 50', 'con.d.fps'],
+  ['light 100', 'con.d.light'], ['light 0', 'con.d.light'], ['fmt A', 'con.d.fmt'], ['fmt B', 'con.d.fmt'], ['fmt C', 'con.d.fmt'],
+  ['ch 7 200', 'con.d.ch'], ['release', 'con.d.release'], ['help', 'con.d.help'],
+];
+function conLog(cmd, lines) { const box = $('#conLog'); if (!box) return; const el = document.createElement('div'); el.className = 'con-entry'; el.innerHTML = `<b>› ${cmd.replace(/</g, '&lt;')}</b>` + lines.map((l) => `<div>${l}</div>`).join(''); box.prepend(el); while (box.childElementCount > 60) box.lastChild.remove(); }
+function conSnap() { sendNow(); const a = []; for (let c = 1; c <= 19; c++) a.push(dmx[cfg.address - 2 + c] | 0); return a; }
+function conBelief() {
+  const ax = out.x * 2 - 1, ay = out.y * 2 - 1, pct = (v) => (v > 0 ? '+' : '') + Math.round(v * 100);
+  const [oX, oY] = posOut(out.sendX, out.sendY), q = quadrantFix(st.pattern, oX, oY);
+  return t('con.belief', { x: pct(ax), y: pct(ay), sx: pct(out.sendX), sy: pct(out.sendY), p: st.pattern, s: Math.round(st.size * 100), r: Math.round(out.ang || 0), z: Math.round(cfg.zone * 100), o: q.pat !== st.pattern ? t('fb.oMirror', { n: q.pat }) : q.rot180 ? t('fb.oRot') : t('fb.oNone') }) + (out.clamped ? ' · ' + t('con.clamped') : '');
+}
+const CON_HUE = { red: 0, orange: 0.06, yellow: 0.14, lime: 0.25, green: 0.33, cyan: 0.5, blue: 0.65, purple: 0.75, pink: 0.9, rød: 0, grøn: 0.33, blå: 0.65, gul: 0.14, lilla: 0.75 };
+function conRun(text) {
+  const raw_ = String(text || '').trim(); if (!raw_) return; const p = raw_.toLowerCase().replace(',', ' ').split(/\s+/), c = p[0], n = (i) => parseFloat(p[i]);
+  if (c === 'help' || c === 'hjælp') { conLog(raw_, [t('con.help')]); return; }
+  if (c === 'release' || c === 'frigiv' || c === 'stop') { clearInterval(con.sweep); con.pos = null; con.ch = {}; sendNow(); conLog(raw_, [t('con.released')]); conPaint(); return; }
+  if (c === 'sweep') { const ax = p[1] === 'y' ? 1 : 0, a = isNaN(n(2)) ? -100 : n(2), b = isNaN(n(3)) ? 100 : n(3); clearInterval(con.sweep); let v = a; const base = con.pos ? con.pos.slice() : [out.sendX, out.sendY]; conLog(raw_, [t('con.sweepStart')]);
+    con.sweep = setInterval(() => { v += (b > a ? 1 : -1); if ((b > a && v > b) || (b < a && v < b)) { clearInterval(con.sweep); conLog(raw_, [t('con.sweepDone'), conBelief()]); return; } const pp = base.slice(); pp[ax] = v / 100; con.pos = pp; sendNow(); const ch = ax ? 9 : 7; const st_ = $('#conLive'); if (st_) st_.textContent = `${ax ? 'Y' : 'X'} ${v} % → ${t('dir.ch')} ${ch}/${ch + 1} = ${dmx[cfg.address - 2 + ch]}/${dmx[cfg.address - 1 + ch]}`; }, 120); return; }
+  const before = conSnap(); let note = '';
+  switch (c) {
+    case 'pos': case 'goto': con.pos = [clamp(n(1) / 100, -1, 1), clamp(n(2) / 100, -1, 1)]; if (p.some((w) => w === 'app')) con.pos = null; break;
+    case 'x': con.pos = [clamp(n(1) / 100, -1, 1), con.pos ? con.pos[1] : out.sendY]; break;
+    case 'y': con.pos = [con.pos ? con.pos[0] : out.sendX, clamp(n(1) / 100, -1, 1)]; break;
+    case 'move': { const b0 = con.pos || [out.sendX, out.sendY]; con.pos = [clamp(b0[0] + (n(1) || 0) / 100, -1, 1), clamp(b0[1] + (n(2) || 0) / 100, -1, 1)]; break; }
+    case 'size': case 'størrelse': delete con.ch[4]; setSize(clamp(n(1) / 100, 0, 1)); break;
+    case 'ch4': con.ch[4] = clamp(Math.round(n(1)), 0, 127); note = t('con.rawNote'); break;
+    case 'pattern': case 'mønster': if (n(1) >= 0) setPattern(Math.round(n(1))); break;
+    case 'color': case 'farve': { const w = p[1]; if (w === 'orig' || w === 'original') setColor({ mode: 'orig' }); else if (w === 'white' || w === 'hvid') setColor({ mode: 'rgb', rgb: [255, 255, 255] }); else if (CON_HUE[w] != null) setColor({ mode: 'rgb', rgb: hsv(CON_HUE[w], 1, 1) }); else if (!isNaN(n(1))) { con.ch[11] = clamp(Math.round(n(1)), 0, 255); note = t('con.rawNote'); } break; }
+    case 'rot': case 'vinkel': st.rotSpeed = 0; st.rotAngle = ((Math.round(n(1)) + 540) % 360) - 180; saveLook(); syncLookUI(); break;
+    case 'spin': st.rotSpeed = clamp(n(1) / 100, -1, 1); saveLook(); syncLookUI(); break;
+    case 'zone': if (p[1] === 'off' || p[1] === 'fra') cfg.zone = 0; else cfg.zone = clamp(n(1) / 100, 0, 1); saveCfg(); syncZoneUI(); break;
+    case 'strobe': st.strobe = clamp(n(1) / 100, 0, 1); saveLook(); syncLookUI(); break;
+    case 'fps': st.fps = clamp(n(1) / 100, 0, 1); saveLook(); syncLookUI(); break;
+    case 'light': case 'lys': setMaster(clamp(n(1) / 100, 0, 1)); break;
+    case 'blackout': setMaster(0); break;
+    case 'fmt': case 'format': { const f = { a: 's', b: 'u', c: 't', s: 's', u: 'u', t: 't' }[p[1]]; if (f) { cfg.posFmt = f; saveCfg(); const el = $('#posFmt'); if (el) el.value = f; } break; }
+    case 'ch': case 'kanal': { const k = Math.round(n(1)), v = Math.round(n(2)); if (k >= 1 && k <= 19 && !isNaN(v)) { con.ch[k] = clamp(v, 0, 255); note = t('con.rawNote'); } else { conLog(raw_, [t('con.bad')]); return; } break; }
+    default: conLog(raw_, [t('con.unknown')]); return;
+  }
+  sendNow(); const after = conSnap(); const diff = []; after.forEach((v, i) => { if (v !== before[i]) diff.push(`${i + 1}${DMX_NAMES[i + 1] ? ' ' + DMX_NAMES[i + 1] : ''}: ${before[i]}→${v}`); });
+  conLog(raw_, [`<span class="mono">${t('con.sent')} ${diff.length ? diff.join(' · ') : t('dir.noChange')}</span>`, conBelief() + (note ? ' · ' + note : '')]); conPaint();
+}
+function conPaint() { const el = $('#conState'); if (el) el.textContent = (con.pos || Object.keys(con.ch).length) ? t('con.overriding', { p: con.pos ? `X ${Math.round(con.pos[0] * 100)} Y ${Math.round(con.pos[1] * 100)}` : '–', c: Object.keys(con.ch).map((k) => k + '=' + con.ch[k]).join(' ') || '–' }) : t('con.appCtl'); }
+function conToggle(on) {
+  const p = $('#pvConPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvCon').classList.toggle('on', show);
+  if (show) { const sel = $('#conSel'); if (sel && !sel.childElementCount) { const o0 = document.createElement('option'); o0.value = ''; o0.textContent = t('con.pick'); sel.appendChild(o0); CON_CMDS.forEach(([cmd, d]) => { const o = document.createElement('option'); o.value = cmd; o.textContent = `${cmd}  —  ${t(d)}`; sel.appendChild(o); }); sel.onchange = () => { if (sel.value) { $('#conIn').value = sel.value; conRun(sel.value); } sel.value = ''; }; } conPaint(); setTimeout(() => $('#conIn') && $('#conIn').focus(), 30); }
+  else { clearInterval(con.sweep); con.pos = null; con.ch = {}; sendNow(); }
+}
+{ const b = $('#pvCon'); if (b) b.onclick = () => conToggle(); const c = $('#conClose'); if (c) c.onclick = () => conToggle(false);
+  const go = $('#conGo'), inp = $('#conIn'); if (go && inp) { go.onclick = () => conRun(inp.value); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { conRun(inp.value); inp.select(); } e.stopPropagation(); }); }
+  const r = $('#conRelease'); if (r) r.onclick = () => conRun('release'); }
+// ---------- LIVE i ægte skala ----------
+var pvAspect = 2;
+{ const z = document.getElementById('viewZoom'); if (z) { const o = document.getElementById('viewZoomOut'); const sync = () => { const v = Math.round(100 / (cfg.viewZoom || 1)); z.value = v; if (o) o.textContent = v + ' %'; }; setTimeout(sync, 0); z.addEventListener('input', () => { cfg.viewZoom = 100 / +z.value; saveCfg(); if (o) o.textContent = z.value + ' %'; }); } }
+function patHalfSent(size) { return (cfg.patHalf100 ?? 0.5) * (0.12 + 0.88 * clamp(size, 0, 1)); } // mønster-koordinat 1 → sendte enheder
+function viewHalf() { // LIVE-feltets halve bredde/højde i sendte enheder (samme skala begge veje, så former ikke forvrænges)
+  const L = cfg.lim || {}, m = (cfg.patHalf100 ?? 0.5) * 0.8, z = cfg.viewZoom || 1;
+  const ny = Math.max(L.top ?? 1, -(L.bottom ?? -1)) + m, nx = Math.max(-(L.left ?? -1), L.right ?? 1) + m, A = pvAspect || 2;
+  const hy = Math.max(ny, nx / A); return [hy * A * z, hy * z];
+}
+function sentToApp(sx, sy) { const [Hx, Hy] = viewHalf(), G = cfg.viewGain || {}, px = sx - (cfg.ctrX || 0), py = sy - (cfg.ctrY || 0); return [px * (px >= 0 ? G.right || 1 : G.left || 1) / Hx, py * (py >= 0 ? G.top || 1 : G.bottom || 1) / Hy]; }
 // ---------- Ret mens du rykker: appen siger hvad den tror – du retter den direkte i LIVE ----------
 var fb = { click: false, timer: null };
 function fbEnsureLim() { if (!cfg.lim || !cfg.lim.on) { limEnsure(); cfg.lim.on = true; ['top', 'bottom', 'left', 'right'].forEach((k) => (cfg.lim.set[k] = true)); saveCfg(); } }
-function fbAxis(a, c, keyPos, keyNeg, ctrKey) { // a = hvor appen tror (app-enheder), c = hvor den faktisk står
-  const L = cfg.lim; if (Math.abs(c - a) < 0.01) return null;
-  if (Math.abs(a) < 0.08 || Math.sign(a) !== Math.sign(c)) { // ved midten: flyt midten (kun det der sendes)
-    const d = c - a, per = d > 0 ? Math.abs(L[keyPos]) : Math.abs(L[keyNeg]); cfg[ctrKey] = clamp((cfg[ctrKey] || 0) - d * per, -1, 1); return 'ctr';
-  }
-  const k = a > 0 ? keyPos : keyNeg; L[k] = clamp(L[k] * a / c, -1, 1); if (Math.abs(L[k]) < 0.05) L[k] = 0.05 * Math.sign(L[k] || 1); L.set[k] = true; return k;
+function fbAxis(a, c, keyPos, keyNeg, ctrKey) { // a = hvor appen tror (LIVE), c = hvor den faktisk står (LIVE)
+  if (Math.abs(c - a) < 0.01) return null; const G = (cfg.viewGain = cfg.viewGain || {}), [Hx, Hy] = viewHalf(), H = ctrKey === 'ctrX' ? Hx : Hy;
+  if (Math.abs(a) < 0.08 || Math.sign(a) !== Math.sign(c)) { const d = c - a, g = (d > 0 ? G[keyPos] : G[keyNeg]) || 1; cfg[ctrKey] = clamp((cfg[ctrKey] || 0) - d * H / g, -1, 1); return 'ctr'; }
+  const k = a > 0 ? keyPos : keyNeg; G[k] = clamp((G[k] || 1) * c / a, 0.2, 5); return k;
 }
 function fbCorrect(cx, cy) { // mønstret står IRL dér hvor du klikkede i LIVE
   fbEnsureLim(); const ax = st.posX, ay = st.posY;
@@ -288,9 +356,10 @@ function fbFix(v) {
   if (v === 'ok') return fbSay(t('dir.res.ok'));
   if (v === 'edge') { // her begynder den at warpe/vende → dette er kanten i den retning (LIVE-kanten flyttes hertil)
     fbEnsureLim(); const d = fbDominant(), a = Math.abs(d === 'up' || d === 'down' ? st.posY : st.posX); if (a < 0.03) return fbSay(t('fb.edgeTooClose'));
-    const k = { up: 'top', down: 'bottom', left: 'left', right: 'right' }[d]; cfg.lim[k] = cfg.lim[k] * a; cfg.lim.set[k] = true; if (d === 'up' || d === 'down') { st.posY = Math.sign(st.posY); sm.y = st.posY; } else { st.posX = Math.sign(st.posX); sm.x = st.posX; } saveCfg(); saveLook(); syncSizeUI(); sendNow(); return fbSay(t('fb.edgeSet', { d: t('wiz.d.' + d) }));
+    const k = { up: 'top', down: 'bottom', left: 'left', right: 'right' }[d]; cfg.lim[k] = (d === 'up' || d === 'down') ? out.sendY - (cfg.ctrY || 0) : out.sendX - (cfg.ctrX || 0); cfg.lim.set[k] = true; saveCfg(); sendNow(); return fbSay(t('fb.edgeSet', { d: t('wiz.d.' + d) }));
   }
-  if (v === 'zone0') { cfg.zoneZeroY = clamp(out.y * 2 - 1, -1, 0.9); saveCfg(); return fbSay(t('fb.zone0Set')); }
+  if (v === 'zone0') { const side = cfg.zoneSide || 'bottom', zs = (cfg.zoneSent = cfg.zoneSent || {}); zs[side + '0'] = side === 'bottom' || side === 'top' ? out.sendY : out.sendX; saveCfg(); return fbSay(t('fb.zone0Set')); }
+  if (v === 'bigger' || v === 'smaller') { cfg.patHalf100 = clamp((cfg.patHalf100 ?? 0.5) * (v === 'bigger' ? 1.1 : 1 / 1.1), 0.05, 3); saveCfg(); return fbSay(t('fb.patScale', { v: Math.round(cfg.patHalf100 * 100) })); }
   if (v === 'reverse') { fbToggle(false); wiz.step = 1; wizToggle(true); setTimeout(() => { const d = document.querySelector('.wiz-fmt'); if (d) d.open = true; }, 50); return toast(t('fb.reverseHint')); }
   if (v === 'higher') return fbCorrect(ax, ay + n); if (v === 'lower') return fbCorrect(ax, ay - n);
   if (v === 'lefter') return fbCorrect(ax - n, ay); if (v === 'righter') return fbCorrect(ax + n, ay);
@@ -315,7 +384,7 @@ function fbToggle(on) {
   const p = $('#pvFbPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvFb').classList.toggle('on', show);
   clearInterval(fb.timer); fb.click = false;
   if (show) {
-    const sel = $('#fbSel'); if (sel && !sel.childElementCount) { [['', 'fb.q'], ['ok', 'fb.o.ok'], ['higher', 'fb.o.higher'], ['lower', 'fb.o.lower'], ['lefter', 'fb.o.lefter'], ['righter', 'fb.o.righter'], ['rot', 'fb.o.rot'], ['lr', 'fb.o.lr'], ['ud', 'fb.o.ud'], ['bent', 'fb.o.bent'], ['reverse', 'fb.o.reverse'], ['edge', 'fb.o.edge'], ['zone0', 'fb.o.zone0']].forEach(([v, k]) => { const o = document.createElement('option'); o.value = v; o.textContent = t(k); sel.appendChild(o); }); sel.onchange = () => { const v = sel.value; sel.value = ''; fbFix(v); }; }
+    const sel = $('#fbSel'); if (sel && !sel.childElementCount) { [['', 'fb.q'], ['ok', 'fb.o.ok'], ['higher', 'fb.o.higher'], ['lower', 'fb.o.lower'], ['lefter', 'fb.o.lefter'], ['righter', 'fb.o.righter'], ['rot', 'fb.o.rot'], ['lr', 'fb.o.lr'], ['ud', 'fb.o.ud'], ['bent', 'fb.o.bent'], ['reverse', 'fb.o.reverse'], ['edge', 'fb.o.edge'], ['zone0', 'fb.o.zone0'], ['bigger', 'fb.o.patBig'], ['smaller', 'fb.o.patSmall']].forEach(([v, k]) => { const o = document.createElement('option'); o.value = v; o.textContent = t(k); sel.appendChild(o); }); sel.onchange = () => { const v = sel.value; sel.value = ''; fbFix(v); }; }
     fb.timer = setInterval(fbPaint, 200); fbPaint();
   }
 }
@@ -327,7 +396,7 @@ function fbToggle(on) {
   if (pp && cv) {
     const head = document.createElement('div'); head.className = 'pv-head'; const foot = document.createElement('div'); foot.className = 'pv-foot';
     [pp.querySelector('.pv-label'), pp.querySelector('.pv-tools')].forEach((el) => el && head.appendChild(el));
-    [$('#pvInfo'), $('#pvSizeBar'), document.querySelector('.pv-zone')].forEach((el) => el && foot.appendChild(el));
+    [$('#pvInfo'), $('#pvSizeBar'), document.querySelector('.pv-zoom'), document.querySelector('.pv-zone')].forEach((el) => el && foot.appendChild(el));
     pp.insertBefore(head, cv); cv.after(foot);
   }
 }
@@ -1392,10 +1461,13 @@ function computeFrame(now) {
   // målt omsætning (Mål placering): det laseren skal have sendt for at ramme det ønskede sted
   let sendX = rawX, sendY = rawY;
   const limOn = !measure && !camCal.active && !raw.on && cfg.lim && cfg.lim.on;
-  if (limOn) { // Grænser: app-kant ↔ den sendte værdi brugeren har sat (stykkevis lineært, laserens midte = app 0,0)
-    const L = cfg.lim, bd = (k) => (wiz.noBend || !cfg.bendStop ? 1 : bendAt(k, sizeApp)), ax_ = clamp(lx, -bd('left'), bd('right')), ay_ = clamp(ly / YF(), -bd('down'), bd('up'));
-    sendX = ax_ >= 0 ? ax_ * L.right : -ax_ * L.left; sendY = ay_ >= 0 ? ay_ * L.top : -ay_ * L.bottom;
-    clamped = Math.abs(lx) > 1.003 || Math.abs(ly) > 1.003; axc = ax_; ayc = ay_; rawX = sendX; rawY = sendY;
+  if (limOn) { // LIVE i ægte skala: hele laserens rækkevidde (+ plads til mønstret) vises, midten = din midte
+    const L = cfg.lim, [Hx, Hy] = viewHalf(), G = cfg.viewGain || {};
+    const ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
+    const gx = ax_ >= 0 ? G.right || 1 : G.left || 1, gy = ay_ >= 0 ? G.top || 1 : G.bottom || 1;
+    const sx = ax_ * Hx / gx, sy = ay_ * Hy / gy, cx = clamp(sx, L.left, L.right), cy = clamp(sy, L.bottom, L.top);
+    clamped = Math.abs(cx - sx) > 1e-4 || Math.abs(cy - sy) > 1e-4; sendX = cx; sendY = cy; rawX = cx; rawY = cy;
+    axc = cx * (cx >= 0 ? G.right || 1 : G.left || 1) / Hx; ayc = cy * (cy >= 0 ? G.top || 1 : G.bottom || 1) / Hy;
   } else if (!measure && !camCal.active && !raw.on && cfg.camMap) {
     // kamera-kalibrering: app-koordinater → det laseren skal have sendt (homografi målt med kameraet)
     const [sx, sy] = camAppToSend(lx, ly / YF(), sizeApp);
@@ -1406,11 +1478,15 @@ function computeFrame(now) {
   if (limShow && limShow.pos) { sendX = limShow.pos[0]; sendY = limShow.pos[1]; }
   // laserens midte IRL: kun det der sendes flyttes (LIVE uændret)
   if (!measure && !camCal.active && !raw.on && (cfg.ctrX || cfg.ctrY)) { sendX = clamp(sendX + (cfg.ctrX || 0), -1, 1); sendY = clamp(sendY + (cfg.ctrY || 0), -1, 1); }
+  if (con.pos && !measure && !camCal.active) { // kommando-konsol: præcis denne sendte position
+    sendX = clamp(con.pos[0], -1, 1); sendY = clamp(con.pos[1], -1, 1);
+    if (cfg.lim && cfg.lim.on) { const [Hx, Hy] = viewHalf(), G = cfg.viewGain || {}, px = sendX - (cfg.ctrX || 0), py = sendY - (cfg.ctrY || 0); axc = px * (px >= 0 ? G.right || 1 : G.left || 1) / Hx; ayc = py * (py >= 0 ? G.top || 1 : G.bottom || 1) / Hy; }
+  }
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
   out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
   if (special) { specialFrame(on); rawOverrides(); return; }
-  if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); rawOverrides(); return; }
+  if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); rawOverrides(); conOverrides(); return; }
   const show = on && st.pattern > 0;
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? st.pattern : 0);
@@ -1762,6 +1838,12 @@ window.addEventListener('resize', debounce(() => renderPatterns(), 200));
 function zoneRect(W, H) {
   if (!(cfg.zone > 0)) return null;
   const b = pvBox(W, H); let z = cfg.zone;
+  if (cfg.lim && cfg.lim.on) { // zonens linje i laserens egne (sendte) koordinater → LIVE
+    const side = cfg.zoneSide || 'bottom', zs = cfg.zoneSent || {}, d0 = { bottom: -1, top: 1, left: -1, right: 1 }[side], s0 = zs[side + '0'] ?? d0, s1 = zs[side + '1'] ?? -d0;
+    const line = s0 + z * (s1 - s0);
+    if (side === 'bottom' || side === 'top') { const ay = sentToApp(cfg.ctrX || 0, line)[1], py = boxPt(b, 0, ay)[1]; return side === 'bottom' ? [b.x, py, b.w, Math.max(0, b.y + b.h - py)] : [b.x, b.y, b.w, Math.max(0, py - b.y)]; }
+    const ax = sentToApp(line, cfg.ctrY || 0)[0], px = boxPt(b, ax, 0)[0]; return side === 'left' ? [b.x, b.y, Math.max(0, px - b.x), b.h] : [px, b.y, Math.max(0, b.x + b.w - px), b.h];
+  }
   const zm = cfg.zoneMap; // målt med kameraet: zone-% → hvor kanten faktisk sidder (andel af LIVE-feltet)
   if (zm && zm.length >= 2) { const pts = [...zm].sort((a, b2) => a.z - b2.z); if (z <= pts[0].z) z = pts[0].f; else if (z >= pts[pts.length - 1].z) z = pts[pts.length - 1].f; else for (let i = 1; i < pts.length; i++) if (z <= pts[i].z) { const a = pts[i - 1], c = pts[i]; z = a.f + (c.f - a.f) * (z - a.z) / Math.max(1e-6, c.z - a.z); break; } z = clamp(z, 0.005, 0.98); }
   switch (cfg.zoneSide) {
@@ -1950,7 +2032,7 @@ let pvFrame = 0, pvLast = performance.now();
 function previewTick(now) {
   const cv = $('#preview');
   if (cv.offsetParent) {
-    const [g, W, H] = sizeCanvas(cv);
+    const [g, W, H] = sizeCanvas(cv); if (H > 10) pvAspect = W / H;
     const B = pvBox(W, H);
     g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
     // LIVE-boksen = det kalibrerede område. Gitter inde i boksen, tydelig kant.
@@ -2032,7 +2114,12 @@ function previewTick(now) {
       // LIVE-størrelse: med kamera-kalibrering tegnes mønsteret så stort som kameraet har målt det ved denne fader-værdi
       let drawScale = out.size * out.calScale;
       { const half = camPatHalfSent(out.laserSize); if (half != null) { const [ax1, ay1] = camAppToSend(0.02, 0, out.size), [ax0, ay0] = camAppToSend(-0.02, 0, out.size), [bx1, by1] = camAppToSend(0, 0.02, out.size), [bx0, by0] = camAppToSend(0, -0.02, out.size); const d = (Math.hypot(ax1 - ax0, ay1 - ay0) + Math.hypot(bx1 - bx0, by1 - by0)) / 2 / 0.04; const e = patExtent(st.pattern, out.ang); if (d > 1e-6) drawScale = (half / 1.08) / d / Math.max(0.05, Math.max(e.x, e.y)) * cfg.cal.sx; } }
-      if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: B, ...extra });
+      let BB = B; if (cfg.lim && cfg.lim.on) { const [Hx] = viewHalf(); BB = { ...B, upl: B.w / 2 / Hx }; drawScale = patHalfSent(out.size); }
+      const zr = zoneRect(W, H); // laseren slukker alt på den anden side af zonen – det gør LIVE også
+      if (zr) { g.save(); g.beginPath(); g.rect(0, 0, W, H); g.rect(zr[0], zr[1], zr[2], zr[3]); g.clip('evenodd'); }
+      if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: BB, ...extra });
+      if (zr) g.restore();
+      if (con.pos) { const [cx_, cy_] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2); g.save(); g.strokeStyle = '#ffaa3c'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx_ - 14, cy_); g.lineTo(cx_ + 14, cy_); g.moveTo(cx_, cy_ - 14); g.lineTo(cx_, cy_ + 14); g.stroke(); g.restore(); }
       if (moveMode) {
         const [cx, cy] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2), R = B.upl * drawScale; g.strokeStyle = 'rgba(49,243,172,.5)'; g.setLineDash([4, 4]); g.lineWidth = 1; g.strokeRect(cx - R, cy - R, R * 2, R * 2); g.setLineDash([]);
         // område hvor mønsterets MIDTE kan stå ved denne størrelse (laseren ganger positionen med størrelsen)
@@ -2048,6 +2135,10 @@ function previewTick(now) {
       if (isFallback) { g.fillStyle = '#5b5b57'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t(patAvail.size ? 'pv.missing' : 'pv.load', { n: st.pattern }), W / 2, B.y + 20); }
     }
     drawZone(g, W, H);
+    if (cfg.lim && cfg.lim.on) { // laserens yderste rækkevidde (signalets maks) som stiplet ramme
+        const [a1, b1] = sentToApp(-1, 1), [a2, b2] = sentToApp(1, -1), [p1x, p1y] = boxPt(B, a1, b1), [p2x, p2y] = boxPt(B, a2, b2);
+        g.save(); g.strokeStyle = 'rgba(122,180,255,.35)'; g.setLineDash([3, 6]); g.strokeRect(p1x, p1y, p2x - p1x, p2y - p1y); g.setLineDash([]); g.fillStyle = 'rgba(122,180,255,.55)'; g.font = '10px -apple-system'; g.textAlign = 'left'; g.fillText(t('pv.reachMax'), p1x + 4, p1y + 12); g.restore();
+    }
     if (autoMode === 'laser') {
       g.font = '600 11px -apple-system'; const txt = t('pv.laserMic'); const tw = g.measureText(txt).width;
       g.fillStyle = 'rgba(49,243,172,0.12)'; g.fillRect((W - tw) / 2 - 10, 40, tw + 20, 22);
@@ -2684,6 +2775,10 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2010view) { // 20/10 22:41: kanterne skal IKKE beskæres – LIVE viser hele laserens rækkevidde i ægte skala. Zonen beholdes hvor den passede.
+  try { if (cfg.lim && cfg.mig2010edge && Math.abs(cfg.lim.bottom + 0.1489) < 0.003 && Math.abs(cfg.lim.left + 0.1815) < 0.003) { const top = cfg.lim.top, cy = cfg.ctrY || 0; cfg.zoneSent = { bottom0: cy + cfg.lim.bottom, bottom1: cy + top }; cfg.lim.bottom = cfg.lim.bottom / 0.09; cfg.lim.left = cfg.lim.left / 0.11; } else if (cfg.lim && cfg.posFmt === 'u' && Math.abs((cfg.ctrY || 0) - 0.655) < 0.02 && !cfg.zoneSent) cfg.zoneSent = { bottom0: 0.506, bottom1: 1 }; } catch (e) {}
+  cfg.viewGain = cfg.viewGain || {}; cfg.mig2010view = true; cfg.mig2010edge = true; saveCfg();
+}
 if (!cfg.mig2010edge) { // målt 20/10 22:19 (format B, midte 65/65): nedad vender den ved Y -9, venstre warper fra X -11 → det er kanterne
   try { if (cfg.lim && cfg.lim.on && cfg.posFmt === 'u' && Math.abs((cfg.ctrY || 0) - 0.655) < 0.02 && cfg.lim.bottom < -1.5) { cfg.lim.bottom = cfg.lim.bottom * 0.09; cfg.lim.left = cfg.lim.left * 0.11; cfg.zoneZeroY = -1; cfg.zoneMap = null; } } catch (e) {}
   cfg.mig2010edge = true; saveCfg();

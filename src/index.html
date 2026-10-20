@@ -51,6 +51,7 @@
         <button class="ghost small pv-tool" id="pvMenuBtn" data-i18n="pv.menu"></button>
         <div class="pv-menu" id="pvMenu" hidden>
           <button class="ghost small pv-tool wiz-btn" id="pvWiz" data-i18n="wiz.btn" data-i18n-title="wiz.tip"></button>
+          <button class="ghost small pv-tool" id="pvCon" data-i18n="con.btn" data-i18n-title="con.tip"></button>
           <button class="ghost small pv-tool" id="pvFb" data-i18n="fb.btn" data-i18n-title="fb.tip"></button>
           <button class="ghost small pv-tool" id="pvZoneLine" data-i18n="pv.zoneLine"></button>
           <button class="ghost small pv-tool" id="pvMax" data-i18n="pv.max" data-i18n-title="pv.maxTip"></button>
@@ -61,6 +62,16 @@
           <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
           <button class="ghost small pv-tool" id="pvLim" data-i18n="lim.btn" data-i18n-title="lim.tip"></button>
         </div>
+      </div>
+      <div class="pv-cal pv-dir pv-con" id="pvConPanel" hidden>
+        <h3 data-i18n="con.title"></h3>
+        <p class="cal-instr" data-i18n="con.intro"></p>
+        <select class="dir-sel" id="conSel"></select>
+        <div class="con-row"><input type="text" id="conIn" placeholder="pos 50 -20" autocomplete="off" spellcheck="false"><button class="small primary" id="conGo" data-i18n="con.send"></button></div>
+        <p class="cal-instr mono" id="conLive"></p>
+        <p class="cal-instr" id="conState"></p>
+        <div class="con-log" id="conLog"></div>
+        <div class="cal-r1 wiz-nav"><button class="ghost small" id="conRelease" data-i18n="con.release"></button><button class="ghost small" id="conClose" data-i18n="dir.close"></button></div>
       </div>
       <div class="pv-cal pv-dir pv-fb" id="pvFbPanel" hidden>
         <h3 data-i18n="fb.title"></h3>
@@ -133,6 +144,7 @@
         <div class="cal-r3"><label><input type="checkbox" id="calIx"> <span data-i18n="set.invX"></span></label><label><input type="checkbox" id="calIy"> <span data-i18n="set.invY"></span></label><button class="ghost small" id="calReset" data-i18n="pv.calReset"></button></div>
         <div class="muted small" id="calSummary"></div>
       </div>
+      <label class="pv-zoom"><span data-i18n="pv.zoom"></span> <input type="range" id="viewZoom" min="30" max="300" value="100"><output id="viewZoomOut"></output></label>
       <label class="pv-zone"><span data-i18n="pv.zone"></span> <input type="range" id="zoneLive" min="0" max="100" value="0"><output id="zoneLiveOut"></output></label>
     </div>
     <div class="panel patpanel">
@@ -366,8 +378,8 @@
       <label><span data-i18n="set.dmxMode"></span> <select id="dmxMode"><option value="dj" data-i18n="set.modeDj"></option><option value="pro" data-i18n="set.modePro"></option></select></label>
     <label class="row"><span data-i18n="set.posFmt"></span><select id="posFmt"><option value="u" data-i18n="set.posU"></option><option value="s" data-i18n="set.posS"></option><option value="t" data-i18n="set.posT"></option></select></label>
     <label class="row"><span data-i18n="set.posScaled"></span><input type="checkbox" id="posScaled"></label>
-    <label class="row"><span data-i18n="set.ctrX"></span><input type="range" id="ctrX" min="-50" max="50" value="0"><output></output></label>
-    <label class="row"><span data-i18n="set.ctrY"></span><input type="range" id="ctrY" min="-50" max="50" value="0"><output></output></label>
+    <label class="row"><span data-i18n="set.ctrX"></span><input type="range" id="ctrX" min="-100" max="100" value="0"><output></output></label>
+    <label class="row"><span data-i18n="set.ctrY"></span><input type="range" id="ctrY" min="-100" max="100" value="0"><output></output></label>
     <div class="row"><span class="hint" data-i18n="set.ctrHint"></span><button class="ghost small" id="ctrReset" data-i18n="set.ctrReset"></button></div>
     <label class="row"><span data-i18n="set.zoneLo"></span><input type="range" id="zoneLo" min="1" max="62" value="40"><output></output></label>
     <label class="row"><span data-i18n="set.zoneHi"></span><input type="range" id="zoneHi" min="2" max="63" value="63"><output></output></label>
