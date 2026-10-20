@@ -51,6 +51,7 @@
         <button class="ghost small pv-tool" id="pvMenuBtn" data-i18n="pv.menu"></button>
         <div class="pv-menu" id="pvMenu" hidden>
           <button class="ghost small pv-tool wiz-btn" id="pvWiz" data-i18n="wiz.btn" data-i18n-title="wiz.tip"></button>
+          <button class="ghost small pv-tool" id="pvOr" data-i18n="or.btn" data-i18n-title="or.tip"></button>
           <button class="ghost small pv-tool" id="pvCon" data-i18n="con.btn" data-i18n-title="con.tip"></button>
           <button class="ghost small pv-tool" id="pvFb" data-i18n="fb.btn" data-i18n-title="fb.tip"></button>
           <button class="ghost small pv-tool" id="pvZoneLine" data-i18n="pv.zoneLine"></button>
@@ -62,6 +63,14 @@
           <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
           <button class="ghost small pv-tool" id="pvLim" data-i18n="lim.btn" data-i18n-title="lim.tip"></button>
         </div>
+      </div>
+      <div class="pv-cal pv-dir pv-or" id="pvOrPanel" hidden>
+        <h3 data-i18n="or.title"></h3>
+        <p class="cal-instr" data-i18n="or.intro"></p>
+        <div id="orRows"></div>
+        <div class="fb-think" id="orState"></div>
+        <div class="cal-r1"><button class="ghost small" id="orMirror" data-i18n="wiz.mkMirror"></button><button class="ghost small" id="orHome" data-i18n="or.home"></button><button class="ghost small" id="orReset" data-i18n="or.reset"></button></div>
+        <div class="cal-r1 wiz-nav"><button class="ghost small" id="orClose" data-i18n="dir.close"></button></div>
       </div>
       <div class="pv-cal pv-dir pv-con" id="pvConPanel" hidden>
         <h3 data-i18n="con.title"></h3>

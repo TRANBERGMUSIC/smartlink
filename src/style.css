@@ -812,3 +812,5 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .con-entry .mono { font-size: 10.5px; color: var(--muted); }
 .pv-zoom { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-left: auto; } .pv-zoom input { width: 90px; } .pv-foot .pv-zone { margin-left: 8px; }
 .pv-zoom output { white-space: nowrap; min-width: 42px; }
+.pv-or { width: 460px; border-color: rgba(200,140,255,.5); } .pv-or h3 { color: #d3a8ff; } #pvOr.on { border-color: #b98cff; color: #d3a8ff; }
+.or-row { display: grid; grid-template-columns: 1fr 170px auto; gap: 6px; align-items: center; margin: 4px 0; font-size: 11.5px; color: var(--text); }

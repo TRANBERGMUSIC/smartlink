@@ -51,7 +51,8 @@ let patMirror = store.get('patMirror', {}); if (Array.isArray(patMirror)) patMir
 // laseren spejler mønsteret når positionen skifter fortegn (målt 19/10): kompensation pr. kvadrant.
 // Begge akser negative → 180° via rotations-kanalen. Én akse negativ → spejlet kopi af mønsteret på kortet (cfg.mirrorSlots[n] = {x, y}).
 let mirrorSlots = store.get('mirrorSlots', {});
-function quadrantFix(n, sx, sy) { // → { pat, rot180 }
+function quadrantFix(n, sx, sy) { // → { pat, rot180 } / { pat, rot }
+  if (cfg.orient && cfg.orient.on) return orientFix(n, sx, sy);
   if (cfg.flipLearn) { // lært i Opsætning: hvor laseren vender/spejler mønsteret, og hvordan
     let bx = 0, by = 0; const fl = cfg.flipLearn; if (fl.base) { bx ^= fl.base[0]; by ^= fl.base[1]; }
     const o = [sx, sy]; (fl.rules || []).forEach((r) => { if ((o[r.axis] - r.at) * r.side > 0) { bx ^= r.f[0]; by ^= r.f[1]; } });
@@ -266,6 +267,45 @@ function rawSizeMark(which) { // 'min' = mindste synlige, 'max' = størst uden f
   toast(t(which === 'min' ? 'raw.sizeMin' : 'raw.sizeMax', { v }));
 }
 function rawZoneMark(which) { const v = clamp(Math.round(raw.zone == null ? 0 : raw.zone), 0, 255); const base = { bottom: 64, top: 0, left: 128, right: 192 }[cfg.zoneSide] || 64; const rel = clamp(v - base, 1, 63); if (which === 'lo') cfg.zoneLo = Math.min(rel, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = Math.max(rel, (cfg.zoneLo ?? 40) + 1); saveCfg(); toast(t(which === 'lo' ? 'raw.zoneLo' : 'raw.zoneHi', { v })); }
+// ---------- Vending: ret KUN det laseren modtager (LIVE-billederne ændres ikke) ----------
+const OR_OPTS = { n: [0, 0, 0], r90: [90, 0, 0], r180: [180, 0, 0], r270: [270, 0, 0], mx: [0, 1, 0], my: [0, 0, 1], mx90: [90, 1, 0], my90: [90, 0, 1], mxy: [0, 1, 1], mxy90: [90, 1, 1] };
+const OR_Q = ['pp', 'np', 'nn', 'pn']; // laserens egne kvadranter: X+Y+ (oppe højre), X−Y+, X−Y−, X+Y−
+function orientCfg() { const o = (cfg.orient = cfg.orient || {}); o.q = o.q || {}; o.pat = o.pat || {}; return o; }
+function orientFix(n, sx, sy) {
+  const o = orientCfg(), key = (sx >= -0.002 ? 'p' : 'n') + (sy >= -0.002 ? 'p' : 'n');
+  let rot = 0, mx = 0, my = 0; [o.all, o.q[key], o.pat[n]].forEach((k) => { const v = OR_OPTS[k || 'n'] || OR_OPTS.n; rot += v[0]; mx ^= v[1]; my ^= v[2]; });
+  if (mx && my) { rot += 180; mx = 0; my = 0; }
+  const sl = mirrorSlots[n] || {}, has = (k) => sl[k] && patAvail.has(sl[k]);
+  let pat = n, missing = false;
+  if (mx) { if (has('x')) pat = sl.x; else if (has('y')) { pat = sl.y; rot += 180; } else missing = true; }
+  if (my) { if (has('y')) pat = sl.y; else if (has('x')) { pat = sl.x; rot += 180; } else missing = true; }
+  return { pat, rot: ((rot % 360) + 360) % 360, missing, key };
+}
+function orientText(q) { const r = q.rot != null ? q.rot : q.rot180 ? 180 : 0; const parts = []; if (q.pat !== st.pattern) parts.push(t('fb.oMirror', { n: q.pat })); if (r) parts.push(t('or.rotBy', { r })); if (q.missing) parts.push(t('or.missing')); return parts.length ? t('or.laserGets') + ' ' + parts.join(' + ') : t('fb.oNone'); }
+function orientSel(id, val, onch) { const el = document.createElement('select'); el.className = 'dir-sel'; el.id = id; Object.keys(OR_OPTS).forEach((k) => { const op = document.createElement('option'); op.value = k; op.textContent = t('or.o.' + k); el.appendChild(op); }); el.value = val || 'n'; el.onchange = () => onch(el.value); return el; }
+function orientRender() {
+  const box = $('#orRows'); if (!box) return; box.innerHTML = ''; const o = orientCfg();
+  const row = (label, sel, btn) => { const r = document.createElement('div'); r.className = 'or-row'; const l = document.createElement('span'); l.textContent = label; r.append(l, sel); if (btn) r.appendChild(btn); box.appendChild(r); };
+  const set = (fn) => (v) => { fn(v); o.on = true; saveCfg(); sendNow(); orientPaint(); };
+  row(t('or.all'), orientSel('orAll', o.all, set((v) => (o.all = v))));
+  OR_Q.forEach((k) => { const b = document.createElement('button'); b.className = 'ghost small'; b.textContent = t('or.show'); b.onclick = () => { const p = { pp: [0.5, 0.5], np: [-0.5, 0.5], nn: [-0.5, -0.5], pn: [0.5, -0.5] }[k]; con.pos = p; sendNow(); orientPaint(); };
+    row(t('or.q.' + k), orientSel('orQ' + k, o.q[k], set((v) => (o.q[k] = v))), b); });
+  row(t('or.pat', { n: st.pattern }), orientSel('orPat', o.pat[st.pattern], set((v) => { if (v === 'n') delete o.pat[st.pattern]; else o.pat[st.pattern] = v; })));
+  orientPaint();
+}
+function orientPaint() {
+  const el = $('#orState'); if (!el) return; const [oX, oY] = posOut(out.sendX, out.sendY), q = quadrantFix(st.pattern, oX, oY);
+  const key = (oX >= -0.002 ? 'p' : 'n') + (oY >= -0.002 ? 'p' : 'n');
+  el.innerHTML = `${t('or.now', { q: t('or.q.' + key) })}<br>${orientText(q)}<br><span class="mono">${t('or.copies', { s: mirrorSlots[st.pattern] ? t('wiz.yes') : t('wiz.no') })}</span>`;
+}
+function orientToggle(on) {
+  const p = $('#pvOrPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvOr').classList.toggle('on', show); clearInterval(orientToggle.t);
+  if (show) { orientRender(); orientToggle.t = setInterval(() => { orientPaint(); const ps = $('#orPat'); if (ps && ps.dataset.n != st.pattern) { orientRender(); ps.dataset.n = st.pattern; } }, 300); } else { con.pos = null; sendNow(); }
+}
+{ const b = $('#pvOr'); if (b) b.onclick = () => orientToggle(); const c = $('#orClose'); if (c) c.onclick = () => orientToggle(false);
+  const m = $('#orMirror'); if (m) m.onclick = () => makeMirrorCopies(st.pattern).then(() => orientPaint());
+  const h = $('#orHome'); if (h) h.onclick = () => { con.pos = null; sendNow(); orientPaint(); };
+  const r = $('#orReset'); if (r) r.onclick = () => { cfg.orient = { on: false, q: {}, pat: {} }; saveCfg(); sendNow(); orientRender(); toast(t('or.resetDone')); }; }
 // ---------- Kommando-konsol: send én kommando ad gangen og se hvad laseren får, og hvad appen tror ----------
 var con = { pos: null, ch: {}, sweep: null };
 function conOverrides() { for (const k in con.ch) setCh(+k, con.ch[k]); }
@@ -284,7 +324,7 @@ function conSnap() { sendNow(); const a = []; for (let c = 1; c <= 19; c++) a.pu
 function conBelief() {
   const ax = out.x * 2 - 1, ay = out.y * 2 - 1, pct = (v) => (v > 0 ? '+' : '') + Math.round(v * 100);
   const [oX, oY] = posOut(out.sendX, out.sendY), q = quadrantFix(st.pattern, oX, oY);
-  return t('con.belief', { x: pct(ax), y: pct(ay), sx: pct(out.sendX), sy: pct(out.sendY), p: st.pattern, s: Math.round(st.size * 100), r: Math.round(out.ang || 0), z: Math.round(cfg.zone * 100), o: q.pat !== st.pattern ? t('fb.oMirror', { n: q.pat }) : q.rot180 ? t('fb.oRot') : t('fb.oNone') }) + (out.clamped ? ' · ' + t('con.clamped') : '');
+  return t('con.belief', { x: pct(ax), y: pct(ay), sx: pct(out.sendX), sy: pct(out.sendY), p: st.pattern, s: Math.round(st.size * 100), r: Math.round(out.ang || 0), z: Math.round(cfg.zone * 100), o: orientText(q) }) + (out.clamped ? ' · ' + t('con.clamped') : '');
 }
 const CON_HUE = { red: 0, orange: 0.06, yellow: 0.14, lime: 0.25, green: 0.33, cyan: 0.5, blue: 0.65, purple: 0.75, pink: 0.9, rød: 0, grøn: 0.33, blå: 0.65, gul: 0.14, lilla: 0.75 };
 function conRun(text) {
@@ -330,13 +370,13 @@ function conToggle(on) {
 var pvAspect = 2;
 { const z = document.getElementById('viewZoom'); if (z) { const o = document.getElementById('viewZoomOut'); const sync = () => { const v = Math.round(100 / (cfg.viewZoom || 1)); z.value = v; if (o) o.textContent = v + ' %'; }; setTimeout(sync, 0); z.addEventListener('input', () => { cfg.viewZoom = 100 / +z.value; saveCfg(); if (o) o.textContent = z.value + ' %'; }); } }
 function patHalfSent(size) { return (cfg.patHalf100 ?? 0.5) * (0.12 + 0.88 * clamp(size, 0, 1)); } // mønster-koordinat 1 → sendte enheder
-function viewGeom() { // LIVE = hele laserens rækkevidde (+ plads til mønstret ude ved kanten). Ingen boks – kanten af LIVE er kanten.
-  const L = cfg.lim || {}, m = (cfg.patHalf100 ?? 0.5) * 0.6, z = cfg.viewZoom || 1, l = L.left ?? -1, r = L.right ?? 1, bo = L.bottom ?? -1, tp = L.top ?? 1;
-  return { cx: (l + r) / 2, cy: (bo + tp) / 2, hx: ((r - l) / 2 + m) * z, hy: ((tp - bo) / 2 + m) * z };
+function viewGeom() { // LIVE: din midte i midten, og hver side går ud til laserens yderste i den retning (+ plads til mønstret). Ingen boks.
+  const L = cfg.lim || {}, m = (cfg.patHalf100 ?? 0.5) * 0.6, z = cfg.viewZoom || 1;
+  return { l: (-(L.left ?? -1) + m) * z, r: ((L.right ?? 1) + m) * z, b: (-(L.bottom ?? -1) + m) * z, t: ((L.top ?? 1) + m) * z };
 }
-function viewHalf() { const v = viewGeom(); return [v.hx, v.hy]; }
-function appToSent(ax, ay) { const v = viewGeom(), G = cfg.viewGain || {}; return [v.cx + ax * v.hx / (ax >= 0 ? G.right || 1 : G.left || 1), v.cy + ay * v.hy / (ay >= 0 ? G.top || 1 : G.bottom || 1)]; } // → sendt (før midte)
-function sentToApp(sx, sy) { const v = viewGeom(), G = cfg.viewGain || {}, px = sx - (cfg.ctrX || 0) - v.cx, py = sy - (cfg.ctrY || 0) - v.cy; return [px * (px >= 0 ? G.right || 1 : G.left || 1) / v.hx, py * (py >= 0 ? G.top || 1 : G.bottom || 1) / v.hy]; }
+function viewHalf() { const v = viewGeom(); return [(v.l + v.r) / 2, (v.b + v.t) / 2]; }
+function appToSent(ax, ay) { const v = viewGeom(), G = cfg.viewGain || {}; return [ax >= 0 ? ax * v.r / (G.right || 1) : ax * v.l / (G.left || 1), ay >= 0 ? ay * v.t / (G.top || 1) : ay * v.b / (G.bottom || 1)]; } // → sendt (før midte)
+function sentToApp(sx, sy) { const v = viewGeom(), G = cfg.viewGain || {}, px = sx - (cfg.ctrX || 0), py = sy - (cfg.ctrY || 0); return [px >= 0 ? px * (G.right || 1) / v.r : px * (G.left || 1) / v.l, py >= 0 ? py * (G.top || 1) / v.t : py * (G.bottom || 1) / v.b]; }
 // ---------- Ret mens du rykker: appen siger hvad den tror – du retter den direkte i LIVE ----------
 var fb = { click: false, timer: null };
 function fbEnsureLim() { if (!cfg.lim || !cfg.lim.on) { limEnsure(); cfg.lim.on = true; ['top', 'bottom', 'left', 'right'].forEach((k) => (cfg.lim.set[k] = true)); saveCfg(); } }
@@ -357,7 +397,7 @@ function fbFix(v) {
   if (v === 'ok') return fbSay(t('dir.res.ok'));
   if (v === 'edge') { // her begynder den at warpe/vende → dette er kanten i den retning (LIVE-kanten flyttes hertil)
     fbEnsureLim(); const d = fbDominant(), a = Math.abs(d === 'up' || d === 'down' ? st.posY : st.posX); if (a < 0.03) return fbSay(t('fb.edgeTooClose'));
-    const k = { up: 'top', down: 'bottom', left: 'left', right: 'right' }[d]; cfg.lim[k] = (d === 'up' || d === 'down') ? out.sendY - (cfg.ctrY || 0) : out.sendX - (cfg.ctrX || 0); cfg.lim.set[k] = true; saveCfg(); sendNow(); return fbSay(t('fb.edgeSet', { d: t('wiz.d.' + d) }));
+    const k = { up: 'top', down: 'bottom', left: 'left', right: 'right' }[d], v = Math.abs((d === 'up' || d === 'down') ? out.sendY : out.sendX); cfg.fold = cfg.fold || {}; cfg.fold[k] = clamp((1 - v) / clamp(out.size, 0.05, 1), 0, 1.5); saveCfg(); sendNow(); return fbSay(t('fb.edgeSet', { d: t('wiz.d.' + d) }));
   }
   if (v === 'zone0') { const side = cfg.zoneSide || 'bottom', zs = (cfg.zoneSent = cfg.zoneSent || {}); zs[side + '0'] = side === 'bottom' || side === 'top' ? out.sendY : out.sendX; saveCfg(); return fbSay(t('fb.zone0Set')); }
   if (v === 'bigger' || v === 'smaller') { cfg.patHalf100 = clamp((cfg.patHalf100 ?? 0.5) * (v === 'bigger' ? 1.1 : 1 / 1.1), 0.05, 3); saveCfg(); return fbSay(t('fb.patScale', { v: Math.round(cfg.patHalf100 * 100) })); }
@@ -376,7 +416,7 @@ function fbPaint() {
   const ax = out.x * 2 - 1, ay = out.y * 2 - 1, pct = (v) => (v > 0 ? '+' : '') + Math.round(v * 100) + ' %';
   const where = `${t('fb.x')} ${pct(ax)} ${Math.abs(ax) < 0.03 ? t('fb.mid') : ax > 0 ? t('fb.right') : t('fb.left')} · ${t('fb.y')} ${pct(ay)} ${Math.abs(ay) < 0.03 ? t('fb.mid') : ay > 0 ? t('fb.up') : t('fb.down')}`;
   const [oX, oY] = posOut(out.sendX, out.sendY), q = quadrantFix(st.pattern, oX, oY);
-  const orient = q.pat !== st.pattern ? t('fb.oMirror', { n: q.pat }) : q.rot180 ? t('fb.oRot') : t('fb.oNone');
+  const orient = orientText(q);
   const d = fbDominant(), lim = cfg.lim && cfg.lim.on && cfg.bendStop ? Math.round(bendAt(d, out.size) * 100) : 100;
   const ch = (c) => dmx[cfg.address - 2 + c] | 0;
   el.innerHTML = `<b>${t('dir.think')}</b> ${where}<br>${t('fb.size', { s: Math.round(st.size * 100), c: ch(4) })} · ${orient}${out.clamped ? ' · <span class="fb-warn">' + t('fb.clamped', { d: t('wiz.d.' + d), a: lim }) + '</span>' : ''}<br><span class="mono">${t('fb.sends', { x: Math.round(oX * 100), y: Math.round(oY * 100), a: ch(7), b: ch(8), c: ch(9), d: ch(10) })}</span>`;
@@ -1361,7 +1401,7 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   setCh(4, sizeCh4(size));
   setCh(5, 0);
   // 6: rotation – 0–192 manuel vinkel (-180…+180°, 96 = 0°), 193–224 auto mod uret, 225–255 auto med uret
-  const flip180 = (patFlip.has(st.pattern) ? 180 : 0) + (qf.rot180 ? 180 : 0);
+  const flip180 = (patFlip.has(st.pattern) ? 180 : 0) + (qf.rot != null ? qf.rot : qf.rot180 ? 180 : 0);
   const rs = cfg.rotDir ? -st.rotSpeed : st.rotSpeed; if (cfg.rotDir) ang = -ang;
   if (rs > 0.02 && !flip180) setCh(6, 225 + rs * 30);
   else if (rs < -0.02 && !flip180) setCh(6, 193 + -rs * 31);
@@ -1464,7 +1504,10 @@ function computeFrame(now) {
   const limOn = !measure && !camCal.active && !raw.on && cfg.lim && cfg.lim.on;
   if (limOn) { // LIVE = hele laserens rækkevidde; mønstret kan stå overalt hvor laseren kan sende det hen
     const L = cfg.lim, ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
-    const [sx, sy] = appToSent(ax_, ay_), cx = clamp(sx, L.left, L.right), cy = clamp(sy, L.bottom, L.top);
+    // laseren folder mønstret tilbage når mønstrets kant rammer scannerens yderste: midten må højst stå 1 − k·størrelse ude (målt)
+    const F = cfg.fold || {}, fs = clamp(sizeApp, 0.05, 1), cX = cfg.ctrX || 0, cY = cfg.ctrY || 0;
+    const lo = (k) => -1 + (F[k] ?? F.all ?? 0) * fs, hi = (k) => 1 - (F[k] ?? F.all ?? 0) * fs;
+    const [sx, sy] = appToSent(ax_, ay_), cx = clamp(sx, Math.max(L.left, lo('left') - cX), Math.min(L.right, hi('right') - cX)), cy = clamp(sy, Math.max(L.bottom, lo('bottom') - cY), Math.min(L.top, hi('top') - cY));
     clamped = Math.abs(cx - sx) > 1e-4 || Math.abs(cy - sy) > 1e-4; sendX = cx; sendY = cy; rawX = cx; rawY = cy;
     [axc, ayc] = sentToApp(cx + (cfg.ctrX || 0), cy + (cfg.ctrY || 0));
   } else if (!measure && !camCal.active && !raw.on && cfg.camMap) {
@@ -2113,7 +2156,7 @@ function previewTick(now) {
       // LIVE-størrelse: med kamera-kalibrering tegnes mønsteret så stort som kameraet har målt det ved denne fader-værdi
       let drawScale = out.size * out.calScale;
       { const half = camPatHalfSent(out.laserSize); if (half != null) { const [ax1, ay1] = camAppToSend(0.02, 0, out.size), [ax0, ay0] = camAppToSend(-0.02, 0, out.size), [bx1, by1] = camAppToSend(0, 0.02, out.size), [bx0, by0] = camAppToSend(0, -0.02, out.size); const d = (Math.hypot(ax1 - ax0, ay1 - ay0) + Math.hypot(bx1 - bx0, by1 - by0)) / 2 / 0.04; const e = patExtent(st.pattern, out.ang); if (d > 1e-6) drawScale = (half / 1.08) / d / Math.max(0.05, Math.max(e.x, e.y)) * cfg.cal.sx; } }
-      let BB = B; if (cfg.lim && cfg.lim.on) { const [, Hy] = viewHalf(); BB = { ...B, upl: B.h / 2 / Hy }; drawScale = patHalfSent(out.size); }
+      let BB = B; // størrelse i LIVE som før (den var mest præcis)
       const zr = zoneRect(W, H); // laseren slukker alt på den anden side af zonen – det gør LIVE også
       if (zr) { g.save(); g.beginPath(); g.rect(0, 0, W, H); g.rect(zr[0], zr[1], zr[2], zr[3]); g.clip('evenodd'); }
       if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: (out.x - 0.5) * 2, oy: (out.y - 0.5) * 2, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: BB, ...extra });
@@ -2770,6 +2813,9 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2010fold) { // 20/10 23:18: i format A vender laseren om ved Y −88 (sendt) med mønster 5 på 100 % → mønstrets kant rammer scannerens yderste
+  cfg.fold = cfg.fold || { all: 0.12 }; cfg.mig2010fold = true; saveCfg();
+}
 if (!cfg.mig2010fmtA) { // 20/10 22:53: dine målinger i format B (vender om under signal 0, spejler ved 0) passer præcis med at laseren taler format A
   if (cfg.posFmt === 'u') { cfg.posFmt = 's'; if (cfg.flipLearn) cfg.flipLearn = { base: cfg.flipLearn.base || [0, 0], rules: [] }; }
   cfg.mig2010fmtA = true; saveCfg();
