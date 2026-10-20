@@ -285,14 +285,14 @@ function limShowRow(r) {
 }
 function limStep(r, d) {
   limEnsure();
-  if (r.kind === 'pos') { const v = clamp(Math.round((cfg.lim[r.k] + d / 100) * 100) / 100, -1, 1); cfg.lim[r.k] = v; }
+  if (r.kind === 'pos') { const out_ = Math.sign(cfg.lim[r.k]) || r.sign; const v = clamp(Math.round((cfg.lim[r.k] + out_ * d / 100) * 100) / 100, -1, 1); cfg.lim[r.k] = v; }
   else if (r.kind === 'size') cfg.lim[r.k] = clamp(cfg.lim[r.k] + d, 0, 127);
   else { if (r.k === 'zoneLo') cfg.zoneLo = clamp((cfg.zoneLo ?? 40) + d, 1, (cfg.zoneHi ?? 63) - 1); else cfg.zoneHi = clamp((cfg.zoneHi ?? 63) + d, (cfg.zoneLo ?? 40) + 1, 63); }
   cfg.lim.set[r.k] = true; if (r.kind !== 'zone') cfg.lim.on = true; saveCfg(); limShowRow(r);
 }
 function limDmxText(r) {
   const v = limVal(r);
-  if (r.kind === 'pos') { const oX = r.axis === 0 ? v * (cfg.dirX ? -1 : 1) : 0, oY = r.axis === 1 ? v * (cfg.dirY ? -1 : 1) : 0; const keep = [dmx[cfg.address + 5], dmx[cfg.address + 6], dmx[cfg.address + 7], dmx[cfg.address + 8]]; pos16(7, oX, true); pos16(9, oY, true); const ch = r.axis === 0 ? 7 : 9; const a = dmx[cfg.address - 2 + ch], b = dmx[cfg.address - 1 + ch]; [7, 8, 9, 10].forEach((c, i) => (dmx[cfg.address - 2 + c] = keep[i])); return `${(v > 0 ? '+' : '') + Math.round(v * 100)} %  →  ${t('dir.ch')} ${ch}: ${a} / ${ch + 1}: ${b}${Math.abs(v) >= 1 ? '  ' + t('lim.max') : ''}`; }
+  if (r.kind === 'pos') { const [oX, oY] = posOut(r.axis === 0 ? v : 0, r.axis === 1 ? v : 0); const keep = [dmx[cfg.address + 5], dmx[cfg.address + 6], dmx[cfg.address + 7], dmx[cfg.address + 8]]; pos16(7, oX, true); pos16(9, oY, true); const ch = r.axis === 0 ? 7 : 9; const a = dmx[cfg.address - 2 + ch], b = dmx[cfg.address - 1 + ch]; [7, 8, 9, 10].forEach((c, i) => (dmx[cfg.address - 2 + c] = keep[i])); return `${(v > 0 ? '+' : '') + Math.round(v * 100)} %  →  ${t('dir.ch')} ${ch}: ${a} / ${ch + 1}: ${b}${Math.abs(v) >= 1 ? '  ' + t('lim.max') : ''}`; }
   if (r.kind === 'size') return `${t('dir.ch')} 4 = ${v}`;
   return `${t('dir.ch')} 16 = ${v}`;
 }
@@ -309,6 +309,14 @@ function limBuild() {
     const mk = (txt, fn, cls) => { const b = document.createElement('button'); b.className = 'ghost small ' + (cls || ''); b.textContent = txt; b.onclick = fn; return b; };
     const big = r.kind === 'pos' ? 5 : 4;
     el.append(nm, v, mk('👁', () => limShowRow(r), 'lim-show'), mk('−−', () => limStep(r, -big)), mk('−', () => limStep(r, -1)), mk('+', () => limStep(r, 1)), mk('++', () => limStep(r, big)));
+    if (r.kind === 'pos') { // hurtig-menu: hvordan passer kanten i virkeligheden?
+      const sel = document.createElement('select'); sel.className = 'lim-sel';
+      [['', 'lim.q'], ['more10', 'lim.more10'], ['more3', 'lim.more3'], ['ok', 'lim.ok'], ['less3', 'lim.less3'], ['less10', 'lim.less10'], ['max', 'lim.toMax']].forEach(([v_, k_]) => { const o = document.createElement('option'); o.value = v_; o.textContent = t(k_); sel.appendChild(o); });
+      sel.onchange = () => { const a = sel.value; sel.value = ''; if (!a) return; if (a === 'ok') { limEnsure(); cfg.lim.set[r.k] = true; cfg.lim.on = true; saveCfg(); limPaint(); toast(t('lim.okDone')); return; }
+        if (a === 'max') { limEnsure(); cfg.lim[r.k] = r.sign; cfg.lim.set[r.k] = true; cfg.lim.on = true; saveCfg(); limShowRow(r); return; }
+        const n = { more10: 10, more3: 3, less3: -3, less10: -10 }[a]; limStep(r, n); };
+      el.appendChild(sel);
+    }
     box.appendChild(el);
   });
 }
@@ -320,44 +328,71 @@ function limToggle(on) {
   const c = $('#limClose'); if (c) c.onclick = () => limToggle(false);
   const st_ = $('#limStop'); if (st_) st_.onclick = () => { limShow = null; sendNow(); limPaint(); };
   const o = $('#limOn'); if (o) o.onchange = () => { limEnsure(); cfg.lim.on = o.checked; saveCfg(); sendNow(); };
+  const fm = $('#limFull'); if (fm) fm.onclick = () => { limEnsure(); ['top', 'bottom', 'left', 'right'].forEach((k) => { cfg.lim[k] = LIM_ROWS.find((q) => q.k === k).sign; cfg.lim.set[k] = true; }); cfg.lim.on = true; saveCfg(); sendNow(); limPaint(); toast(t('lim.fullDone')); };
   const re = $('#limReread'); if (re) re.onclick = () => { const was = cfg.lim && cfg.lim.on; if (cfg.lim) cfg.lim.on = false; const b = limBelief(); cfg.lim = { on: false, ...b, set: {} }; saveCfg(); limPaint(); toast(t('lim.reread')); if (was) {} };
 }
-// ---------- Retnings-test: appen sender en kommando, viser hvad den sender og hvad den TROR sker – du retter hvis det er forkert ----------
+// ---------- Retnings-test: appen sender en kommando, du vælger i en menu hvad der FAKTISK skete – appen retter sin fortolkning ----------
+// Laserens akser: L = hvor laserens sendte +X og +Y ender i virkeligheden ('r','l','u','d'). Udgangen P = L⁻¹, så app-retning = virkelighed.
+const DV = { r: [1, 0], l: [-1, 0], u: [0, 1], d: [0, -1] };
+const vKey = (v) => (v[0] > 0 ? 'r' : v[0] < 0 ? 'l' : v[1] > 0 ? 'u' : 'd');
+const vNeg = (k) => ({ r: 'l', l: 'r', u: 'd', d: 'u' }[k]);
+function lmap() { const L = cfg.lmap || {}; let x = L.x || (cfg.dirX ? 'l' : 'r'), y = L.y || (cfg.dirY ? 'd' : 'u'); return { x, y }; }
+function posMat() { // P = L^T (signed permutation)
+  const L = lmap(), cx = DV[L.x], cy = DV[L.y]; // kolonner i L
+  return [[cx[0], cx[1]], [cy[0], cy[1]]]; // rækker = kolonner af L
+}
+function posOut(x, y) { const P = posMat(); return [P[0][0] * x + P[0][1] * y, P[1][0] * x + P[1][1] * y]; }
+function lmapObserve(intended, seen) { // app ville 'intended' (vektor) – laseren gik 'seen' (nøgle)
+  const P = posMat(), u = [P[0][0] * intended[0] + P[0][1] * intended[1], P[1][0] * intended[0] + P[1][1] * intended[1]]; // sendt laser-akse
+  const L = lmap(); const axis = u[0] !== 0 ? 'x' : 'y', w = (u[0] + u[1]) > 0 ? seen : vNeg(seen); L[axis] = w;
+  const other = axis === 'x' ? 'y' : 'x'; const hz = (k) => k === 'r' || k === 'l';
+  if (hz(L[axis]) === hz(L[other])) L[other] = hz(L[axis]) ? (L[other] === 'l' ? 'd' : 'u') : (L[other] === 'd' ? 'l' : 'r'); // akserne kan ikke pege samme vej
+  cfg.lmap = L; cfg.dirX = false; cfg.dirY = false; saveCfg();
+}
 const DIR_CMDS = [
-  { k: 'up', run: () => setPos('posY', st.posY + 0.1), fix: 'dirY' },
-  { k: 'down', run: () => setPos('posY', st.posY - 0.1), fix: 'dirY' },
-  { k: 'left', run: () => setPos('posX', st.posX - 0.1), fix: 'dirX' },
-  { k: 'right', run: () => setPos('posX', st.posX + 0.1), fix: 'dirX' },
-  { k: 'bigger', run: () => setSize(clamp(st.size + 0.1, 0, 1)), fix: 'sizeFlip' },
-  { k: 'smaller', run: () => setSize(clamp(st.size - 0.1, 0, 1)), fix: 'sizeFlip' },
-  { k: 'cw', run: () => { st.rotSpeed = 0; st.rotAngle = ((st.rotAngle + 15 + 180) % 360) - 180; saveLook(); syncLookUI(); }, fix: 'rotDir' },
-  { k: 'ccw', run: () => { st.rotSpeed = 0; st.rotAngle = ((st.rotAngle - 15 + 540) % 360) - 180; saveLook(); syncLookUI(); }, fix: 'rotDir' },
-  { k: 'zoneUp', run: () => { cfg.zone = clamp(Math.round((cfg.zone + 0.1) * 100) / 100, 0, 0.9); saveCfg(); if (typeof syncZoneUI === 'function') syncZoneUI(); }, fix: 'zoneFlip' },
-  { k: 'zoneDown', run: () => { cfg.zone = clamp(Math.round((cfg.zone - 0.1) * 100) / 100, 0, 0.9); saveCfg(); if (typeof syncZoneUI === 'function') syncZoneUI(); }, fix: 'zoneFlip' },
-  { k: 'center', run: () => { setPos('posX', 0); setPos('posY', 0); }, fix: 'center' },
+  { k: 'up', run: () => setPos('posY', st.posY + 0.1), kind: 'pos', v: [0, 1] },
+  { k: 'down', run: () => setPos('posY', st.posY - 0.1), kind: 'pos', v: [0, -1] },
+  { k: 'left', run: () => setPos('posX', st.posX - 0.1), kind: 'pos', v: [-1, 0] },
+  { k: 'right', run: () => setPos('posX', st.posX + 0.1), kind: 'pos', v: [1, 0] },
+  { k: 'bigger', run: () => setSize(clamp(st.size + 0.1, 0, 1)), kind: 'size', want: 'bigger' },
+  { k: 'smaller', run: () => setSize(clamp(st.size - 0.1, 0, 1)), kind: 'size', want: 'smaller' },
+  { k: 'cw', run: () => { st.rotSpeed = 0; st.rotAngle = ((st.rotAngle + 15 + 180) % 360) - 180; saveLook(); syncLookUI(); }, kind: 'rot', want: 'cw' },
+  { k: 'ccw', run: () => { st.rotSpeed = 0; st.rotAngle = ((st.rotAngle - 15 + 540) % 360) - 180; saveLook(); syncLookUI(); }, kind: 'rot', want: 'ccw' },
+  { k: 'zoneUp', run: () => { cfg.zone = clamp(Math.round((cfg.zone + 0.1) * 100) / 100, 0, 0.9); saveCfg(); if (typeof syncZoneUI === 'function') syncZoneUI(); }, kind: 'zone', want: 'more' },
+  { k: 'zoneDown', run: () => { cfg.zone = clamp(Math.round((cfg.zone - 0.1) * 100) / 100, 0, 0.9); saveCfg(); if (typeof syncZoneUI === 'function') syncZoneUI(); }, kind: 'zone', want: 'less' },
+  { k: 'center', run: () => { setPos('posX', 0); setPos('posY', 0); }, kind: 'center' },
 ];
-const dirRes = {}; // k → 'ok' | 'fixed'
+const DIR_OPTS = { pos: ['u', 'd', 'l', 'r', 'none'], size: ['bigger', 'smaller', 'none'], rot: ['cw', 'ccw', 'none'], zone: ['more', 'less', 'none'], center: ['yes', 'no'] };
+const dirRes = {}; // k → tekst om hvad der blev rettet
 const DMX_NAMES = { 1: 'lys', 2: 'mønster', 3: 'fps', 4: 'størrelse', 6: 'rotation', 7: 'X', 8: 'X fin', 9: 'Y', 10: 'Y fin', 11: 'farve', 13: 'strobe', 16: 'zone', 17: 'zone til' };
 function dirSnap() { sendNow(); const a = []; for (let c = 1; c <= 19; c++) a.push(dmx[cfg.address - 2 + c] | 0); return a; }
 function dirRun(cmd) {
-  if (raw.on) rawToggle(false); if (special) setSpecial(special);
-  st.move = 'none'; const before = dirSnap(); const appBefore = [out.x, out.y, out.size];
+  if (raw.on) rawToggle(false); if (special) setSpecial(special); limShow = null;
+  st.move = 'none'; const before = dirSnap();
   cmd.run(); sm.x = st.posX; sm.y = st.posY; sm.size = st.size; const after = dirSnap();
   const diff = []; after.forEach((v, i) => { if (v !== before[i]) diff.push(`${t('dir.ch')} ${i + 1}${DMX_NAMES[i + 1] ? ' (' + DMX_NAMES[i + 1] + ')' : ''}: ${before[i]} → ${v}`); });
   const row = document.querySelector(`.dir-row[data-k="${cmd.k}"]`); if (!row) return;
   row.querySelector('.dir-sent').textContent = diff.length ? diff.join(' · ') : t('dir.noChange');
   row.classList.add('ran'); delete dirRes[cmd.k]; dirPaint();
 }
-function dirFix(cmd, ok) {
-  if (ok) { dirRes[cmd.k] = 'ok'; dirPaint(); return; }
-  if (cmd.fix === 'center') { toast(t('dir.centerFix')); return; }
-  cfg[cmd.fix] = !cfg[cmd.fix]; saveCfg(); if (cmd.fix === 'sizeFlip') { const el = $('#sizeFlip'); if (el) el.checked = !!cfg.sizeFlip; }
-  DIR_CMDS.filter((c) => c.fix === cmd.fix).forEach((c) => (dirRes[c.k] = 'fixed'));
-  sendNow(); dirPaint(); toast(t('dir.fixed.' + cmd.fix, { s: t(cfg[cmd.fix] ? 'dir.flipped' : 'dir.normal') }));
+function dirAnswer(cmd, ans) {
+  if (!ans) return;
+  if (ans === 'none') { dirRes[cmd.k] = t('dir.res.none'); dirPaint(); return; }
+  if (cmd.kind === 'center') { dirRes[cmd.k] = ans === 'yes' ? t('dir.res.ok') : t('dir.centerFix'); dirPaint(); return; }
+  if (cmd.kind === 'pos') {
+    if (ans === vKey(cmd.v)) dirRes[cmd.k] = t('dir.res.ok');
+    else { lmapObserve(cmd.v, ans); dirRes[cmd.k] = t('dir.res.fixed', { a: t('dir.cmd.' + cmd.k), b: t('dir.o.' + ans) }); }
+  } else {
+    const flag = { size: 'sizeFlip', rot: 'rotDir', zone: 'zoneFlip' }[cmd.kind];
+    if (ans === cmd.want) dirRes[cmd.k] = t('dir.res.ok');
+    else { cfg[flag] = !cfg[flag]; saveCfg(); if (flag === 'sizeFlip') { const el = $('#sizeFlip'); if (el) el.checked = !!cfg.sizeFlip; } dirRes[cmd.k] = t('dir.res.fixed', { a: t('dir.cmd.' + cmd.k), b: t('dir.o.' + ans) }); }
+  }
+  sendNow(); dirPaint(); toast(dirRes[cmd.k]);
 }
 function dirPaint() {
-  $$('.dir-row').forEach((r) => { const k = r.dataset.k; r.classList.toggle('ok', dirRes[k] === 'ok'); r.classList.toggle('fixed', dirRes[k] === 'fixed'); });
-  const st_ = $('#dirState'); if (st_) st_.textContent = t('dir.state', { x: t(cfg.dirX ? 'dir.flipped' : 'dir.normal'), y: t(cfg.dirY ? 'dir.flipped' : 'dir.normal'), s: t(cfg.sizeFlip ? 'dir.flipped' : 'dir.normal'), r: t(cfg.rotDir ? 'dir.flipped' : 'dir.normal'), z: t(cfg.zoneFlip ? 'dir.flipped' : 'dir.normal') });
+  $$('.dir-row').forEach((r) => { const k = r.dataset.k, res = r.querySelector('.dir-res'); if (res) res.textContent = dirRes[k] || ''; r.classList.toggle('fixed', !!dirRes[k]); const sel = r.querySelector('select'); if (sel) sel.value = ''; });
+  const L = lmap(), st_ = $('#dirState');
+  if (st_) st_.textContent = t('dir.state2', { x: t('dir.a.' + L.x), y: t('dir.a.' + L.y), s: t(cfg.sizeFlip ? 'dir.flipped' : 'dir.normal'), r: t(cfg.rotDir ? 'dir.flipped' : 'dir.normal'), z: t(cfg.zoneFlip ? 'dir.flipped' : 'dir.normal') });
 }
 function dirBuild() {
   const box = $('#dirRows'); if (!box || box.childElementCount) return;
@@ -366,16 +401,19 @@ function dirBuild() {
     const go = document.createElement('button'); go.className = 'ghost small dir-go'; go.textContent = t('dir.cmd.' + cmd.k); go.onclick = () => dirRun(cmd);
     const info = document.createElement('div'); info.className = 'dir-info';
     const th = document.createElement('div'); th.className = 'dir-think'; th.textContent = t('dir.think') + ' ' + t('dir.exp.' + cmd.k);
-    const se = document.createElement('div'); se.className = 'dir-sent mono'; se.textContent = '–'; info.append(th, se);
-    const ok = document.createElement('button'); ok.className = 'ghost small dir-ok'; ok.textContent = '✓'; ok.title = t('dir.okTip'); ok.onclick = () => dirFix(cmd, true);
-    const no = document.createElement('button'); no.className = 'ghost small dir-no'; no.textContent = '✗'; no.title = t('dir.noTip'); no.onclick = () => dirFix(cmd, false);
-    r.append(go, info, ok, no); box.appendChild(r);
+    const se = document.createElement('div'); se.className = 'dir-sent mono'; se.textContent = '–';
+    const res = document.createElement('div'); res.className = 'dir-res'; info.append(th, se, res);
+    const sel = document.createElement('select'); sel.className = 'dir-sel';
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = t('dir.what'); sel.appendChild(o0);
+    DIR_OPTS[cmd.kind].forEach((k) => { const o = document.createElement('option'); o.value = k; o.textContent = t('dir.o.' + k); sel.appendChild(o); });
+    sel.onchange = () => dirAnswer(cmd, sel.value);
+    r.append(go, info, sel); box.appendChild(r);
   });
   dirPaint();
 }
 function dirToggle(on) { const p = $('#pvDirPanel'); if (!p) return; const show = on == null ? p.hidden : on; p.hidden = !show; $('#pvDir').classList.toggle('on', show); if (show) { dirBuild(); dirPaint(); } }
 { const b = $('#pvDir'); if (b) b.onclick = () => dirToggle(); const c = $('#dirClose'); if (c) c.onclick = () => dirToggle(false);
-  const r = $('#dirReset'); if (r) r.onclick = () => { ['dirX', 'dirY', 'rotDir', 'zoneFlip'].forEach((k) => (cfg[k] = false)); cfg.sizeFlip = false; saveCfg(); for (const k in dirRes) delete dirRes[k]; sendNow(); dirPaint(); toast(t('dir.resetDone')); }; }
+  const r = $('#dirReset'); if (r) r.onclick = () => { ['dirX', 'dirY', 'rotDir', 'zoneFlip', 'sizeFlip'].forEach((k) => (cfg[k] = false)); cfg.lmap = null; saveCfg(); for (const k in dirRes) delete dirRes[k]; sendNow(); dirPaint(); toast(t('dir.resetDone')); }; }
 (() => {
   const b = $('#pvRaw'); if (!b) return; b.onclick = () => rawToggle();
   const bind = (id, k) => { const el = $('#' + id); if (!el) return; el.addEventListener('input', () => { raw[k] = +el.value; rawSync(); sendNow(); }); };
@@ -1047,7 +1085,7 @@ function setSpecial(v) {
 // DJ-tilstand (19 kanaler) – laserens standard
 function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
   const show = on && st.pattern > 0 && (cfg.calibDone || camCal.active); // intet mønster = helt slukket (nogle kort har en 000.ild); ingen mønstre før området er kalibreret
-  const oX = out.sendX * (cfg.dirX ? -1 : 1), oY = out.sendY * (cfg.dirY ? -1 : 1); // Retnings-test: rettet fortolkning af X/Y-signalet
+  const [oX, oY] = posOut(out.sendX, out.sendY); // Retnings-test: rettet fortolkning af X/Y-signalet (vendt/byttet)
   const qf = quadrantFix(st.pattern, oX, oY);
   setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
   setCh(2, show ? qf.pat : 0);

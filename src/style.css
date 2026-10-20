@@ -722,10 +722,10 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .rawch-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 4px 0; }
 .rawch { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--muted); }
 .rawch input { width: 100%; min-width: 0; height: 22px; font-size: 11px; padding: 0 4px; }
-.pv-dir { width: 380px; bottom: 12px; overflow-y: auto; background: rgba(7,8,12,.97); border-color: rgba(120,180,255,.45); }
+.pv-dir { width: 470px; bottom: 12px; overflow-y: auto; background: rgba(7,8,12,.97); border-color: rgba(120,180,255,.45); }
 .pv-dir h3 { color: #9cc8ff; }
 #pvDir.on { border-color: #7ab4ff; color: #9cc8ff; }
-.dir-row { display: grid; grid-template-columns: 118px 1fr 28px 28px; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 6px; border: 1px solid transparent; margin-bottom: 3px; }
+.dir-row { display: grid; grid-template-columns: 112px 1fr 150px; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 6px; border: 1px solid transparent; margin-bottom: 3px; }
 .dir-row.ran { border-color: rgba(255,255,255,.12); }
 .dir-row.ok { border-color: #31f3ac; background: rgba(49,243,172,.07); }
 .dir-row.fixed { border-color: #ffaa3c; background: rgba(255,170,60,.08); }
@@ -744,3 +744,7 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .lim-row.showing { border-color: #7ab4ff; background: rgba(122,180,255,.08); }
 .lim-row button { padding: 2px 0; min-width: 0; }
 #pvLim.on { border-color: #7ab4ff; color: #9cc8ff; }
+.dir-sel, .lim-sel { width: 100%; font-size: 11px; height: 26px; background: #11131a; color: var(--text); border: 1px solid rgba(255,255,255,.15); border-radius: 6px; }
+.dir-res { color: #ffaa3c; font-size: 10.5px; }
+.lim-row { grid-template-areas: "n s a b c d" "v v v v v v" "q q q q q q"; }
+.lim-row .lim-sel { grid-area: q; }
