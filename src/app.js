@@ -1653,12 +1653,7 @@ function computeFrame(now) {
     const L = cfg.lim, ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
     // laseren folder mønstret tilbage når mønstrets kant rammer scannerens yderste: midten må højst stå 1 − k·størrelse ude (målt)
     const F = cfg.dmxMode === 'pro' ? {} : cfg.fold || {}, fs = clamp(sizeApp, 0.05, 1), cX = cfg.ctrX || 0, cY = cfg.ctrY || 0;
-    let lo = (k) => -1 + (F[k] ?? F.all ?? 0) * fs, hi = (k) => 1 - (F[k] ?? F.all ?? 0) * fs;
-    if (cfg.dmxMode === 'pro') { // hele mønstret skal blive i feltet: midten kan gå helt ud til mønstrets kant rammer kanten – uanset størrelse
-      const pb = patBox(st.pattern), fr_ = patHalfSent(sizeApp), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
-      const hx = Math.min(1, (pb.hx * c_ + pb.hy * s_) * fr_), hy = Math.min(1, (pb.hx * s_ + pb.hy * c_) * fr_);
-      lo = (k) => (k === 'left' ? -1 + hx : -1 + hy); hi = (k) => (k === 'right' ? 1 - hx : 1 - hy);
-    }
+    const lo = (k) => -1 + (F[k] ?? F.all ?? 0) * fs, hi = (k) => 1 - (F[k] ?? F.all ?? 0) * fs;
     const [sx, sy] = appToSent(ax_, ay_), cx = clamp(sx, Math.max(L.left, lo('left') - cX), Math.min(L.right, hi('right') - cX)), cy = clamp(sy, Math.max(L.bottom, lo('bottom') - cY), Math.min(L.top, hi('top') - cY));
     clamped = Math.abs(cx - sx) > 1e-4 || Math.abs(cy - sy) > 1e-4; sendX = cx; sendY = cy; rawX = cx; rawY = cy;
     [axc, ayc] = sentToApp(cx + (cfg.ctrX || 0), cy + (cfg.ctrY || 0));
