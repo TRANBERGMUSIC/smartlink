@@ -1673,11 +1673,18 @@ function computeFrame(now) {
     if (cfg.lim && cfg.lim.on) [axc, ayc] = sentToApp(sendX, sendY);
   }
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
-  if (cfg.dmxMode === 'pro' && autoMode !== 'off' && !con.pos && !special && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') {
-    const line = -1 + 2 * zoneEff(), pb = patBox(st.pattern), avail = 1 - line; let fr_ = patHalfSent(sizeApp);
-    if (pb.hy * fr_ * 2 > avail * 0.95) { const want = avail * 0.95 / 2 / Math.max(0.01, pb.hy), l = ShowNET.sizeLimits(profFor('pro'), 'pro'), top_ = Math.max(l.min, Math.min(l.max, cfg.sizeMax ?? 1)); sizeApp = Math.min(sizeApp, clamp((want - l.min) / Math.max(1e-6, top_ - l.min), 0, 1)); fr_ = patHalfSent(sizeApp); }
-    const hh = pb.hy * fr_; sendY = clamp(sendY, Math.min(1, line + hh), Math.max(line + hh, 1 - hh)); [axc, ayc] = sentToApp(sendX, sendY);
+  if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
+    // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
+    const line = -1 + 2 * zoneEff() + 0.03, edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
+    const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
+    const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
+    const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
+    const want = Math.min(availH / 2 / Math.max(0.01, uy), availW / 2 / Math.max(0.01, ux));
+    if (fr_ > want) { const l = ShowNET.sizeLimits(profFor('pro'), 'pro'), top_ = Math.max(l.min, Math.min(l.max, cfg.sizeMax ?? 1)); sizeApp = Math.min(sizeApp, clamp((want - l.min) / Math.max(1e-6, top_ - l.min), 0, 1)); fr_ = patHalfSent(sizeApp); }
+    const hw = ux * fr_, hh = uy * fr_;
+    sendX = clamp(sendX, -edge + hw, Math.max(-edge + hw, edge - hw)); sendY = clamp(sendY, Math.min(edge, line + hh), Math.max(line + hh, edge - hh)); [axc, ayc] = sentToApp(sendX, sendY);
   }
+
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
   out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
@@ -1822,7 +1829,7 @@ function patExtent(n, ang = 0) {
 }
 const pbCache = new Map();
 function patBox(n) { // mønstrets halve bredde/højde omkring dets egen midte (mønster-koordinater)
-  if (pbCache.has(n)) return pbCache.get(n); const fr = patData.get(n); if (!fr || !fr.length) return { hx: 0.5, hy: 0.5 };
+  if (pbCache.has(n)) return pbCache.get(n); const fr = patData.get(n); if (!fr || !fr.length) { if (patAvail.has(n)) loadPat(n); return { hx: 1, hy: 1 }; } // ukendt mønster: regn med at det fylder hele rammen (sikker side)
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const f of fr) for (let i = 0; i < f.n; i++) { if (f.bl[i]) continue; const x = f.xy[i * 2], y = f.xy[i * 2 + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const b = x0 === Infinity ? { hx: 0, hy: 0 } : { hx: (x1 - x0) / 2, hy: (y1 - y0) / 2 }; pbCache.set(n, b); return b;
