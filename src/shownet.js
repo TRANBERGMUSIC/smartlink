@@ -96,8 +96,9 @@
       const c = s.color || { mode: 'orig' };
       if (c.mode === 'rgb') { ch(13, 248); ch(14, c.rgb[0]); ch(15, c.rgb[1]); ch(16, c.rgb[2]); } else if (c.mode === 'white') ch(13, 232); else ch(13, 0);
       ch(17, s.strobe > 0 ? 16 + s.strobe * 239 : 0); ch(18, 0);
-      ch(19, (s.zone || 0) * 255); ch(20, s.zone > 0 ? 255 : 0);
-      ch(21, 255); ch(22, 255); ch(23, 255); ch(24, 0); ch(25, 0); for (let n = 26; n <= 29; n++) ch(n, 128);
+      // 19: zone – 0–63 bund, 64–127 top, 128–191 venstre, 192–255 højre (størrelse inden for området). 20: 0 = fuld lys, 255 = intet lys i zonen
+      const zb = { bottom: 0, top: 64, left: 128, right: 192 }[s.zoneSide || 'bottom'] ?? 0; ch(19, s.zone > 0 ? zb + Math.round(clamp(s.zone, 0, 1) * 63) : 0); ch(20, s.zone > 0 ? 255 : 0);
+      ch(21, 0); ch(22, 0); ch(23, 0); // farvebalance: 0 = MAKSIMUM, 255 = ingen (Laserworld-chart) ch(24, 0); ch(25, 0); for (let n = 26; n <= 29; n++) ch(n, 128);
       return f;
     }
     ch(1, on ? Math.max(1, (s.intensity ?? 1) * 255) : 0); ch(2, on ? s.pattern : 0); ch(3, s.freeze ? 16 : fpsEncode(s.fps ?? 50, 'dj'));
@@ -122,7 +123,8 @@
       out.sizeDmxX = g(10); out.sizeDmxY = g(11); out.sizeX = sizeFromDmx(g(10), P, 'pro'); out.sizeY = sizeFromDmx(g(11), P, 'pro');
       const inv = g(12); out.invX = inv >= 64 && inv < 128 || inv >= 192; out.invY = inv >= 128;
       const c = g(13); out.color = c < 16 ? { mode: 'orig' } : c >= 240 ? { mode: 'rgb', rgb: [g(14), g(15), g(16)] } : c >= 208 ? { mode: 'white' } : { mode: 'fixed', v: c };
-      out.strobe = g(17) < 16 ? 0 : (g(17) - 16) / 239; out.zone = g(19) / 255;
+      out.strobe = g(17) < 16 ? 0 : (g(17) - 16) / 239; out.zone = g(20) > 0 ? (g(19) % 64) / 63 : 0; out.zoneSide = ['bottom', 'top', 'left', 'right'][g(19) >> 6];
+      out.balance = [1 - g(21) / 255, 1 - g(22) / 255, 1 - g(23) / 255]; if (out.balance.every((b) => b < 0.02)) out.tooDark = true;
       out.tooSmall = g(10) >= P.dmxMinVisible.pro || g(11) >= P.dmxMinVisible.pro;
     } else {
       out.fps = fpsDecode(g(3), 'dj');
@@ -136,7 +138,7 @@
       out.strobe = g(13) < 16 ? 0 : (g(13) - 16) / 239; out.zone = g(16) > 64 ? (g(16) - 84) / 42 : 0;
       out.tooSmall = sz <= 127 && sz >= P.dmxMinVisible.dj; out.opMode = g(14);
     }
-    out.visible = out.intensity > 0 && out.pattern > 0 && !out.tooSmall;
+    out.visible = out.intensity > 0 && out.pattern > 0 && !out.tooSmall && !out.tooDark;
     return out;
   }
 

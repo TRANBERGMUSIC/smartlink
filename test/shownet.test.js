@@ -48,6 +48,7 @@ test('decode(encode(s)) == s (Pro)', () => {
     near(d.fps, s.fps, 0.45, 'fps'); near(d.rotDeg, s.rotDeg, 360 / 65536 + 1e-6, 'rot'); assert.strictEqual(d.invX, s.invX); assert.strictEqual(d.invY, s.invY); assert.strictEqual(d.pattern, s.pattern); assert.strictEqual(d.visible, true);
     for (const v of f) assert.ok(Number.isInteger(v) && v >= 0 && v <= 255);
     for (let k = 30; k <= 34; k++) assert.strictEqual(f[k - 1], 0, 'kanal 30–34 er reserveret');
+    for (let k = 21; k <= 23; k++) assert.strictEqual(f[k - 1], 0, 'farvebalance 0 = fuld lys');
   }
 });
 test('decode(encode(s)) == s (DJ, alle positionsmodeller)', () => {
@@ -58,6 +59,7 @@ test('decode(encode(s)) == s (DJ, alle positionsmodeller)', () => {
     assert.strictEqual(f[13], 0, 'DJ kanal 14 (operation mode) skal være 0');
   }
 });
+test('Pro zone: bund 0–63, intensitet 255 = intet lys', () => { const f = S.encode({ on: true, pattern: 1, zone: 0.5, zoneSide: 'top' }, null, 'pro'); assert.strictEqual(f[18], 64 + 32); assert.strictEqual(f[19], 255); const d = S.decode(f, null, 'pro'); near(d.zone, 32 / 63, 1e-9, 'zone'); assert.strictEqual(d.zoneSide, 'top'); });
 test('slukket = intet synligt', () => { assert.strictEqual(S.decode(S.encode({ on: false, pattern: 3 }, null, 'pro'), null, 'pro').visible, false); assert.strictEqual(S.decode(S.encode({ on: true, pattern: 0 }, null, 'pro'), null, 'pro').visible, false); });
 test('transformationskæde: skalér og rotér om ILDA-origo, ikke mønstrets midte', () => {
   const d = { sizeX: 0.5, sizeY: 0.5, rotDeg: 90, x: 0.2, y: 0, invX: false, invY: false };

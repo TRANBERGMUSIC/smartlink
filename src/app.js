@@ -320,7 +320,7 @@ function calMode() { return cfg.dmxMode === 'pro' ? 'pro' : 'dj'; }
 function calMeas() { const P = prof(); P.measurements = P.measurements || {}; const M = P.measurements; M.field = M.field || {}; M.pos = M.pos || []; M.size = M.size || []; M.rot = M.rot || []; return M; }
 function calBase() { // trin 1: kanal 1 = 200, valgt mønster, alle effekter 0, fuld størrelse, position i midten (DJ kanal 14 = 0)
   const m = calMode(), f = new Uint8Array(m === 'pro' ? 34 : 19), pat = clamp(cfg.calPattern || cfg.boxPattern || 1, 1, 255);
-  if (m === 'pro') { f[0] = 200; f[1] = pat; f[2] = 128; f[3] = 128; f[5] = 128; f[7] = 128; f[20] = 255; f[21] = 255; f[22] = 255; for (let n = 26; n <= 29; n++) f[n - 1] = 128; }
+  if (m === 'pro') { f[0] = 200; f[1] = pat; f[2] = 128; f[3] = 128; f[5] = 128; f[7] = 128; for (let n = 26; n <= 29; n++) f[n - 1] = 128; } // 21–23 = 0 = fuld farvebalance
   else { f[0] = 200; f[1] = pat; f[2] = 0; f[3] = 0; f[4] = 0; f[5] = 96; const c = ShowNET.posEncode(0, djModel()); f[6] = c >> 8; f[7] = c & 255; f[8] = c >> 8; f[9] = c & 255; }
   return f;
 }
@@ -478,14 +478,10 @@ function patHalfSent(size) { // mønster-koordinat 1 → felt-enheder ved fader-
   if (cfg.dmxMode === 'pro') { const l = ShowNET.sizeLimits(profFor('pro'), 'pro'); return l.min + clamp(size, 0, 1) * (l.max - l.min); }
   return ShowNET.sizeFromDmx(sizeCh4(size), profFor('dj'), 'dj');
 }
-function viewGeom() { // LIVE i felt-koordinater (−1…1 = hele scanfeltet), midten i midten, samme skala begge veje, zoomet ud
-  const L = cfg.lim || {}, m = 0.25, z = cfg.viewZoom || 1, cx = cfg.ctrX || 0, cy = cfg.ctrY || 0, A = pvAspect || 2;
-  const rx = Math.max(1 + Math.abs(cx), -(L.left ?? -1), L.right ?? 1) + m, ry = Math.max(1 + Math.abs(cy), L.top ?? 1, -(L.bottom ?? -1)) + m;
-  const hy = Math.max(ry, rx / A), hx = hy * A; return { l: hx * z, r: hx * z, b: hy * z, t: hy * z };
-}
+function viewGeom() { return { l: 1, r: 1, b: 1, t: 1 }; } // LIVE = hele laserens scanfelt (laserens "POV"): hele det sorte område, uanset zoom
 function viewHalf() { const v = viewGeom(); return [(v.l + v.r) / 2, (v.b + v.t) / 2]; }
-function appToSent(ax, ay) { const v = viewGeom(), G = cfg.viewGain || {}; return [ax >= 0 ? ax * v.r / (G.right || 1) : ax * v.l / (G.left || 1), ay >= 0 ? ay * v.t / (G.top || 1) : ay * v.b / (G.bottom || 1)]; } // → sendt (før midte)
-function sentToApp(sx, sy) { const v = viewGeom(), G = cfg.viewGain || {}, px = sx - (cfg.ctrX || 0), py = sy - (cfg.ctrY || 0); return [px >= 0 ? px * (G.right || 1) / v.r : px * (G.left || 1) / v.l, py >= 0 ? py * (G.top || 1) / v.t : py * (G.bottom || 1) / v.b]; }
+function appToSent(ax, ay) { return [clamp(ax, -1, 1) - (cfg.ctrX || 0), clamp(ay, -1, 1) - (cfg.ctrY || 0)]; } // LIVE-punkt = feltpunkt (før midten lægges til)
+function sentToApp(sx, sy) { return [sx, sy]; } // feltkoordinat (−1…1) = LIVE-koordinat
 // ---------- Ret mens du rykker: appen siger hvad den tror – du retter den direkte i LIVE ----------
 var fb = { click: false, timer: null };
 function fbEnsureLim() { if (!cfg.lim || !cfg.lim.on) { limEnsure(); cfg.lim.on = true; ['top', 'bottom', 'left', 'right'].forEach((k) => (cfg.lim.set[k] = true)); saveCfg(); } }
@@ -642,7 +638,7 @@ function wizRender() {
   wizInfo();
 }
 function wizCenterHere() { // dér hvor mønstret står nu (trukket i LIVE / pile) = laserens midte
-  sendNow(); const E = finalEdges(); cfg.ctrX = clamp(out.sendX, -1, 1); cfg.ctrY = clamp(out.sendY, -1, 1); cfg.axis = { x: cfg.ctrX, y: cfg.ctrY }; st.posX = 0; st.posY = 0; sm.x = 0; sm.y = 0; saveCfg(); syncCtrUI(); if (cfg.edgesUser) setFinalEdges(E); else wizLimFull(); sendNow();
+  sendNow(); const E = finalEdges(); cfg.ctrX = clamp(out.sendX, -1, 1); cfg.ctrY = clamp(out.sendY, -1, 1); cfg.axis = { x: cfg.ctrX, y: cfg.ctrY }; saveCfg(); syncCtrUI(); if (cfg.edgesUser) setFinalEdges(E); else wizLimFull(); sendNow();
 }
 function wizFmtSweep(fmt) { // kør langsomt helt fra venstre til højre – det rigtige format bevæger sig jævnt hele vejen uden at hoppe eller vende om
   clearInterval(wiz.fmtT); let v = -1; wiz.fmtT = setInterval(() => { v += 0.02; if (v > 1.0001) { clearInterval(wiz.fmtT); wiz.fmtT = null; return; } wizFmtTest(fmt, v); const el = $('#wizFmtOut'); if (el) el.textContent = t('wiz.fmtSweepAt', { f: { s: 'A', u: 'B', t: 'C' }[fmt], v: Math.round(v * 100) }) + ' · ' + el.textContent; }, 110);
@@ -1491,8 +1487,8 @@ function specialFrame(on) {
     const ol = g.offLaser ?? 0; put16(4, g.vertical ? 0.5 + ol / 2 : 0.5); put16(6, g.vertical ? 0.5 : 0.5 + ol / 2); put16(8, 0.5);
     setCh(10, g.vertical ? 255 : 0); setCh(11, g.vertical ? 0 : 255);
     setCh(13, 248); setCh(14, g.rgb[0]); setCh(15, g.rgb[1]); setCh(16, g.rgb[2]);
-    setCh(19, special !== 'line' ? 0 : zoneVal()); setCh(20, special !== 'line' ? 0 : cfg.zone > 0 ? 255 : 0);
-    setCh(21, 255); setCh(22, 255); setCh(23, 255);
+    setCh(19, 0); setCh(20, 0);
+    setCh(21, 0); setCh(22, 0); setCh(23, 0); // farvebalance 0 = fuld
     for (let c = 26; c <= 29; c++) setCh(c, 128);
   } else {
     setCh(1, inten); setCh(2, on ? pat : 0); setCh(3, 0);
@@ -1697,7 +1693,7 @@ function proFrame(on, ang, mode, rgb, bright, strobe) { // Professional Mode: ti
   if (cfg.patCenterFix !== false && !con.pos && !raw.on && !measure && !camCal.active) { const c = patCenter(st.pattern); [rcx, rcy] = rotV(c.x * frac, c.y * frac, rotDeg); }
   const x = (invX ? -oX : oX) - rcx, y = (invY ? -oY : oY) - rcy; out.patOff = [rcx, rcy]; // inversion spejler også positionen (firmwarens rækkefølge)
   const f = ShowNET.encode({ on: show, intensity: master * cfg.maxInt * bright, pattern: st.pattern, fps: fpsFrac(st.fps) * 100, freeze: st.freeze, x, y, sizeX: frac, sizeY: frac, rotDeg, invX, invY,
-    color: mode === 'orig' ? { mode: 'orig' } : { mode: 'rgb', rgb }, strobe, zone: cfg.zone }, P, 'pro');
+    color: mode === 'orig' ? { mode: 'orig' } : { mode: 'rgb', rgb }, strobe, zone: cfg.zone, zoneSide: cfg.zoneSide }, P, 'pro');
   const a0 = cfg.address - 1; for (let i = 0; i < f.length; i++) dmx[a0 + i] = f[i];
 }
 
@@ -2155,7 +2151,7 @@ function syncSizeUI() {
 $('#sizeLive').addEventListener('input', (e) => setSize(e.target.value / 100));
 $('#szMinus').onclick = () => setSize(st.size - 0.05); $('#szPlus').onclick = () => setSize(st.size + 0.05);
 $$('#pvSizeBar button[data-k]').forEach((b) => (b.onclick = () => setPos(b.dataset.k, st[b.dataset.k] + 0.05 * +b.dataset.d)));
-$('#posReset').onclick = () => { st.posX = 0; st.posY = 0; setSize(0.8); };
+$('#posReset').onclick = () => { st.posX = cfg.lim && cfg.lim.on ? cfg.ctrX || 0 : 0; st.posY = cfg.lim && cfg.lim.on ? cfg.ctrY || 0 : 0; setSize(0.8); };
 $('#pvMax').onclick = () => setSpecial('max');
 $('#pvMeasure').onclick = () => (measure ? measureStop(false) : measureStart());
 $('#msSkip').onclick = () => measureNext();
@@ -2363,12 +2359,6 @@ function previewTick(now) {
       if (isFallback) { g.fillStyle = '#5b5b57'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t(patAvail.size ? 'pv.missing' : 'pv.load', { n: st.pattern }), W / 2, B.y + 20); }
     }
     drawZone(g, W, H);
-    if (cfg.lim && cfg.lim.on) { // ramme for hele scanfeltet (−1…1) og den gemte projektionszone
-      const P = prof(), rect = (l, r, b_, t_, col, dash, label) => { const [a1, b1] = sentToApp(l, t_), [a2, b2] = sentToApp(r, b_), [p1x, p1y] = boxPt(B, a1, b1), [p2x, p2y] = boxPt(B, a2, b2); g.save(); g.strokeStyle = col; g.setLineDash(dash); g.strokeRect(p1x, p1y, p2x - p1x, p2y - p1y); g.setLineDash([]); if (label) { g.fillStyle = col; g.font = '10px -apple-system'; g.textAlign = 'left'; g.fillText(label, p1x + 4, p1y + 12); } g.restore(); };
-      const wM = P.throwM ? 2 * P.throwM * Math.tan(P.scanDegX / 2 * Math.PI / 180) : 0, hM = P.throwM ? 2 * P.throwM * Math.tan(P.scanDegY / 2 * Math.PI / 180) : 0;
-      rect(-1, 1, -1, 1, 'rgba(122,180,255,.28)', [3, 6], t('pv.field') + (wM ? ` · ${wM.toFixed(1)} × ${hM.toFixed(1)} m` : ''));
-      const Z = P.zone; if (Z.l > -1 || Z.r < 1 || Z.b > -1 || Z.t < 1) rect(Z.l, Z.r, Z.b, Z.t, 'rgba(255,170,60,.45)', [6, 4], t('pv.storedZone'));
-    }
     if (autoMode === 'laser') {
       g.font = '600 11px -apple-system'; const txt = t('pv.laserMic'); const tw = g.measureText(txt).width;
       g.fillStyle = 'rgba(49,243,172,0.12)'; g.fillRect((W - tw) / 2 - 10, 40, tw + 20, 22);
@@ -3005,6 +2995,7 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2310pov) { cfg.viewZoom = 1; cfg.mig2310pov = true; saveCfg(); }
 if (!cfg.mig2310pro) { // 23/10: Professional Mode + ShowNET-mapping. DJ-tidens rettelser (midte, kanter, vending, fold) passer ikke længere → nulstil
   cfg.dmxMode = 'pro'; cfg.profile = ShowNET.profileOf(cfg.profile); cfg.ctrX = 0; cfg.ctrY = 0; cfg.axis = { x: 0, y: 0 }; cfg.edgesUser = false;
   cfg.orient = { on: false, q: {}, pat: {} }; cfg.flipLearn = null; cfg.lmap = null; cfg.dirX = false; cfg.dirY = false; cfg.fold = {}; cfg.zoneSent = {}; cfg.kpps = 0; cfg.animScale = 1; cfg.viewGain = {};
