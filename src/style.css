@@ -814,3 +814,9 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .pv-zoom output { white-space: nowrap; min-width: 42px; }
 .pv-or { width: 460px; border-color: rgba(200,140,255,.5); } .pv-or h3 { color: #d3a8ff; } #pvOr.on { border-color: #b98cff; color: #d3a8ff; }
 .or-row { display: grid; grid-template-columns: 1fr 170px auto; gap: 6px; align-items: center; margin: 4px 0; font-size: 11.5px; color: var(--text); }
+.pv-co { width: 440px; border-color: rgba(49,243,172,.5); } .pv-co h3 { color: #31f3ac; } #pvCo.on { border-color: #31f3ac; color: #31f3ac; }
+.co-grid { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.co-row { display: grid !important; grid-template-columns: 1fr 90px 52px; gap: 6px; align-items: center; font-size: 11.5px; color: var(--text); margin: 2px 0 !important; }
+.co-row input { width: 100%; height: 26px; font-size: 12px; padding: 0 6px; background: #0b0d13; color: var(--text); border: 1px solid rgba(255,255,255,.18); border-radius: 6px; font-variant-numeric: tabular-nums; }
+.co-corners { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px; }
+.co-corners button { font-size: 11px; font-variant-numeric: tabular-nums; }

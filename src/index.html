@@ -51,6 +51,7 @@
         <button class="ghost small pv-tool" id="pvMenuBtn" data-i18n="pv.menu"></button>
         <div class="pv-menu" id="pvMenu" hidden>
           <button class="ghost small pv-tool wiz-btn" id="pvWiz" data-i18n="wiz.btn" data-i18n-title="wiz.tip"></button>
+          <button class="ghost small pv-tool" id="pvCo" data-i18n="co.btn" data-i18n-title="co.tip"></button>
           <button class="ghost small pv-tool" id="pvOr" data-i18n="or.btn" data-i18n-title="or.tip"></button>
           <button class="ghost small pv-tool" id="pvCon" data-i18n="con.btn" data-i18n-title="con.tip"></button>
           <button class="ghost small pv-tool" id="pvFb" data-i18n="fb.btn" data-i18n-title="fb.tip"></button>
@@ -63,6 +64,12 @@
           <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
           <button class="ghost small pv-tool" id="pvLim" data-i18n="lim.btn" data-i18n-title="lim.tip"></button>
         </div>
+      </div>
+      <div class="pv-cal pv-dir pv-co" id="pvCoPanel" hidden>
+        <h3 data-i18n="co.title"></h3>
+        <p class="cal-instr" data-i18n="co.intro"></p>
+        <div id="coBody"></div>
+        <div class="cal-r1 wiz-nav"><button class="ghost small" id="coClose" data-i18n="dir.close"></button></div>
       </div>
       <div class="pv-cal pv-dir pv-or" id="pvOrPanel" hidden>
         <h3 data-i18n="or.title"></h3>
@@ -392,6 +399,9 @@
     <div class="row"><span class="hint" data-i18n="set.ctrHint"></span><button class="ghost small" id="ctrReset" data-i18n="set.ctrReset"></button></div>
     <label class="row"><span data-i18n="set.zoneLo"></span><input type="range" id="zoneLo" min="1" max="62" value="40"><output></output></label>
     <label class="row"><span data-i18n="set.zoneHi"></span><input type="range" id="zoneHi" min="2" max="63" value="63"><output></output></label>
+    <label class="row"><span data-i18n="set.arrowFlipX"></span><input type="checkbox" id="arrowFlipX"></label>
+    <label class="row"><span data-i18n="set.arrowFlipY"></span><input type="checkbox" id="arrowFlipY"></label>
+    <label class="row"><span data-i18n="set.arrowSwap"></span><input type="checkbox" id="arrowSwap"></label>
     <label class="row"><span data-i18n="set.animScale"></span><input type="range" id="animScale" min="10" max="400" value="100"><output></output></label>
     <label class="row"><span data-i18n="set.kpps"></span><input type="range" id="kpps" min="0" max="60" value="30"><output></output></label>
     <div class="row"><span class="hint" data-i18n="set.animHint"></span><button class="ghost small" id="animSync" data-i18n="set.animSync"></button></div>
