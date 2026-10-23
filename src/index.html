@@ -50,6 +50,7 @@
         <button class="ghost small pv-tool" id="pvMove" data-i18n="pv.move" data-i18n-title="pv.moveTip"></button>
         <button class="ghost small pv-tool" id="pvMenuBtn" data-i18n="pv.menu"></button>
         <div class="pv-menu" id="pvMenu" hidden>
+          <button class="ghost small pv-tool" id="pvCalSn" data-i18n="csn.btn" data-i18n-title="csn.tip"></button>
           <button class="ghost small pv-tool wiz-btn" id="pvWiz" data-i18n="wiz.btn" data-i18n-title="wiz.tip"></button>
           <button class="ghost small pv-tool" id="pvCo" data-i18n="co.btn" data-i18n-title="co.tip"></button>
           <button class="ghost small pv-tool" id="pvOr" data-i18n="or.btn" data-i18n-title="or.tip"></button>
@@ -64,6 +65,11 @@
           <button class="ghost small pv-tool" id="pvDir" data-i18n="dir.btn" data-i18n-title="dir.tip"></button>
           <button class="ghost small pv-tool" id="pvLim" data-i18n="lim.btn" data-i18n-title="lim.tip"></button>
         </div>
+      </div>
+      <div class="pv-cal pv-dir pv-calsn" id="pvCalSnPanel" hidden>
+        <h3><span data-i18n="csn.title"></span> · <span id="calSnStep"></span></h3>
+        <div id="calSnBody"></div>
+        <div class="cal-r1 wiz-nav"><button class="ghost small" id="calSnBack" data-i18n="wiz.back"></button><button class="small primary" id="calSnNext"></button><button class="ghost small" id="calSnClose" data-i18n="dir.close"></button></div>
       </div>
       <div class="pv-cal pv-dir pv-co" id="pvCoPanel" hidden>
         <h3 data-i18n="co.title"></h3>
@@ -577,6 +583,7 @@
 <script src="showgen.js"></script>
 <script src="words.js"></script>
 <script src="designer.js"></script>
+<script src="shownet.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

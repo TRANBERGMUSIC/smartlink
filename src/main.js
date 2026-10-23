@@ -391,6 +391,9 @@ function remoteStop() {
 }
 function notifyRemoteCount() { if (win && !win.isDestroyed()) win.webContents.send('remote-count', remote.clients.size); }
 // USB-diagnose: kør macOS' egne værktøjer og gem resultatet i den delte SmartLink-mappe (så det kan læses udefra)
+ipcMain.handle('profile-save', async (_e, txt) => { // laserprofil til ~/Desktop/SmartLink/laser-profile.json (tests læser den)
+  try { const dir = path.join(os.homedir(), 'Desktop', 'SmartLink'); fs.mkdirSync(dir, { recursive: true }); const f = path.join(dir, 'laser-profile.json'); fs.writeFileSync(f, String(txt)); return { ok: true, path: f }; } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.on('state-dump', (_e, txt) => { // kopi af indstillingerne til fejlsøgning (kun hvis mappen findes)
   try { const dir = path.join(os.homedir(), 'Desktop', 'SmartLink'); if (fs.existsSync(dir) && typeof txt === 'string' && txt.length < 5e6) fs.writeFile(path.join(dir, 'smartlink-state.json'), txt, () => {}); } catch (_) {}
 });

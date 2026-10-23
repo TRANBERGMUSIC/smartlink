@@ -87,6 +87,13 @@ const MOVES = ['none', 'circle', 'eight', 'sweep', 'bounce'];
 const MOVE_DA = new Proxy({}, { get: (_o, k) => t('move.' + String(k)) });
 
 const saveLook = debounce(() => store.set('look', st), 300);
+// ---------- laserprofil (ShowNET) – alt hvad kalibreringen har målt; se src/shownet.js ----------
+function prof() { if (!cfg.profile || !cfg.profile._ok) cfg.profile = { ...ShowNET.profileOf(cfg.profile), _ok: true }; cfg.profile.mode = cfg.dmxMode === 'pro' ? 'pro' : 'dj'; return cfg.profile; } // samme objekt hver gang (ændringer bliver i profilen)
+const djModel = () => ({ s: 's', t: 'h1', u: 'u', h2: 'h2' }[cfg.posFmt] || 's');
+function profFor(mode) { const P = prof(); return mode === 'dj' ? { ...P, posModel: djModel() } : { ...P, posModel: 'pro' }; }
+let lastFrame = null, lastMode = 'dj', lastDec = null; // præcis det der sidst gik ud på kablet – LIVE tegner KUN herfra
+function captureFrame() { const m = cfg.dmxMode === 'pro' ? 'pro' : 'dj', n = m === 'pro' ? 34 : 19, a = cfg.address - 1; lastFrame = Uint8Array.from(dmx.slice(a, a + n)); lastMode = m; lastDec = null; }
+function decodedFrame() { if (!lastFrame) return null; if (!lastDec) lastDec = ShowNET.decode(lastFrame, profFor(lastMode), lastMode); return lastDec; }
 const saveCfg = debounce(() => { store.set('settings', cfg); try { if (window.laser.stateDump) window.laser.stateDump(JSON.stringify({ at: new Date().toISOString(), cfg, look: st }, null, 1)); } catch (_) {} }, 300); // kopi til ~/Desktop/SmartLink/smartlink-state.json (til fejlsøgning)
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
@@ -306,6 +313,97 @@ function orientToggle(on) {
   const m = $('#orMirror'); if (m) m.onclick = () => makeMirrorCopies(st.pattern).then(() => orientPaint());
   const h = $('#orHome'); if (h) h.onclick = () => { con.pos = null; sendNow(); orientPaint(); };
   const r = $('#orReset'); if (r) r.onclick = () => { cfg.orient = { on: false, q: {}, pat: {} }; saveCfg(); sendNow(); orientRender(); toast(t('or.resetDone')); }; }
+// ---------- Kalibrering (ShowNET) – mål laseren og gem en profil. Bruges FØR alt andet tunes. ----------
+var calib = { on: false, step: 1, frame: null, axis: 'x' };
+const CAL_STEPS = 7;
+function calMode() { return cfg.dmxMode === 'pro' ? 'pro' : 'dj'; }
+function calMeas() { const P = prof(); P.measurements = P.measurements || {}; const M = P.measurements; M.field = M.field || {}; M.pos = M.pos || []; M.size = M.size || []; M.rot = M.rot || []; return M; }
+function calBase() { // trin 1: kanal 1 = 200, valgt mønster, alle effekter 0, fuld størrelse, position i midten (DJ kanal 14 = 0)
+  const m = calMode(), f = new Uint8Array(m === 'pro' ? 34 : 19), pat = clamp(cfg.calPattern || cfg.boxPattern || 1, 1, 255);
+  if (m === 'pro') { f[0] = 200; f[1] = pat; f[2] = 128; f[3] = 128; f[5] = 128; f[7] = 128; f[20] = 255; f[21] = 255; f[22] = 255; for (let n = 26; n <= 29; n++) f[n - 1] = 128; }
+  else { f[0] = 200; f[1] = pat; f[2] = 0; f[3] = 0; f[4] = 0; f[5] = 96; const c = ShowNET.posEncode(0, djModel()); f[6] = c >> 8; f[7] = c & 255; f[8] = c >> 8; f[9] = c & 255; }
+  return f;
+}
+function calSend(fn) { calib.on = true; calib.frame = calBase(); if (fn) fn(calib.frame); sendNow(); }
+function calPosValues() { return calMode() === 'pro' ? [0, 64, 128, 192, 255] : [0, 32, 64, 96, 127, 128, 160, 192, 224, 255]; }
+function calSizeValues() { return calMode() === 'pro' ? [0, 32, 64, 96, 128, 160, 192, 224, 240, 248, 252, 255] : [0, 16, 32, 48, 64, 80, 96, 104, 112, 120, 124, 127]; }
+function calRotValues() { return calMode() === 'pro' ? [128, 160, 192, 224, 255, 0, 64] : [96, 120, 144, 168, 192, 0, 48]; }
+function calRender() {
+  const box = $('#calSnBody'); if (!box) return; const m = calMode(), M = calMeas(), P = prof(), st_ = calib.step;
+  $('#calSnStep').textContent = t('wiz.stepOf', { n: st_, m: CAL_STEPS });
+  const b = (id, txt, cls) => `<button class="ghost small ${cls || ''}" data-k="${id}">${txt}</button>`, num = (id, v, step) => `<input type="number" class="cal-num" data-n="${id}" value="${v ?? ''}" step="${step || 'any'}">`;
+  let h = `<h4>${t('csn.t' + st_)}</h4><p class="cal-instr">${t('csn.i' + st_, { mode: m === 'pro' ? 'Professional (34)' : 'DJ (19)' })}</p>`;
+  if (st_ === 1) h += `<div class="co-row"><span>${t('csn.pattern')}</span>${num('pat', cfg.calPattern || cfg.boxPattern || 1, 1)}${b('base', t('con.send'))}</div>`;
+  if (st_ === 2) h += `<div class="co-row"><span>${t('csn.W')}</span>${num('W', M.field.W)}<span>cm</span></div><div class="co-row"><span>${t('csn.H')}</span>${num('H', M.field.H)}<span>cm</span></div><div class="co-row"><span>${t('csn.D')}</span>${num('D', M.field.D)}<span>cm</span></div><p class="cal-instr mono">${t('csn.angles', { x: P.scanDegX.toFixed(1), y: P.scanDegY.toFixed(1) })}</p>${b('base', t('csn.resend'))}`;
+  if (st_ === 3) {
+    h += `<div class="cal-r1">${b('ax-x', 'X', calib.axis === 'x' ? 'on' : '')}${b('ax-y', 'Y', calib.axis === 'y' ? 'on' : '')}</div><div class="co-grid">`;
+    for (const v of calPosValues()) { const r = M.pos.find((p) => p.axis === calib.axis && p.coarse === v); h += `<div class="co-row"><span>coarse ${v}</span>${num('pos-' + v, r ? Math.round(r.cm * 10) / 10 : '')}${b('sp-' + v, t('con.send'))}</div>`; }
+    h += `</div><p class="cal-instr">${t('csn.posHint')}</p>${b('fitpos', t('csn.fit'), 'wiz-hot')}<p class="cal-instr mono" id="calSnRes">${t('csn.posNow', { m: m === 'pro' ? 'pro' : djModel(), sx: P.signX, sy: P.signY, gx: (+P.posGainX).toFixed(3), gy: (+P.posGainY).toFixed(3) })}</p>`;
+  }
+  if (st_ === 4) {
+    h += `<div class="co-grid">`; for (const v of calSizeValues()) { const r = M.size.find((p) => p.mode === m && p.dmx === v); h += `<div class="co-row co-row4"><span>dmx ${v}</span>${num('sz-' + v, r && !r.off ? r.cm : '')}<label class="cal-off"><input type="checkbox" data-off="${v}" ${r && r.off ? 'checked' : ''}>${t('csn.off')}</label>${b('ss-' + v, t('con.send'))}</div>`; }
+    const lim = ShowNET.sizeLimits(P, m); h += `</div>${b('fitsize', t('csn.fit'), 'wiz-hot')}<p class="cal-instr mono" id="calSnRes">${t('csn.sizeNow', { min: Math.round(lim.min * 1000) / 10, d: P.dmxMinVisible[m] })}</p>`;
+  }
+  if (st_ === 5) {
+    h += `<div class="co-grid">`; for (const v of calRotValues()) { const r = M.rot.find((p) => p.mode === m && p.v === v); h += `<div class="co-row"><span>${m === 'pro' ? 'ch 8' : 'ch 6'} = ${v}</span>${num('rt-' + v, r ? r.deg : '')}${b('sr-' + v, t('con.send'))}</div>`; }
+    h += `</div><p class="cal-instr">${t('csn.rotHint')}</p>${b('fitrot', t('csn.fit'), 'wiz-hot')}<p class="cal-instr mono" id="calSnRes">${t('csn.rotNow', { k: (P.rotDegPerStep * 256).toFixed(3), s: P.rotSign })}</p>`;
+  }
+  if (st_ === 6) h += `${b('clipsend', t('csn.clipSend'))}<div class="cal-r1">${b('clip-clamp', t('csn.clamp'), P.clipMode === 'clamp' ? 'on' : '')}${b('clip-clip', t('csn.clip'), P.clipMode === 'clip' ? 'on' : '')}</div>`;
+  if (st_ === 7) h += `${['l', 'r', 'b', 't'].map((k) => `<div class="co-row"><span>${t('csn.z' + k)}</span>${num('z' + k, P.zone[k], 0.01)}<span></span></div>`).join('')}<div class="co-row"><span>${t('csn.throw')}</span>${num('throw', P.throwM || (M.field.D ? M.field.D / 100 : ''), 0.1)}<span>m</span></div>${b('savefile', t('csn.saveFile'), 'wiz-hot')}<p class="cal-instr" id="calSnRes"></p>`;
+  box.innerHTML = h;
+  box.querySelectorAll('[data-k]').forEach((el) => (el.onclick = () => calAct(el.dataset.k)));
+  box.querySelectorAll('[data-n]').forEach((el) => el.addEventListener('change', () => calInput(el.dataset.n, el.value)));
+  box.querySelectorAll('[data-off]').forEach((el) => el.addEventListener('change', () => { const v = +el.dataset.off, Mm = calMeas(); let r = Mm.size.find((p) => p.mode === m && p.dmx === v); if (!r) Mm.size.push((r = { mode: m, dmx: v })); r.off = el.checked; saveCfg(); }));
+  $('#calSnBack').disabled = st_ <= 1; $('#calSnNext').textContent = t(st_ >= CAL_STEPS ? 'csn.finish' : 'wiz.next');
+}
+function calInput(k, val) {
+  const M = calMeas(), P = prof(), m = calMode(), v = val === '' ? null : +val;
+  if (k === 'pat') { cfg.calPattern = clamp(v | 0, 1, 255); saveCfg(); return; }
+  if (k === 'W' || k === 'H' || k === 'D') { M.field[k] = v; const F = M.field; if (F.W && F.D) P.scanDegX = 2 * Math.atan(F.W / (2 * F.D)) * 180 / Math.PI; if (F.H && F.D) P.scanDegY = 2 * Math.atan(F.H / (2 * F.D)) * 180 / Math.PI; saveCfg(); return calRender(); }
+  if (k.startsWith('pos-')) { const c = +k.slice(4); M.pos = M.pos.filter((p) => !(p.axis === calib.axis && p.coarse === c && p.mode === m)); if (v != null) { const half = (calib.axis === 'x' ? M.field.W : M.field.H) / 2; M.pos.push({ mode: m, axis: calib.axis, coarse: c, cm: v, u: half ? v / half : v / 100 }); } saveCfg(); return; }
+  if (k.startsWith('sz-')) { const d = +k.slice(3); let r = M.size.find((p) => p.mode === m && p.dmx === d); if (!r) M.size.push((r = { mode: m, dmx: d })); r.cm = v; r.off = false; saveCfg(); return; }
+  if (k.startsWith('rt-')) { const x = +k.slice(3); M.rot = M.rot.filter((p) => !(p.mode === m && p.v === x)); if (v != null) M.rot.push({ mode: m, v: x, deg: v }); saveCfg(); return; }
+  if (/^z[lrbt]$/.test(k)) { P.zone[k[1]] = clamp(v ?? (k[1] === 'l' || k[1] === 'b' ? -1 : 1), -1, 1); saveCfg(); return; }
+  if (k === 'throw') { P.throwM = v || 0; saveCfg(); }
+}
+function calAct(k) {
+  const m = calMode(), P = prof(), M = calMeas(), res = (txt) => { const el = $('#calSnRes'); if (el) el.textContent = txt; };
+  if (k === 'base') return calSend();
+  if (k === 'ax-x' || k === 'ax-y') { calib.axis = k.slice(3); return calRender(); }
+  if (k.startsWith('sp-')) { const v = +k.slice(3); return calSend((f) => { if (m === 'pro') { const i = calib.axis === 'x' ? 3 : 5; f[i] = v; f[i + 1] = 0; } else { const i = calib.axis === 'x' ? 6 : 8; f[i] = v; f[i + 1] = 0; } }); }
+  if (k.startsWith('ss-')) { const v = +k.slice(3); return calSend((f) => { if (m === 'pro') { f[9] = v; f[10] = v; } else f[3] = v; }); }
+  if (k.startsWith('sr-')) { const v = +k.slice(3); return calSend((f) => { if (m === 'pro') { f[7] = v; f[8] = 0; } else f[5] = v; }); }
+  if (k === 'clipsend') return calSend((f) => { if (m === 'pro') { f[3] = 192; f[4] = 0; f[9] = 0; f[10] = 0; } else { const c = ShowNET.posEncode(0.5, djModel()); f[6] = c >> 8; f[7] = c & 255; f[3] = 0; } });
+  if (k === 'clip-clamp' || k === 'clip-clip') { P.clipMode = k.slice(5); saveCfg(); return calRender(); }
+  if (k === 'fitpos') {
+    const out_ = []; for (const ax of ['x', 'y']) { const S_ = M.pos.filter((p) => p.mode === m && p.axis === ax); if (S_.length < 3) { out_.push(t('csn.needMore', { a: ax.toUpperCase() })); continue; }
+      const fit = ShowNET.fitPosModel(S_, m === 'pro' ? ['pro'] : ['s', 'h1', 'h2', 'u']);
+      if (ax === 'x') { P.signX = fit.sign; P.posGainX = fit.gain; } else { P.signY = fit.sign; P.posGainY = fit.gain; }
+      if (m === 'dj' && ax === 'x') { P.posModel = fit.model; cfg.posFmt = { s: 's', h1: 't', u: 'u', h2: 'h2' }[fit.model]; }
+      out_.push(t('csn.posFit', { a: ax.toUpperCase(), m: fit.model, s: fit.sign, g: fit.gain.toFixed(3), e: Math.sqrt(fit.err).toFixed(3) })); }
+    saveCfg(); if (cfg.lim) { cfg.edgesUser = false; setFinalEdges({ L: -P.posGainX, R: P.posGainX, T: P.posGainY, B: -P.posGainY }); } res(out_.join(' · ')); return;
+  }
+  if (k === 'fitsize') {
+    const S_ = M.size.filter((p) => p.mode === m).sort((a, b) => a.dmx - b.dmx), w0 = (S_.find((p) => p.dmx === 0 && !p.off) || {}).cm;
+    if (!w0) return res(t('csn.needW0'));
+    const vis = S_.filter((p) => !p.off && p.cm > 0), off = S_.filter((p) => p.off); P.sizeCurve[m] = vis.map((p) => [p.dmx, clamp(p.cm / w0, 0.001, 1.5)]); if (P.sizeCurve[m].length < 2) P.sizeCurve[m].push([m === 'pro' ? 255 : 127, P.sizeCurve[m][0][1]]);
+    P.dmxMinVisible[m] = off.length ? Math.min(...off.map((p) => p.dmx)) : m === 'pro' ? 256 : 128; for (const p of S_) p.frac = p.off ? null : p.cm / w0;
+    saveCfg(); const lim = ShowNET.sizeLimits(P, m); return res(t('csn.sizeNow', { min: Math.round(lim.min * 1000) / 10, d: P.dmxMinVisible[m] }));
+  }
+  if (k === 'fitrot') {
+    const S_ = M.rot.filter((p) => p.mode === m); if (S_.length < 3) return res(t('csn.needMore', { a: '' }));
+    if (m === 'pro') { const unwrap = S_.map((p) => ({ x: p.v * 256 - 32768, y: p.deg })); const fit = ShowNET.fitLinear(unwrap.map((p) => p.x), unwrap.map((p) => p.y)); P.rotDegPerStep = Math.abs(fit.k) || 360 / 65536; P.rotSign = fit.k < 0 ? -1 : 1; }
+    saveCfg(); return res(t('csn.rotNow', { k: (P.rotDegPerStep * 256).toFixed(3), s: P.rotSign }));
+  }
+  if (k === 'savefile') { const txt = JSON.stringify({ ...P, mode: m, savedAt: new Date().toISOString() }, null, 1); if (window.laser.profileSave) window.laser.profileSave(txt).then((r) => res(r && r.ok ? t('csn.saved', { p: r.path }) : t('csn.saveFail'))); else res(t('csn.saveFail')); return; }
+}
+function calToggle(on) {
+  const p = $('#pvCalSnPanel'); if (!p) return; const sh = on == null ? p.hidden : on; p.hidden = !sh; $('#pvCalSn').classList.toggle('on', sh);
+  if (sh) { if (raw.on) rawToggle(false); if (autoMode !== 'off') setAuto('off'); calib.step = calib.step || 1; calRender(); calSend(); } else { calib.on = false; calib.frame = null; sendNow(); }
+}
+{ const b = $('#pvCalSn'); if (b) b.onclick = () => calToggle(); const c = $('#calSnClose'); if (c) c.onclick = () => calToggle(false);
+  const bk = $('#calSnBack'); if (bk) bk.onclick = () => { calib.step = Math.max(1, calib.step - 1); calRender(); };
+  const nx = $('#calSnNext'); if (nx) nx.onclick = () => { if (calib.step >= CAL_STEPS) { toast(t('csn.done')); calToggle(false); return; } calib.step++; calRender(); calSend(); }; }
 // ---------- Kommando-konsol: send én kommando ad gangen og se hvad laseren får, og hvad appen tror ----------
 var con = { pos: null, ch: {}, sweep: null };
 function conOverrides() { for (const k in con.ch) setCh(+k, con.ch[k]); }
@@ -376,11 +474,14 @@ function conToggle(on) {
 var pvAspect = 2;
 { const z = document.getElementById('viewZoom'); if (z) { const o = document.getElementById('viewZoomOut'); const sync = () => { const v = Math.round(100 / (cfg.viewZoom || 1)); z.value = v; if (o) o.textContent = v + ' %'; }; setTimeout(sync, 0); z.addEventListener('input', () => { cfg.viewZoom = 100 / +z.value; saveCfg(); if (o) o.textContent = z.value + ' %'; }); } }
 function patK() { return cfg.patK ?? 1.2; } // mønster-koordinat 1 ved 100 % = så mange sendte enheder (målt: 85 %-mønster folder ved X 61)
-function patHalfSent(size) { return patK() * clamp(size, 0, 1); }
-function viewGeom() { // LIVE: midten i midten, lige langt til hver side (zoomet ud så hele rækkevidden + et 100 %-mønster er med)
-  const L = cfg.lim || {}, m = patK() * 0.75, z = cfg.viewZoom || 1;
-  const rx = Math.max(-(L.left ?? -1), L.right ?? 1) + m, ry = Math.max(L.top ?? 1, -(L.bottom ?? -1)) + m;
-  return { l: rx * z, r: rx * z, b: ry * z, t: ry * z };
+function patHalfSent(size) { // mønster-koordinat 1 → felt-enheder ved fader-størrelsen (fra størrelseskurven i profilen)
+  if (cfg.dmxMode === 'pro') { const l = ShowNET.sizeLimits(profFor('pro'), 'pro'); return l.min + clamp(size, 0, 1) * (l.max - l.min); }
+  return ShowNET.sizeFromDmx(sizeCh4(size), profFor('dj'), 'dj');
+}
+function viewGeom() { // LIVE i felt-koordinater (−1…1 = hele scanfeltet), midten i midten, samme skala begge veje, zoomet ud
+  const L = cfg.lim || {}, m = 0.25, z = cfg.viewZoom || 1, cx = cfg.ctrX || 0, cy = cfg.ctrY || 0, A = pvAspect || 2;
+  const rx = Math.max(1 + Math.abs(cx), -(L.left ?? -1), L.right ?? 1) + m, ry = Math.max(1 + Math.abs(cy), L.top ?? 1, -(L.bottom ?? -1)) + m;
+  const hy = Math.max(ry, rx / A), hx = hy * A; return { l: hx * z, r: hx * z, b: hy * z, t: hy * z };
 }
 function viewHalf() { const v = viewGeom(); return [(v.l + v.r) / 2, (v.b + v.t) / 2]; }
 function appToSent(ax, ay) { const v = viewGeom(), G = cfg.viewGain || {}; return [ax >= 0 ? ax * v.r / (G.right || 1) : ax * v.l / (G.left || 1), ay >= 0 ? ay * v.t / (G.top || 1) : ay * v.b / (G.bottom || 1)]; } // → sendt (før midte)
@@ -473,7 +574,7 @@ function coordRender(host) { // overblik: de tal appen bruger til at forstå hvo
   const corners = [['↖', E.L, E.T], ['↗', E.R, E.T], ['↘', E.R, E.B], ['↙', E.L, E.B]];
   host.innerHTML = `<div class="co-grid">${rows.map(([k, l, v]) => `<label class="co-row"><span>${l}</span><input type="number" step="0.5" min="-100" max="100" data-co="${k}" value="${pc(v)}"><button class="ghost small" data-cs="${k}">${t('or.show')}</button></label>`).join('')}</div>
     <p class="cal-instr">${t('co.corners')}</p><div class="co-corners">${corners.map(([a, x, y]) => `<button class="ghost small" data-cc="${x},${y}">${a} X ${pc(x)} · Y ${pc(y)}</button>`).join('')}</div>
-    <label class="co-row"><span>${t('co.patK')}</span><input type="number" step="0.05" min="0.1" max="5" data-co="K" value="${patK()}"><span></span></label>
+    <p class="cal-instr mono">${(() => { const P = prof(), m = cfg.dmxMode === 'pro' ? 'pro' : 'dj', l = ShowNET.sizeLimits(P, m); return t('co.info', { mode: m === 'pro' ? 'Professional' : 'DJ', min: Math.round(l.min * 1000) / 10, gx: (+P.posGainX).toFixed(2), gy: (+P.posGainY).toFixed(2), ax: P.scanDegX.toFixed(0), ay: P.scanDegY.toFixed(0) }); })()}</p>
     <div class="cal-r1"><button class="ghost small" data-cf="full">${t('co.full')}</button><button class="ghost small" data-cf="home">${t('or.home')}</button></div>`;
   host.querySelectorAll('[data-co]').forEach((el) => el.addEventListener('change', () => {
     const k = el.dataset.co, v = clamp(+el.value / 100, -1, 1); if (isNaN(+el.value)) return;
@@ -485,7 +586,7 @@ function coordRender(host) { // overblik: de tal appen bruger til at forstå hvo
   const show = (x, y) => { con.pos = [clamp(x, -1, 1), clamp(y, -1, 1)]; sendNow(); };
   host.querySelectorAll('[data-cs]').forEach((el) => (el.onclick = () => { const k = el.dataset.cs, E2 = finalEdges(), cx = cfg.ctrX || 0, cy = cfg.ctrY || 0; show({ mx: cx, my: cx, L: E2.L, R: E2.R, T: cx, B: cx }[k], { mx: cy, my: cy, L: cy, R: cy, T: E2.T, B: E2.B }[k]); }));
   host.querySelectorAll('[data-cc]').forEach((el) => (el.onclick = () => { const [x, y] = el.dataset.cc.split(',').map(Number); show(x, y); }));
-  host.querySelectorAll('[data-cf]').forEach((el) => (el.onclick = () => { if (el.dataset.cf === 'full') { cfg.edgesUser = false; setFinalEdges({ L: -1, R: 1, T: 1, B: -1 }); sendNow(); coordRender(host); } else { con.pos = null; sendNow(); } }));
+  host.querySelectorAll('[data-cf]').forEach((el) => (el.onclick = () => { if (el.dataset.cf === 'full') { const P = prof(); cfg.edgesUser = false; setFinalEdges({ L: -P.posGainX, R: P.posGainX, T: P.posGainY, B: -P.posGainY }); sendNow(); coordRender(host); } else { con.pos = null; sendNow(); } }));
 }
 function coordToggle(on) { const p = $('#pvCoPanel'); if (!p) return; const sh = on == null ? p.hidden : on; p.hidden = !sh; $('#pvCo').classList.toggle('on', sh); if (sh) coordRender($('#coBody')); else { con.pos = null; sendNow(); } }
 { const b = $('#pvCo'); if (b) b.onclick = () => coordToggle(); const c = $('#coClose'); if (c) c.onclick = () => coordToggle(false); }
@@ -1340,6 +1441,7 @@ function pos16(ch, v, raw = false) {
   const axis = ch === 7 || ch === 4 ? 'x' : 'y';
   if (!raw) v = calAxis(v, axis);
   const fmt = (limShow && limShow.fmt) || cfg.posFmt;
+  if (fmt === 'h2') { const p = ShowNET.posEncode(v, 'h2'); setCh(ch, p >> 8); setCh(ch + 1, p & 255); return; }
   if (fmt === 's') {
     // målt på DS-3000: fortegn + størrelse. Grov byte: bit 7 = retning (1 = op/højre), bit 0–6 = udslag 0–127. Fin byte = finjustering.
     v = clamp(v, -1, 1); const mag = Math.abs(v) * 127, coarse = Math.floor(mag), fine = Math.round((mag - coarse) * 255);
@@ -1457,7 +1559,7 @@ function djFrame(on, size, ang, mode, rgb, bright = 1, strobe = st.strobe) {
     const [rx, ry] = rotV(c.x, c.y, (Math.abs(rs) > 0.02 ? 0 : ang) + flip180), k = patHalfSent(out.size); oX = clamp(oX - rx * k, -1, 1); oY = clamp(oY - ry * k, -1, 1); out.patOff = [rx * k, ry * k];
   } else out.patOff = [0, 0];
   const psc = cfg.posScaled ? 1 / Math.max(size, 0.08) : 1;
-  pos16(7, oX * psc, true); pos16(9, oY * psc, true);
+  { const P = prof(); pos16(7, oX * P.signX / P.posGainX * psc, true); pos16(9, oY * P.signY / P.posGainY * psc, true); }
   // 11: farve – 0–15 original, 16–79 ensfarvet, 144–255 automatisk farveskift
   if (st.colorCycle) setCh(11, 144 + st.colorCycleSpeed * 111);
   else if (mode === 'orig') setCh(11, 8);
@@ -1482,6 +1584,7 @@ function rgbHue([r, g, b]) {
 }
 
 function computeFrame(now) {
+  if (calib.on && calib.frame) { const a = cfg.address - 1; dmx.fill(0, a, a + 34); for (let i = 0; i < calib.frame.length; i++) dmx[a + i] = calib.frame[i]; return; } // kalibrering: præcis disse kanaler
   const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   const hz = 0.05 + st.moveSpeed * st.moveSpeed * 1.6;
   movePhase += dt * hz * Math.PI * 2;
@@ -1553,7 +1656,7 @@ function computeFrame(now) {
   if (limOn) { // LIVE = hele laserens rækkevidde; mønstret kan stå overalt hvor laseren kan sende det hen
     const L = cfg.lim, ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
     // laseren folder mønstret tilbage når mønstrets kant rammer scannerens yderste: midten må højst stå 1 − k·størrelse ude (målt)
-    const F = cfg.fold || {}, fs = clamp(sizeApp, 0.05, 1), cX = cfg.ctrX || 0, cY = cfg.ctrY || 0;
+    const F = cfg.dmxMode === 'pro' ? {} : cfg.fold || {}, fs = clamp(sizeApp, 0.05, 1), cX = cfg.ctrX || 0, cY = cfg.ctrY || 0;
     const lo = (k) => -1 + (F[k] ?? F.all ?? 0) * fs, hi = (k) => 1 - (F[k] ?? F.all ?? 0) * fs;
     const [sx, sy] = appToSent(ax_, ay_), cx = clamp(sx, Math.max(L.left, lo('left') - cX), Math.min(L.right, hi('right') - cX)), cy = clamp(sy, Math.max(L.bottom, lo('bottom') - cY), Math.min(L.top, hi('top') - cY));
     clamped = Math.abs(cx - sx) > 1e-4 || Math.abs(cy - sy) > 1e-4; sendX = cx; sendY = cy; rawX = cx; rawY = cy;
@@ -1577,35 +1680,35 @@ function computeFrame(now) {
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
   if (special) { specialFrame(on); rawOverrides(); return; }
   if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); rawOverrides(); conOverrides(); return; }
-  const show = on && st.pattern > 0;
-  setCh(1, show ? master * cfg.maxInt * bright * 255 : 0);
-  setCh(2, show ? st.pattern : 0);
-  setCh(3, st.freeze ? 0 : st.fps * 255);
-  { const ps = cfg.posScaled ? Math.max(size, 0.08) : 1; put16(4, 0.5 + clamp(out.sendX / ps, -1, 1) / 2); put16(6, 0.5 + clamp(out.sendY / ps, -1, 1) / 2); } put16(8, rot);
-  setCh(10, sizeVal); setCh(11, sizeVal);
-  const fy = cfg.invY !== patFlip.has(st.pattern);
-  setCh(12, cfg.invX && fy ? 224 : cfg.invX ? 96 : fy ? 160 : 0);
-  setCh(13, mode === 'orig' ? 8 : 248);
-  setCh(14, rgb[0]); setCh(15, rgb[1]); setCh(16, rgb[2]);
-  const strobeV = Math.max(st.strobe, liveStrobe);
-  setCh(17, strobeV > 0 ? 16 + strobeV * 239 : 0);
-  setCh(18, [0, 70, 140, 210][cfg.scan] || 0);
-  setCh(19, zoneVal());
-  setCh(20, cfg.zone > 0 ? 255 : 0);
-  setCh(21, 255); setCh(22, 255); setCh(23, 255);
-  setCh(24, 0); setCh(25, 0); // altid Show-tilstand – aldrig setup/gem
-  for (let c = 26; c <= 29; c++) setCh(c, 128);
-  for (let c = 30; c <= 34; c++) setCh(c, 0);
+  proFrame(on, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); rawOverrides(); conOverrides();
+}
+function orientPro(oX, oY) { // Pro Mode har en inversionskanal – spejling kræver ingen kopier på SD-kortet
+  const o = cfg.orient; if (!o || !o.on) return { rot: 0, invX: false, invY: false };
+  const key = (oX >= -0.002 ? 'p' : 'n') + (oY >= -0.002 ? 'p' : 'n'); let rot = 0, mx = 0, my = 0;
+  [o.all, (o.q || {})[key], (o.pat || {})[st.pattern]].forEach((k) => { const v = OR_OPTS[k || 'n'] || OR_OPTS.n; rot += v[0]; mx ^= v[1]; my ^= v[2]; });
+  return { rot, invX: !!mx, invY: !!my };
+}
+function proFrame(on, ang, mode, rgb, bright, strobe) { // Professional Mode: tilstand → ShowNET.encode → DMX (én sandhedskilde)
+  const P = profFor('pro'), show = on && st.pattern > 0 && (cfg.calibDone || camCal.active);
+  let [oX, oY] = posOut(out.sendX, out.sendY); const o = orientPro(oX, oY);
+  const lim = ShowNET.sizeLimits(P, 'pro'), frac = lim.min + clamp(out.size, 0, 1) * (lim.max - lim.min);
+  const rotDeg = ang + (patFlip.has(st.pattern) ? 180 : 0) + o.rot, invX = o.invX !== !!cfg.invX, invY = o.invY !== !!cfg.invY;
+  let rcx = 0, rcy = 0;
+  if (cfg.patCenterFix !== false && !con.pos && !raw.on && !measure && !camCal.active) { const c = patCenter(st.pattern); [rcx, rcy] = rotV(c.x * frac, c.y * frac, rotDeg); }
+  const x = (invX ? -oX : oX) - rcx, y = (invY ? -oY : oY) - rcy; out.patOff = [rcx, rcy]; // inversion spejler også positionen (firmwarens rækkefølge)
+  const f = ShowNET.encode({ on: show, intensity: master * cfg.maxInt * bright, pattern: st.pattern, fps: fpsFrac(st.fps) * 100, freeze: st.freeze, x, y, sizeX: frac, sizeY: frac, rotDeg, invX, invY,
+    color: mode === 'orig' ? { mode: 'orig' } : { mode: 'rgb', rgb }, strobe, zone: cfg.zone }, P, 'pro');
+  const a0 = cfg.address - 1; for (let i = 0; i < f.length; i++) dmx[a0 + i] = f[i];
 }
 
 let sendTimer;
-function sendNow() { const now = performance.now(); computeFrame(now); window.laser.sendDmx(cfg.universe, cfg.ip, dmx); }
+function sendNow() { const now = performance.now(); computeFrame(now); captureFrame(); window.laser.sendDmx(cfg.universe, cfg.ip, dmx); }
 function startSending() {
   clearInterval(sendTimer);
   sendTimer = setInterval(() => {
     const now = performance.now();
     tickBeatClock(now);
-    computeFrame(now);
+    computeFrame(now); captureFrame(); // samme ur: animation → DMX-frame → LIVE
     window.laser.sendDmx(cfg.universe, cfg.ip, dmx);
   }, 1000 / clamp(cfg.rate, 10, 44));
 }
@@ -1658,6 +1761,19 @@ async function loadPat(n) {
   patData.set(n, fr); return fr;
 }
 // tegn ét frame: o = { scale, ang (grader), ox, oy (-1..1), rgb|null, alpha, glow }
+function physFromRaw(x, y) { const L = lmap(), a = DV[L.x], b = DV[L.y]; return [a[0] * x + b[0] * y, a[1] * x + b[1] * y]; }
+function drawField(g, f, d, P, toPx, o = {}) { // tegn en ILDA-frame gennem firmwarens transformationskæde (ShowNET.transformPoint)
+  if (!f || f.n < 1) return; const pts = new Array(f.n);
+  for (let i = 0; i < f.n; i++) { const q = ShowNET.transformPoint(f.xy[i * 2], f.xy[i * 2 + 1], d, P); const [px, py] = toPx(q.x, q.y); pts[i] = [px, py, q.outside]; }
+  g.save(); g.globalCompositeOperation = 'lighter'; g.lineCap = 'round'; g.globalAlpha = o.alpha ?? 1;
+  for (const [lw, al] of o.glow ? [[o.glow * 3, 0.18], [Math.max(1, o.glow), 1]] : [[1.3, 1]]) {
+    g.lineWidth = lw;
+    for (let i = 1; i < f.n; i++) { if (f.bl[i]) continue; const p = pts[i], q = pts[i - 1]; if (p[2] || q[2]) continue;
+      const c = o.rgb || [f.col[i * 3], f.col[i * 3 + 1], f.col[i * 3 + 2]]; g.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${al})`;
+      if (Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) < 0.5) { g.fillStyle = g.strokeStyle; g.fillRect(p[0] - lw / 2, p[1] - lw / 2, lw, lw); } else { g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(p[0], p[1]); g.stroke(); } }
+  }
+  g.restore();
+}
 function drawIlda(g, W, H, f, o = {}) {
   if (!f || f.n < 1) return;
   const R = o.box ? o.box.upl * (o.scale ?? 1) : (Math.min(W, H) / 2) * 0.9 * (o.scale ?? 1);
@@ -2146,7 +2262,7 @@ function previewTick(now) {
     // samme tempo som laseren: valgt fps (justérbar), men aldrig hurtigere end scannerne kan tegne frames med så mange punkter
     if (pvPat !== st.pattern) { pvPat = st.pattern; pvFrame = 0; } // laseren starter animationen forfra ved mønsterskift
     const curF = fr[Math.floor(pvFrame) % fr.length], pts = curF && curF.xy ? curF.xy.length / 2 : 0;
-    let fps = fpsFrac(st.fps) * 100 * (cfg.animScale || 1); if (pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts);
+    const dd = decodedFrame(); let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (cfg.animScale || 1); if (pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts); // præcis den fps kanal 3 giver
     if (!st.freeze) pvFrame += (Math.min(250, now - pvLast) / 1000) * fps; pvLast = now;
     const rawLine = (vertical, rx, ry, len, col, lw) => { // streg i rå laser-koordinater tegnet ind i boksen
       const [ax, ay] = rawToApp(rx, ry); const [px, py] = boxPt(B, ax, ay); const hl = len * B.upl;
@@ -2215,12 +2331,21 @@ function previewTick(now) {
       // LIVE-størrelse: med kamera-kalibrering tegnes mønsteret så stort som kameraet har målt det ved denne fader-værdi
       let drawScale = out.size * out.calScale;
       { const half = camPatHalfSent(out.laserSize); if (half != null) { const [ax1, ay1] = camAppToSend(0.02, 0, out.size), [ax0, ay0] = camAppToSend(-0.02, 0, out.size), [bx1, by1] = camAppToSend(0, 0.02, out.size), [bx0, by0] = camAppToSend(0, -0.02, out.size); const d = (Math.hypot(ax1 - ax0, ay1 - ay0) + Math.hypot(bx1 - bx0, by1 - by0)) / 2 / 0.04; const e = patExtent(st.pattern, out.ang); if (d > 1e-6) drawScale = (half / 1.08) / d / Math.max(0.05, Math.max(e.x, e.y)) * cfg.cal.sx; } }
-      let BB = B, oxD = (out.x - 0.5) * 2, oyD = (out.y - 0.5) * 2;
-      if (cfg.lim && cfg.lim.on) { const v = viewGeom(); BB = { ...B, upl: B.w / 2 / v.r }; drawScale = patHalfSent(out.size);
-        if (cfg.patCenterFix !== false) { const c = patCenter(st.pattern), [rx, ry] = rotV(c.x, c.y, out.ang || 0), R = BB.upl * drawScale, [px, py] = boxPt(B, oxD, oyD); oxD = ((px - rx * R) - B.x) / B.w * 2 - 1; oyD = 1 - ((py + ry * R) - B.y) / B.h * 2; } }
       const zr = zoneRect(W, H); // laseren slukker alt på den anden side af zonen – det gør LIVE også
       if (zr) { g.save(); g.beginPath(); g.rect(0, 0, W, H); g.rect(zr[0], zr[1], zr[2], zr[3]); g.clip('evenodd'); }
-      if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: oxD, oy: oyD, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: BB, ...extra });
+      const d = decodedFrame();
+      if (d && cfg.lim && cfg.lim.on) { // ÉN sandhedskilde: tegn det laseren fik besked på (decode af sidst sendte DMX-frame)
+        if (!strobeOff && d.visible) {
+          let fr2 = patData.get(d.pattern); if (!fr2 && patAvail.has(d.pattern)) loadPat(d.pattern); if (!fr2 || !fr2.length) fr2 = fr;
+          const f2 = fr2[Math.floor(pvFrame) % fr2.length], dd2 = { ...d, rotDeg: Math.abs(d.rotSpeed) > 0.02 ? out.ang || 0 : d.rotDeg };
+          const rgbD = d.color && d.color.mode === 'rgb' ? d.color.rgb : d.color && d.color.mode === 'white' ? [255, 255, 255] : out.rgb || (isFallback ? [235, 235, 235] : null);
+          drawField(g, f2, dd2, profFor(lastMode), (fx, fy) => { const [px, py] = physFromRaw(fx, fy), [ax, ay] = sentToApp(px, py); return boxPt(B, ax, ay); }, { rgb: rgbD, alpha: Math.max(0.2, d.intensity), glow: 1.4 });
+        }
+        if (d.tooSmall) { g.save(); g.strokeStyle = '#ff3b5c'; g.lineWidth = 4; g.strokeRect(2, 2, W - 4, H - 4); g.fillStyle = '#ff3b5c'; g.font = '700 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.tooSmall'), W / 2, 22); g.restore(); }
+      } else {
+        let BB = B, oxD = (out.x - 0.5) * 2, oyD = (out.y - 0.5) * 2;
+        if (!strobeOff) drawIlda(g, W, H, frame, { ...mirrorOpts(st.pattern), scale: drawScale, ang: out.ang, ox: oxD, oy: oyD, rgb: out.rgb || (isFallback ? [235, 235, 235] : null), alpha: Math.max(0.2, out.intensity), glow: 1.4, box: BB, ...extra });
+      }
       if (zr) g.restore();
       if (con.pos) { const [cx_, cy_] = boxPt(B, (out.x - 0.5) * 2, (out.y - 0.5) * 2); g.save(); g.strokeStyle = '#ffaa3c'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx_ - 14, cy_); g.lineTo(cx_ + 14, cy_); g.moveTo(cx_, cy_ - 14); g.lineTo(cx_, cy_ + 14); g.stroke(); g.restore(); }
       if (moveMode && !(cfg.lim && cfg.lim.on)) { // gamle rammer (kun uden Grænser/opsætning)
@@ -2238,6 +2363,12 @@ function previewTick(now) {
       if (isFallback) { g.fillStyle = '#5b5b57'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t(patAvail.size ? 'pv.missing' : 'pv.load', { n: st.pattern }), W / 2, B.y + 20); }
     }
     drawZone(g, W, H);
+    if (cfg.lim && cfg.lim.on) { // ramme for hele scanfeltet (−1…1) og den gemte projektionszone
+      const P = prof(), rect = (l, r, b_, t_, col, dash, label) => { const [a1, b1] = sentToApp(l, t_), [a2, b2] = sentToApp(r, b_), [p1x, p1y] = boxPt(B, a1, b1), [p2x, p2y] = boxPt(B, a2, b2); g.save(); g.strokeStyle = col; g.setLineDash(dash); g.strokeRect(p1x, p1y, p2x - p1x, p2y - p1y); g.setLineDash([]); if (label) { g.fillStyle = col; g.font = '10px -apple-system'; g.textAlign = 'left'; g.fillText(label, p1x + 4, p1y + 12); } g.restore(); };
+      const wM = P.throwM ? 2 * P.throwM * Math.tan(P.scanDegX / 2 * Math.PI / 180) : 0, hM = P.throwM ? 2 * P.throwM * Math.tan(P.scanDegY / 2 * Math.PI / 180) : 0;
+      rect(-1, 1, -1, 1, 'rgba(122,180,255,.28)', [3, 6], t('pv.field') + (wM ? ` · ${wM.toFixed(1)} × ${hM.toFixed(1)} m` : ''));
+      const Z = P.zone; if (Z.l > -1 || Z.r < 1 || Z.b > -1 || Z.t < 1) rect(Z.l, Z.r, Z.b, Z.t, 'rgba(255,170,60,.45)', [6, 4], t('pv.storedZone'));
+    }
     if (autoMode === 'laser') {
       g.font = '600 11px -apple-system'; const txt = t('pv.laserMic'); const tw = g.measureText(txt).width;
       g.fillStyle = 'rgba(49,243,172,0.12)'; g.fillRect((W - tw) / 2 - 10, 40, tw + 20, 22);
@@ -2874,6 +3005,12 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2310pro) { // 23/10: Professional Mode + ShowNET-mapping. DJ-tidens rettelser (midte, kanter, vending, fold) passer ikke længere → nulstil
+  cfg.dmxMode = 'pro'; cfg.profile = ShowNET.profileOf(cfg.profile); cfg.ctrX = 0; cfg.ctrY = 0; cfg.axis = { x: 0, y: 0 }; cfg.edgesUser = false;
+  cfg.orient = { on: false, q: {}, pat: {} }; cfg.flipLearn = null; cfg.lmap = null; cfg.dirX = false; cfg.dirY = false; cfg.fold = {}; cfg.zoneSent = {}; cfg.kpps = 0; cfg.animScale = 1; cfg.viewGain = {};
+  cfg.lim = { on: true, top: 1, bottom: -1, left: -1, right: 1, small: cfg.lim && cfg.lim.small, big: cfg.lim && cfg.lim.big, sizeOn: cfg.lim && cfg.lim.sizeOn, set: {} };
+  cfg.mig2310pro = true; cfg._proNotice = true; cfg.mig2110rot = true; saveCfg();
+}
 if (!cfg.mig2110rot) { // 21/10 00:15: vend ALLE mønstre 180° i det laseren modtager (LIVE uændret) – oven i det der sendes nu
   const o = (cfg.orient = cfg.orient || {}); o.q = o.q || {}; o.pat = o.pat || {};
   if (!o.on) { const b = (cfg.flipLearn && cfg.flipLearn.base) || [0, 0]; o.all = b[0] && b[1] ? 'r180' : b[0] ? 'mx' : b[1] ? 'my' : 'n'; o.on = true; }
@@ -2899,6 +3036,7 @@ if (!cfg.mig2010edge) { // målt 20/10 22:19 (format B, midte 65/65): nedad vend
 }
 if (!cfg.mig2010bend) { cfg.bend = {}; cfg.bendStop = false; cfg.mig2010bend = true; saveCfg(); } // 20/10: gamle bøje-punkter låste mønstret til ~30 % af LIVE
 if (!cfg.mig2010size) { try { const lo = sizeCh4(0.16), hi = sizeCh4(1); limEnsure(); cfg.lim.small = lo; cfg.lim.big = hi; cfg.lim.sizeOn = true; cfg.lim.set.small = true; cfg.lim.set.big = true; } catch (e) {} cfg.mig2010size = true; saveCfg(); }
+if (cfg._proNotice) { delete cfg._proNotice; saveCfg(); setTimeout(() => modal(t('csn.proNotice'), null), 800); }
 if (cfg._needCenter) { delete cfg._needCenter; try { centerLive(); } catch (e) {} saveCfg(); }
 function syncArrowUI() { ['arrowFlipX', 'arrowFlipY', 'arrowSwap'].forEach((k) => { const el = $('#' + k); if (el) el.checked = !!cfg[k]; }); }
 ['arrowFlipX', 'arrowFlipY', 'arrowSwap'].forEach((k) => { const el = $('#' + k); if (el) el.addEventListener('change', () => { cfg[k] = el.checked; saveCfg(); }); }); syncArrowUI();
