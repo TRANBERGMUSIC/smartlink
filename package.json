@@ -1,7 +1,7 @@
 {
   "name": "smartlink",
   "productName": "SmartLink",
-  "version": "5.0.2",
+  "version": "5.0.3",
   "description": "SmartLink – Art-Net styring af Laserworld DS-3000RGB MK5",
   "main": "src/main.js",
   "author": "Willads",

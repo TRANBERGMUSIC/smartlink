@@ -1760,7 +1760,10 @@ async function loadPat(n) {
 function physFromRaw(x, y) { const L = lmap(), a = DV[L.x], b = DV[L.y]; return [a[0] * x + b[0] * y, a[1] * x + b[1] * y]; }
 function drawField(g, f, d, P, toPx, o = {}) { // tegn en ILDA-frame gennem firmwarens transformationskæde (ShowNET.transformPoint)
   if (!f || f.n < 1) return; const pts = new Array(f.n);
-  for (let i = 0; i < f.n; i++) { const q = ShowNET.transformPoint(f.xy[i * 2], f.xy[i * 2 + 1], d, P); const [px, py] = toPx(q.x, q.y); pts[i] = [px, py, q.outside]; }
+  if (o.uniform) { // mønstret beholder sin form (LIVE er bredere end laserens kvadratiske felt): midten placeres i feltet, selve mønstret tegnes med samme skala begge veje
+    const q0 = ShowNET.transformPoint(0, 0, d, P), [cx, cy] = toPx(q0.x, q0.y), k = o.uniform;
+    for (let i = 0; i < f.n; i++) { const q = ShowNET.transformPoint(f.xy[i * 2], f.xy[i * 2 + 1], d, P); pts[i] = [cx + (q.x - q0.x) * k, cy - (q.y - q0.y) * k, q.outside]; }
+  } else for (let i = 0; i < f.n; i++) { const q = ShowNET.transformPoint(f.xy[i * 2], f.xy[i * 2 + 1], d, P); const [px, py] = toPx(q.x, q.y); pts[i] = [px, py, q.outside]; }
   g.save(); g.globalCompositeOperation = 'lighter'; g.lineCap = 'round'; g.globalAlpha = o.alpha ?? 1;
   for (const [lw, al] of o.glow ? [[o.glow * 3, 0.18], [Math.max(1, o.glow), 1]] : [[1.3, 1]]) {
     g.lineWidth = lw;
@@ -2335,7 +2338,7 @@ function previewTick(now) {
           let fr2 = patData.get(d.pattern); if (!fr2 && patAvail.has(d.pattern)) loadPat(d.pattern); if (!fr2 || !fr2.length) fr2 = fr;
           const f2 = fr2[Math.floor(pvFrame) % fr2.length], dd2 = { ...d, rotDeg: Math.abs(d.rotSpeed) > 0.02 ? out.ang || 0 : d.rotDeg };
           const rgbD = d.color && d.color.mode === 'rgb' ? d.color.rgb : d.color && d.color.mode === 'white' ? [255, 255, 255] : out.rgb || (isFallback ? [235, 235, 235] : null);
-          drawField(g, f2, dd2, profFor(lastMode), (fx, fy) => { const [px, py] = physFromRaw(fx, fy), [ax, ay] = sentToApp(px, py); return boxPt(B, ax, ay); }, { rgb: rgbD, alpha: Math.max(0.2, d.intensity), glow: 1.4 });
+          drawField(g, f2, dd2, profFor(lastMode), (fx, fy) => { const [px, py] = physFromRaw(fx, fy), [ax, ay] = sentToApp(px, py); return boxPt(B, ax, ay); }, { rgb: rgbD, alpha: Math.max(0.2, d.intensity), glow: 1.4, uniform: B.h / 2 });
         }
         if (d.tooSmall) { g.save(); g.strokeStyle = '#ff3b5c'; g.lineWidth = 4; g.strokeRect(2, 2, W - 4, H - 4); g.fillStyle = '#ff3b5c'; g.font = '700 12px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.tooSmall'), W / 2, 22); g.restore(); }
       } else {
@@ -2995,10 +2998,12 @@ function syncCtrUI() { ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); 
 ['ctrX', 'ctrY'].forEach((k) => { const el = $('#' + k); if (!el) return; el.addEventListener('input', () => { cfg[k] = +el.value / 100; saveCfg(); syncCtrUI(); }); });
 { const b = $('#ctrReset'); if (b) b.onclick = () => { cfg.ctrX = 0; cfg.ctrY = 0; saveCfg(); syncCtrUI(); }; }
 syncCtrUI();
+if (!cfg.mig2310fix) { cfg.invX = !cfg.invX; cfg.kpps = 20; // hele billedet spejles vandret (kanal 12) – så både position og mønster vender rigtigt
+  cfg.mig2310fix = true; saveCfg(); } // højre gik til venstre IRL; Admin Tool: SD card scan speed 20 kpps
 if (!cfg.mig2310pov) { cfg.viewZoom = 1; cfg.mig2310pov = true; saveCfg(); }
 if (!cfg.mig2310pro) { // 23/10: Professional Mode + ShowNET-mapping. DJ-tidens rettelser (midte, kanter, vending, fold) passer ikke længere → nulstil
   cfg.dmxMode = 'pro'; cfg.profile = ShowNET.profileOf(cfg.profile); cfg.ctrX = 0; cfg.ctrY = 0; cfg.axis = { x: 0, y: 0 }; cfg.edgesUser = false;
-  cfg.orient = { on: false, q: {}, pat: {} }; cfg.flipLearn = null; cfg.lmap = null; cfg.dirX = false; cfg.dirY = false; cfg.fold = {}; cfg.zoneSent = {}; cfg.kpps = 0; cfg.animScale = 1; cfg.viewGain = {};
+  cfg.orient = { on: false, q: {}, pat: {} }; cfg.flipLearn = null; cfg.lmap = null; cfg.dirX = false; cfg.dirY = false; cfg.fold = {}; cfg.zoneSent = {}; cfg.kpps = 20; cfg.animScale = 1; cfg.viewGain = {};
   cfg.lim = { on: true, top: 1, bottom: -1, left: -1, right: 1, small: cfg.lim && cfg.lim.small, big: cfg.lim && cfg.lim.big, sizeOn: cfg.lim && cfg.lim.sizeOn, set: {} };
   cfg.mig2310pro = true; cfg._proNotice = true; cfg.mig2110rot = true; saveCfg();
 }
