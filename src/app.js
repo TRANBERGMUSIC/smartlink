@@ -1424,7 +1424,7 @@ function specialGeom() {
     return Object.assign({ rgb: [255, 0, 0], raw: true }, calGeomFor([1, 2, 4, 3][maxEdge()]));
   }
   if (special === 'max') { const e = [[false, 0.97], [false, -0.97], [true, -0.97], [true, 0.97]][maxEdge()]; return { vertical: e[0], off: e[1], offLaser: e[0] ? e[1] : e[1] * YF(), rgb: [255, 0, 0] }; }
-  const z = cfg.zone || 0, side = cfg.zoneSide || 'bottom';
+  const z = zoneEff(), side = cfg.zoneSide || 'bottom';
   const edge = (s) => (s === 'bottom' || s === 'left' ? -1 + 2 * z + 0.03 : 1 - 2 * z - 0.03);
   const vertical = side === 'left' || side === 'right';
   return { vertical, off: edge(side), offLaser: vertical ? edge(side) : edge(side) * YF(), rgb: [255, 0, 0] };
@@ -1653,7 +1653,12 @@ function computeFrame(now) {
     const L = cfg.lim, ax_ = clamp(lx, -1, 1), ay_ = clamp(ly / YF(), -1, 1);
     // laseren folder mønstret tilbage når mønstrets kant rammer scannerens yderste: midten må højst stå 1 − k·størrelse ude (målt)
     const F = cfg.dmxMode === 'pro' ? {} : cfg.fold || {}, fs = clamp(sizeApp, 0.05, 1), cX = cfg.ctrX || 0, cY = cfg.ctrY || 0;
-    const lo = (k) => -1 + (F[k] ?? F.all ?? 0) * fs, hi = (k) => 1 - (F[k] ?? F.all ?? 0) * fs;
+    let lo = (k) => -1 + (F[k] ?? F.all ?? 0) * fs, hi = (k) => 1 - (F[k] ?? F.all ?? 0) * fs;
+    if (cfg.dmxMode === 'pro') { // hele mønstret skal blive i feltet: midten kan gå helt ud til mønstrets kant rammer kanten – uanset størrelse
+      const pb = patBox(st.pattern), fr_ = patHalfSent(sizeApp), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
+      const hx = Math.min(1, (pb.hx * c_ + pb.hy * s_) * fr_), hy = Math.min(1, (pb.hx * s_ + pb.hy * c_) * fr_);
+      lo = (k) => (k === 'left' ? -1 + hx : -1 + hy); hi = (k) => (k === 'right' ? 1 - hx : 1 - hy);
+    }
     const [sx, sy] = appToSent(ax_, ay_), cx = clamp(sx, Math.max(L.left, lo('left') - cX), Math.min(L.right, hi('right') - cX)), cy = clamp(sy, Math.max(L.bottom, lo('bottom') - cY), Math.min(L.top, hi('top') - cY));
     clamped = Math.abs(cx - sx) > 1e-4 || Math.abs(cy - sy) > 1e-4; sendX = cx; sendY = cy; rawX = cx; rawY = cy;
     [axc, ayc] = sentToApp(cx + (cfg.ctrX || 0), cy + (cfg.ctrY || 0));
@@ -1684,6 +1689,7 @@ function orientPro(oX, oY) { // Pro Mode har en inversionskanal – spejling kr�
   [o.all, (o.q || {})[key], (o.pat || {})[st.pattern]].forEach((k) => { const v = OR_OPTS[k || 'n'] || OR_OPTS.n; rot += v[0]; mx ^= v[1]; my ^= v[2]; });
   return { rot, invX: !!mx, invY: !!my };
 }
+function zoneEff() { return cfg.dmxMode === 'pro' ? clamp(cfg.zone || 0, 0, 1) * (cfg.zoneTop ?? 0.97) : cfg.zone || 0; } // 100 % = det højeste punkt laseren kan ramme (målt 97 %)
 function proFrame(on, ang, mode, rgb, bright, strobe) { // Professional Mode: tilstand → ShowNET.encode → DMX (én sandhedskilde)
   const P = profFor('pro'), show = on && st.pattern > 0 && (cfg.calibDone || camCal.active);
   let [oX, oY] = posOut(out.sendX, out.sendY); const o = orientPro(oX, oY);
@@ -1693,7 +1699,7 @@ function proFrame(on, ang, mode, rgb, bright, strobe) { // Professional Mode: ti
   if (cfg.patCenterFix !== false && !con.pos && !raw.on && !measure && !camCal.active) { const c = patCenter(st.pattern); [rcx, rcy] = rotV(c.x * frac, c.y * frac, rotDeg); }
   const x = (invX ? -oX : oX) - rcx, y = (invY ? -oY : oY) - rcy; out.patOff = [rcx, rcy]; // inversion spejler også positionen (firmwarens rækkefølge)
   const f = ShowNET.encode({ on: show, intensity: master * cfg.maxInt * bright, pattern: st.pattern, fps: fpsFrac(st.fps) * 100, freeze: st.freeze, x, y, sizeX: frac, sizeY: frac, rotDeg, invX, invY,
-    color: mode === 'orig' ? { mode: 'orig' } : { mode: 'rgb', rgb }, strobe, zone: cfg.zone, zoneSide: cfg.zoneSide }, P, 'pro');
+    color: mode === 'orig' ? { mode: 'orig' } : { mode: 'rgb', rgb }, strobe, zone: zoneEff(), zoneSide: cfg.zoneSide }, P, 'pro');
   const a0 = cfg.address - 1; for (let i = 0; i < f.length; i++) dmx[a0 + i] = f[i];
 }
 
@@ -1811,6 +1817,13 @@ function patExtent(n, ang = 0) {
   const e = extCache.get(n);
   if (Math.abs(ang) % 180 < 3) return e;
   const m = Math.max(e.x, e.y); return { x: m, y: m }; // drejet: brug den største
+}
+const pbCache = new Map();
+function patBox(n) { // mønstrets halve bredde/højde omkring dets egen midte (mønster-koordinater)
+  if (pbCache.has(n)) return pbCache.get(n); const fr = patData.get(n); if (!fr || !fr.length) return { hx: 0.5, hy: 0.5 };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const f of fr) for (let i = 0; i < f.n; i++) { if (f.bl[i]) continue; const x = f.xy[i * 2], y = f.xy[i * 2 + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const b = x0 === Infinity ? { hx: 0, hy: 0 } : { hx: (x1 - x0) / 2, hy: (y1 - y0) / 2 }; pbCache.set(n, b); return b;
 }
 const pcCache = new Map();
 function patCenter(n) { // mønstrets egen midte (mønstre er ikke altid tegnet om 0,0) – i mønster-koordinater
@@ -2050,7 +2063,7 @@ window.addEventListener('resize', debounce(() => renderPatterns(), 200));
 // ---------- sikkerhedszone i forhåndsvisningen ----------
 function zoneRect(W, H) {
   if (!(cfg.zone > 0)) return null;
-  const b = pvBox(W, H); let z = cfg.zone;
+  const b = pvBox(W, H); let z = zoneEff();
   if (cfg.lim && cfg.lim.on) { // zonens linje i laserens egne (sendte) koordinater → LIVE
     const side = cfg.zoneSide || 'bottom', zs = cfg.zoneSent || {}, d0 = { bottom: -1, top: 1, left: -1, right: 1 }[side], s0 = zs[side + '0'] ?? d0, s1 = zs[side + '1'] ?? -d0;
     // 0 % = det målte startpunkt (s0), 100 % = helt ude ved LIVE-kanten i den anden ende

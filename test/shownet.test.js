@@ -59,7 +59,7 @@ test('decode(encode(s)) == s (DJ, alle positionsmodeller)', () => {
     assert.strictEqual(f[13], 0, 'DJ kanal 14 (operation mode) skal være 0');
   }
 });
-test('Pro zone: bund 0–63, intensitet 255 = intet lys', () => { const f = S.encode({ on: true, pattern: 1, zone: 0.5, zoneSide: 'top' }, null, 'pro'); assert.strictEqual(f[18], 64 + 31); assert.strictEqual(f[19], 255); const d = S.decode(f, null, 'pro'); near(d.zone, 32 / 63, 1e-9, 'zone'); assert.strictEqual(d.zoneSide, 'top'); });
+test('Pro zone: bund 0–63, intensitet 255 = intet lys', () => { const f = S.encode({ on: true, pattern: 1, zone: 0.5, zoneSide: 'top' }, null, 'pro'); assert.strictEqual(f[18], 0 + 32); assert.strictEqual(f[19], 255); const d = S.decode(f, null, 'pro'); near(d.zone, 32 / 63, 1e-9, 'zone'); assert.strictEqual(d.zoneSide, 'top'); });
 test('slukket = intet synligt', () => { assert.strictEqual(S.decode(S.encode({ on: false, pattern: 3 }, null, 'pro'), null, 'pro').visible, false); assert.strictEqual(S.decode(S.encode({ on: true, pattern: 0 }, null, 'pro'), null, 'pro').visible, false); });
 test('transformationskæde: skalér og rotér om ILDA-origo, ikke mønstrets midte', () => {
   const d = { sizeX: 0.5, sizeY: 0.5, rotDeg: 90, x: 0.2, y: 0, invX: false, invY: false };

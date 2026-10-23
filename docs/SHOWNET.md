@@ -25,7 +25,7 @@ Alt hvad der går til laseren laves i `src/shownet.js` (rene funktioner, ingen D
 | 14–16 | R, G, B |
 | 17 | Strobe (0–15 ingen) |
 | 18 | Scan speed (0–15 default) |
-| 19 | Sikkerhedszone: 0–63 bund, 64–127 top, 128–191 venstre, 192–255 højre. Målt: lav værdi i området = stor zone, så appen sender 63 − zone·63 |
+| 19 | Sikkerhedszone: 0–63 bund, 64–127 top, 128–191 venstre, 192–255 højre. Målt: laserens bund-område (0–63) ligger fysisk i toppen, så appen bruger 64–127 til en zone nedefra; højere værdi = større zone |
 | 20 | Lys i zonen: 0 = fuld, 255 = intet |
 | 21–23 | Farvebalance R/G/B: **0 = maksimum, 255 = intet lys** |
 | 24–25 | Setup/Save – sendes altid 0 |
