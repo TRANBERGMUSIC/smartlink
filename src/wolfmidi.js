@@ -41,7 +41,9 @@
   // CC som knap: press når værdien er over tærsklen og (var under, eller beskeden kommer alene efter en pause –
   // knapper der kun sender fx 127 ved hvert tryk og aldrig 0), release når den krydser ned under. Tilstand pr. signal.
   const CC_GAP_MS = 250;
-  function ccEdges(ccState, id, value, threshold = 64, now = Date.now()) {
+  // Standard-tærskel 1: Wolfmix sender typisk en lille værdi ved tryk (fx 4, 6, 10 = "MIDI out value") og 0 ved slip.
+  const DEFAULT_THR = 1;
+  function ccEdges(ccState, id, value, threshold = DEFAULT_THR, now = Date.now()) {
     const s = ccState[id] || { high: false, t: 0 }, high = value >= threshold;
     const edge = high ? (!s.high || now - s.t > CC_GAP_MS ? 'press' : null) : s.high ? 'release' : null;
     ccState[id] = { high, t: now }; return edge;
@@ -54,23 +56,26 @@
     return isNew;
   }
   // én MIDI-besked → liste af handlinger der skal køres: [{ action, value? }]
-  function dispatch(state, ccState, ev, now) {
+  // isHold(id): handlingen er en "hold"-handling → den får value 1 ved tryk og value 0 ved slip
+  function dispatch(state, ccState, ev, now, isHold) {
     const b = state.bindings[ev.id]; if (!b) return [];
     const out = [];
     if (ev.type === 'cc') {
       if (b.onChange) out.push({ action: b.onChange, value: ev.value / 127, slot: 'onChange' });
-      const edge = ccEdges(ccState, ev.id, ev.value, b.threshold ?? 64, now);
+      const edge = ccEdges(ccState, ev.id, ev.value, b.threshold ?? DEFAULT_THR, now);
       if (edge === 'press' && b.onPress) out.push({ action: b.onPress, slot: 'onPress' });
       if (edge === 'release' && b.onRelease) out.push({ action: b.onRelease, slot: 'onRelease' });
+      if (edge === 'release' && b.onPress && isHold && isHold(b.onPress)) out.push({ action: b.onPress, value: 0, slot: 'holdRelease' });
     } else {
       if (ev.event === 'press' && b.onPress) out.push({ action: b.onPress, slot: 'onPress' });
       if (ev.event === 'release' && b.onRelease) out.push({ action: b.onRelease, slot: 'onRelease' });
+      if (ev.event === 'release' && b.onPress && isHold && isHold(b.onPress)) out.push({ action: b.onPress, value: 0, slot: 'holdRelease' });
       if (ev.event === 'press' && b.onChange) out.push({ action: b.onChange, value: ev.value / 127, slot: 'onChange' }); // fx anslagsstyrke → dimmer
     }
     return out;
   }
   function bind(state, id, slot, action) {
-    const b = state.bindings[id] || (state.bindings[id] = { onPress: null, onRelease: null, onChange: null, threshold: 64 });
+    const b = state.bindings[id] || (state.bindings[id] = { onPress: null, onRelease: null, onChange: null, threshold: DEFAULT_THR });
     b[slot] = action || null; return b;
   }
   // Lær: kan denne hændelse bruges til handlingen? trigger → tryk (note/program) eller en hvilken som helst CC; continuous → CC eller note
@@ -80,7 +85,7 @@
     return ev.event === 'press' ? 'onPress' : null;
   }
   // tærskel når en CC læres som knap: sender knappen fx kun værdien 1 eller 0, skal tærsklen ned så trykket tæller
-  function learnThreshold(ev) { return ev.type === 'cc' ? Math.min(64, ev.value) : 64; }
+  function learnThreshold(ev) { return ev.type === 'cc' && ev.value === 0 ? 0 : DEFAULT_THR; }
   // import fra Wolfmix Monitor: triggers.json {id:{label}} og signals.json {id:{type,channel,number,last_value,count,last_seen}}
   function importMonitor(state, triggers, signals) {
     let names = 0, sigs = 0;
@@ -92,6 +97,6 @@
     for (const [id, tr] of Object.entries(triggers || {})) { const r = ensure(id); if (!r || !tr || !tr.label) continue; r.name = String(tr.label); names++; }
     return { names, signals: sigs };
   }
-  function sanitize(obj) { const s = newState(); if (obj && typeof obj === 'object') { if (obj.signals && typeof obj.signals === 'object') s.signals = obj.signals; if (obj.bindings && typeof obj.bindings === 'object') s.bindings = obj.bindings; if (obj.active === false) s.active = false; } return s; }
-  return { TYPES, parse, parseId, toBytes, newState, normalize, ccEdges, learnThreshold, record, dispatch, bind, learnSlot, importMonitor, sanitize };
+  function sanitize(obj) { const s = newState(); if (obj && typeof obj === 'object') { if (obj.signals && typeof obj.signals === 'object') s.signals = obj.signals; if (obj.bindings && typeof obj.bindings === 'object') s.bindings = obj.bindings; for (const b of Object.values(s.bindings)) if (b && b.threshold === 64) b.threshold = DEFAULT_THR; /* gammel standard (64) virkede ikke med Wolfmix' små værdier */ if (obj.active === false) s.active = false; if (obj.layout && typeof obj.layout === 'object') s.layout = obj.layout; if (obj.out && typeof obj.out === 'object') s.out = obj.out; } return s; }
+  return { DEFAULT_THR, TYPES, parse, parseId, toBytes, newState, normalize, ccEdges, learnThreshold, record, dispatch, bind, learnSlot, importMonitor, sanitize };
 });

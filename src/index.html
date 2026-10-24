@@ -299,6 +299,14 @@
       <span data-i18n="wmidi.learnLbl"></span><select id="wmidiLearnAct"></select><button class="primary small" id="wmidiLearn" data-i18n="wmidi.learn"></button>
       <span class="wmidi-learnmsg" id="wmidiLearnMsg" hidden></span>
     </div>
+    <div class="wc-wrap">
+      <div class="wc" id="wc">
+        <div class="wc-col" id="wcLeft"></div>
+        <div class="wc-mid"><div class="wc-screen" id="wcScreen"></div><div class="wc-encs" id="wcEncs"></div><div class="wc-pads" id="wcPads"></div></div>
+        <div class="wc-col" id="wcRight"></div>
+      </div>
+      <div class="wc-insp" id="wcInsp"></div>
+    </div>
     <div class="wmidi-log" id="wmidiLog"></div>
     <div class="wmidi-empty" id="wmidiNoDev" hidden>
       <h3 data-i18n="wmidi.noDevTitle"></h3>
@@ -306,7 +314,7 @@
       <p class="hint" id="wmidiErr"></p>
     </div>
     <div class="wmidi-empty" id="wmidiNoSig" hidden><h3 data-i18n="wmidi.noSig"></h3><p class="hint" data-i18n="wmidi.noSigHint"></p></div>
-    <div class="wmidi-tablewrap"><table class="wmidi-table" id="wmidiTable"></table></div>
+    <details class="wmidi-list"><summary data-i18n="wc.list"></summary><div class="wmidi-tablewrap"><table class="wmidi-table" id="wmidiTable"></table></div></details>
     <details class="wmidi-sim"><summary data-i18n="wmidi.sim"></summary>
       <div class="row">
         <select id="wmidiSimType"><option value="note">Note</option><option value="cc">CC</option><option value="pc">Program</option></select>
@@ -673,6 +681,7 @@
 <script src="app.js"></script>
 <script src="actions.js"></script>
 <script src="wolfpage.js"></script>
+<script src="wolfconsole.js"></script>
 <script src="vector.js"></script>
 </body>
 </html>

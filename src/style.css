@@ -881,3 +881,85 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .wmidi-log { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 22px; }
 .wmidi-log:empty::before { content: attr(data-empty); color: var(--muted); }
 .wmidi-log b { color: var(--accent); font-weight: 600; }
+
+/* ---------- Wolfmix-konsol (tegning af pulten, uden branding) ---------- */
+.wc-wrap { display: grid; grid-template-columns: minmax(0, 680px) minmax(280px, 1fr); gap: 16px; align-items: start; }
+.wc { display: grid; grid-template-columns: 96px 1fr 96px; gap: 18px; background: #0a0a0c; background-image: radial-gradient(120% 80% at 50% 0%, #15161a 0%, #0a0a0c 70%); border: 1px solid #1c1d22; border-radius: 12px; padding: 22px 18px 20px; box-shadow: 0 24px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04); }
+.wc-col { display: flex; flex-direction: column; gap: 12px; padding-top: 74px; }
+/* gummiknapper i siderne */
+.wc-btn { position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px; color: var(--c); transition: background .06s, box-shadow .06s, transform .06s; }
+.wc-side { width: 100%; height: 62px; border-radius: 5px; border: 1px solid #000; background: linear-gradient(180deg, #1a1b1f 0%, #121316 55%, #0d0e10 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -3px 0 rgba(0,0,0,.55), 0 0 0 2px #050506, 0 3px 6px rgba(0,0,0,.8); }
+.wc-side:hover { background: linear-gradient(180deg, #1f2025, #15161a 60%, #0f1013); }
+.wc-side:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 2px #050506, 0 1px 2px rgba(0,0,0,.8); }
+.wc-side .wc-lbl { font-size: 12.5px; font-weight: 800; letter-spacing: -.01em; text-align: center; line-height: 1.05; text-transform: uppercase; color: var(--c); background: linear-gradient(180deg, var(--c) 15%, var(--c2) 90%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--c2) 45%, transparent)); }
+/* SHIFT og PRESET lyser svagt som på pulten */
+.wc-side.wc-mode { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 92%, #fff), color-mix(in srgb, var(--c2) 85%, #fff)); border-color: color-mix(in srgb, var(--c2) 50%, #000); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 0 0 2px #050506, 0 0 18px color-mix(in srgb, var(--c2) 45%, transparent); }
+.wc-side.wc-mode .wc-lbl { background: none; -webkit-text-fill-color: color-mix(in srgb, var(--c2) 70%, #000); filter: none; font-weight: 600; }
+.wc-groups { box-shadow: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -3px 0 rgba(0,0,0,.55), 0 0 0 2px #050506, 0 3px 6px rgba(0,0,0,.8), inset 0 0 14px color-mix(in srgb, var(--c2) 35%, transparent); }
+.wc-side .wc-fn { color: #7f8592; }
+.wc-side.lit { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 85%, #fff), var(--c) 40%, var(--c2)); border-color: color-mix(in srgb, var(--c) 60%, #000); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 0 0 2px #050506, 0 0 24px color-mix(in srgb, var(--c2) 75%, transparent), 0 0 48px color-mix(in srgb, var(--c2) 35%, transparent); }
+.wc-side.lit .wc-lbl { background: none; -webkit-text-fill-color: color-mix(in srgb, var(--c2) 35%, #14141a); color: #1b1b22; filter: none; }
+.wc-side.lit .wc-fn { color: #2a2a32; }
+.wc-groups .wc-lbl { font-size: 10px; letter-spacing: .08em; }
+.wc-static { display: flex; flex-direction: column; gap: 10px; border: 2px solid #3b3d44; border-radius: 9px; padding: 8px 6px 16px; position: relative; }
+.wc-static-lbl { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); background: #0b0b0d; padding: 0 6px; font-size: 11px; letter-spacing: .02em; color: #b9bdc6; font-style: italic; font-weight: 800; }
+.wc-fn { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.1; }
+.wc-btn:not(.linked) .wc-fn:empty { display: none; }
+.wc-btn.linked::after { content: ''; position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.wc-btn.sel { outline: 2px solid var(--accent); outline-offset: 3px; }
+.wc-btn.listening { animation: wcListen 1s ease-in-out infinite; }
+@keyframes wcListen { 50% { outline-color: #ffb23c; box-shadow: 0 0 22px rgba(255,178,60,.55); } }
+/* skærm */
+.wc-mid { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wc-screen { height: auto; background: #0d1522; border: 7px solid #030304; outline: 1px solid #1e2026; border-radius: 4px; padding: 6px 8px 5px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; box-shadow: inset 0 0 30px rgba(0,0,0,.6); font-size: 11px; }
+.wc-scr-top, .wc-scr-bot { display: flex; align-items: center; gap: 10px; color: #fff; min-width: 0; }
+.wc-scr-top > b { font-weight: 800; letter-spacing: .02em; }
+.wc-scr-msg { flex: 1; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-scr-msg .muted, .wc-scr-bot .muted { color: #8fa3bd; }
+.wc-scr-fn { color: #ffb23c; font-weight: 700; }
+.wc-scr-blink { color: #ffb23c; font-weight: 800; animation: wcBlink 1s steps(2) infinite; }
+@keyframes wcBlink { 50% { opacity: .45; } }
+.wc-scr-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+.wc-cell { --h: 0; height: 20px; padding: 0 5px; border: 0; border-radius: 1px; font-size: 10px; color: rgba(255,255,255,.75); text-align: left; justify-content: flex-start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  background: linear-gradient(180deg, hsl(calc(150 + var(--h) * 25) 28% 52% / .75), hsl(calc(155 + var(--h) * 25) 30% 42% / .75)); }
+.wc-cell.linked { color: #fff; font-weight: 700; }
+.wc-cell.sel { outline: 1px solid var(--accent); outline-offset: -1px; }
+.wc-cell.lit { background: linear-gradient(180deg, #ffb043, #ff7f1f); color: #3a1500; box-shadow: 0 0 10px rgba(255,140,40,.7); }
+.wc-scr-bot { justify-content: space-between; font-size: 10.5px; }
+.wc-scr-bot > span:first-child { color: #8fa3bd; }
+.wc-pg { display: flex; align-items: center; gap: 6px; }
+.wc-pg b { color: #fff; }
+.wc-pgn { color: #ffb23c; font-weight: 800; min-width: 40px; text-align: center; }
+.wc-pg button { height: 20px; padding: 0 8px; font-size: 10px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); color: #fff; }
+.wc-col { padding-top: 0 !important; justify-content: flex-end; }
+/* drejeknapper: rillet metalring med mørk top */
+.wc-encs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: -4px; }
+.wc-enc { width: 100%; min-height: 0; height: 74px; background: none; border: 0; padding: 0; box-shadow: none; }
+.wc-knob { width: 54px; height: 54px; border-radius: 50%; position: relative; --a: -135deg; background: repeating-conic-gradient(#8a8d94 0 3deg, #3d3f45 3deg 6deg); box-shadow: 0 4px 8px rgba(0,0,0,.8), 0 0 0 2px #070708; }
+.wc-knob::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #6d7078, #3a3c42 45%, #1d1e22 100%); box-shadow: inset 0 1px 1px rgba(255,255,255,.25), 0 1px 2px rgba(0,0,0,.8); }
+.wc-knob i { position: absolute; inset: 0; transform: rotate(var(--a)); }
+.wc-knob i::before { content: ''; position: absolute; left: 50%; top: 11px; width: 2px; height: 8px; margin-left: -1px; background: rgba(230,234,240,.75); border-radius: 1px; }
+.wc-enc.lit .wc-knob { box-shadow: 0 4px 8px rgba(0,0,0,.8), 0 0 0 2px var(--accent), 0 0 18px rgba(49,243,172,.55); }
+.wc-enc.sel, .wc-enc.listening { outline: 0; }
+.wc-enc.sel .wc-knob { outline: 2px solid var(--accent); outline-offset: 4px; }
+.wc-enc.listening .wc-knob { outline: 2px solid #ffb23c; outline-offset: 4px; }
+.wc-enc .wc-fn { margin-top: 3px; color: var(--muted); }
+/* pads: matte, frostede gummi-pads der gløder orange */
+.wc-pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 14px; }
+.wc-pad { width: 100%; height: auto; min-height: 0; aspect-ratio: 1 / 0.92; border-radius: 4px; border: 1px solid #a9adb5; color: #8a8f99; background: linear-gradient(165deg, #f3f4f6 0%, #e2e4e8 45%, #cfd2d8 100%); box-shadow: inset 0 -4px 8px rgba(0,0,0,.10), inset 0 2px 0 rgba(255,255,255,.7), 0 0 0 2px #060607, 0 4px 8px rgba(0,0,0,.75); }
+.wc-pad:hover { background: linear-gradient(165deg, #fafafa, #e8eaee 45%, #d6d9de); }
+.wc-pad:active { transform: translateY(1px); }
+.wc-pad .wc-lbl { font-size: 10px; font-weight: 700; position: absolute; top: 5px; left: 7px; color: #a3a8b1; }
+.wc-pad .wc-fn { color: #4a4f58; font-size: 10px; font-weight: 700; white-space: normal; text-align: center; padding: 0 6px; }
+.wc-pad.lit { border-color: #ff9a3c; background: radial-gradient(circle at 50% 58%, #fff3a6 0%, #ffd34d 18%, #ffa63a 45%, #ff7b2c 75%, #f2611f 100%); box-shadow: inset 0 0 18px rgba(255,255,255,.25), 0 0 0 2px #060607, 0 0 28px rgba(255,140,40,.7), 0 0 60px rgba(255,120,30,.35); }
+.wc-pad.lit .wc-lbl, .wc-pad.lit .wc-fn { color: #5a2400; }
+/* panel til højre */
+.wc-insp { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; }
+.wc-insp h3 { margin: 0; font-size: 15px; }
+.wc-i-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; font-size: 12px; }
+.wc-i-row select, .wc-i-row input { width: 100%; min-width: 0; }
+.wc-i-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.wc-listen { margin: 0; color: #ffb23c; font-weight: 700; }
+.wmidi-list > summary { cursor: pointer; color: var(--muted); }
+.wc-insp .mono { font-family: ui-monospace, Menlo, monospace; }
+@media (max-width: 1100px) { .wc-wrap { grid-template-columns: 1fr; } }

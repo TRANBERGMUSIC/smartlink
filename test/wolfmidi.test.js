@@ -30,6 +30,18 @@ test('import fra Wolfmix Monitor', () => {
   const st = W.newState(); const r = W.importMonitor(st, { 'note:1:36': { label: 'Laser op', extra: 1 }, 'bad id': { label: 'x' } }, { 'note:1:36': { type: 'note', channel: 1, number: 36, last_value: 127, count: 14, last_seen: '2026-10-24T02:25:00' }, 'cc:2:7': { type: 'cc', channel: 2, number: 7 } });
   assert.deepStrictEqual(r, { names: 1, signals: 2 }); assert.strictEqual(st.signals['note:1:36'].name, 'Laser op'); assert.strictEqual(st.signals['note:1:36'].count, 14); assert.strictEqual(st.signals['cc:2:7'].type, 'cc');
 });
+test('Wolfmix-knap der sender 4 ved tryk og 0 ved slip virker med standard-tærsklen', () => {
+  const st = W.newState(), cc = {}; W.bind(st, 'cc:4:4', 'onPress', 'laser.toggle'); W.bind(st, 'cc:4:4', 'onRelease', 'x');
+  assert.deepStrictEqual(W.dispatch(st, cc, W.parse([0xb3, 4, 4]), 0).map((a) => a.action), ['laser.toggle']); assert.deepStrictEqual(W.dispatch(st, cc, W.parse([0xb3, 4, 0]), 100).map((a) => a.action), ['x']);
+  assert.deepStrictEqual(W.dispatch(st, cc, W.parse([0xb3, 4, 4]), 900).map((a) => a.action), ['laser.toggle']);
+});
+test('gammel tærskel 64 rettes til 1 ved indlæsning', () => { assert.strictEqual(W.sanitize({ bindings: { 'cc:1:2': { onPress: 'a', threshold: 64 } } }).bindings['cc:1:2'].threshold, 1); });
+test('hold: tryk = 1, slip = 0 (CC 6/0 og note)', () => {
+  const st = W.newState(), cc = {}, isHold = (id) => id === 'hold.blank'; W.bind(st, 'cc:1:6', 'onPress', 'hold.blank'); W.bind(st, 'note:1:1', 'onPress', 'hold.blank');
+  assert.deepStrictEqual(W.dispatch(st, cc, W.parse([0xb0, 6, 6]), 0, isHold).map((a) => [a.action, a.value]), [['hold.blank', undefined]]);
+  assert.deepStrictEqual(W.dispatch(st, cc, W.parse([0xb0, 6, 0]), 50, isHold).map((a) => [a.action, a.value]), [['hold.blank', 0]]);
+  assert.deepStrictEqual(W.dispatch(st, cc, W.parse([0x80, 1, 0]), 0, isHold).map((a) => [a.action, a.value]), [['hold.blank', 0]]);
+});
 test('sanitize tåler skrald', () => { assert.deepStrictEqual(W.sanitize(null), W.newState()); assert.strictEqual(W.sanitize({ active: false }).active, false); });
 
 console.log(failed ? `${failed} af ${n + failed} tests fejlede` : `✓ wolfmidi: alle ${n} tests bestået`);

@@ -35,6 +35,11 @@ const SL_ACTIONS = (() => {
   add('strobe.toggle', 'act.strobe', 'trigger', () => { st.strobe = st.strobe > 0 ? 0 : 0.6; look(); }, 'look');
   add('pos.center', 'act.center', 'trigger', () => { setPos('posX', 0); setPos('posY', 0); }, 'look');
   add('look.reset', 'act.reset', 'trigger', () => $('#resetLook').click(), 'look');
+  // ---- hold (virker kun mens knappen holdes nede; slip = tilbage som før) ----
+  add('hold.blank', 'act.holdBlank', 'hold', (down) => { holdMute = !!down; }, 'hold'); // usynlig, IKKE slukket – ingen ny bekræftelse ved slip
+  let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; st.strobe = 0.85; } else if (strobePrev != null) { st.strobe = strobePrev; strobePrev = null; } look(); }, 'hold');
+  let sizePrev = null; add('hold.full', 'act.holdFull', 'hold', (down) => { if (down) { if (sizePrev == null) sizePrev = st.size; setSize(1); } else if (sizePrev != null) { setSize(sizePrev); sizePrev = null; } }, 'hold');
+  let masterPrev = null; add('hold.bright', 'act.holdBright', 'hold', (down) => { if (down) { if (masterPrev == null) masterPrev = master; setMaster(1); } else if (masterPrev != null) { setMaster(masterPrev); masterPrev = null; } }, 'hold');
   add('wolfmix.preset', 'act.wolfPreset', 'trigger', () => { if (typeof wolfSendPreset === 'function') wolfSendPreset(); }, 'wolfmix');
 
   // ---- trinløse (continuous, 0…1) – samme funktioner som DMX-ind bruger (wmRun i app.js) ----
@@ -45,6 +50,7 @@ const SL_ACTIONS = (() => {
   const byId = Object.fromEntries(list.map((a) => [a.id, a]));
   const label = (a) => { if (!a) return ''; const m = /\.(\d+)$/.exec(a.id); if (a.group === 'preset') { const i = +m[1] - 1; return t('act.preset', { n: i + 1 }) + (PRESETS[i] ? ' – ' + presetName(PRESETS[i], i) : ''); } if (a.group === 'scene') { const i = +m[1] - 1; return t('act.scene', { n: i + 1 }) + (scenes[i] ? ' – ' + scenes[i].name : ''); } return t(a.labelKey); };
   // kør en handling; sendNow() sender med det samme, så der ikke ventes på næste DMX-tik (< 20 ms fra tryk til laser)
-  function run(id, value) { const a = byId[id]; if (!a) return false; try { a.kind === 'continuous' ? a.run(Math.max(0, Math.min(1, value ?? 1))) : a.run(); if (typeof sendNow === 'function') sendNow(); return true; } catch (e) { console.warn('handling', id, e); return false; } }
-  return { list, byId, label, run };
+  function run(id, value) { const a = byId[id]; if (!a) return false; try { a.kind === 'continuous' ? a.run(Math.max(0, Math.min(1, value ?? 1))) : a.kind === 'hold' ? a.run((value ?? 1) > 0) : a.run(); if (typeof sendNow === 'function') sendNow(); return true; } catch (e) { console.warn('handling', id, e); return false; } }
+  const isHold = (id) => !!(byId[id] && byId[id].kind === 'hold');
+  return { list, byId, label, run, isHold };
 })();

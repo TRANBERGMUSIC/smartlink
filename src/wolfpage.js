@@ -18,15 +18,17 @@ function wmiInputs() { return WMI.access ? [...WMI.access.inputs.values()].filte
 function wmiHandle(data, source) {
   const raw = WolfMidi.parse(data); if (!raw) { if (data[0] < 0xf8) wmiLog(source, data, null, ''); return; } // clock/active sensing ignoreres helt
   const now = Date.now(), ev = WolfMidi.normalize(raw, WMI.noteState); WMI.lastAt = now; WMI.lastSrc = source;
+  if (typeof wcIntercept === 'function' && wcIntercept(ev)) { wmiSave(); wmiRender(); wmiLog(source, data, ev, t('wc.logLinked')); return; } // konsollen lytter: forbind, udfør intet
   // 1) udfør først (lav latens), 2) så UI
   let learned = false, did = '';
   if (WMI.learn) { const slot = WolfMidi.learnSlot(WMI.learn.kind, ev); if (slot) { wmiBindLearned(ev, slot); learned = true; did = t('wmidi.logLearned'); } }
-  else if (wmiState.active) { const acts = WolfMidi.dispatch(wmiState, WMI.ccState, ev, now); did = acts.map((a) => (SL_ACTIONS.run(a.action, a.value) ? '✓ ' : '✗ ') + SL_ACTIONS.label(SL_ACTIONS.byId[a.action])).join(', '); }
+  else if (wmiState.active) { const acts = WolfMidi.dispatch(wmiState, WMI.ccState, ev, now, SL_ACTIONS.isHold); did = acts.map((a) => (SL_ACTIONS.run(a.action, a.value) ? '✓ ' : '✗ ') + SL_ACTIONS.label(SL_ACTIONS.byId[a.action])).join(', '); }
   else did = t('wmidi.logPaused');
-  if (!wmiState.active && ev.type === 'cc') WolfMidi.ccEdges(WMI.ccState, ev.id, ev.value, (wmiState.bindings[ev.id] || {}).threshold ?? 64, now); // hold CC-knaptilstand korrekt også på pause
+  if (!wmiState.active && ev.type === 'cc') WolfMidi.ccEdges(WMI.ccState, ev.id, ev.value, (wmiState.bindings[ev.id] || {}).threshold ?? WolfMidi.DEFAULT_THR, now); // hold CC-knaptilstand korrekt også på pause
   const isNew = WolfMidi.record(wmiState, ev); wmiSave();
   if (isNew || learned) wmiRender(); else wmiUpdateRow(ev.id);
   wmiFlash(ev.id); wmiLog(source, data, ev, did);
+  if (typeof wcSignal === 'function') wcSignal(ev);
 }
 // ---------- MIDI-log: de seneste beskeder på siden + fejlsøgningsfil (~/Desktop/SmartLink/wolfmidi-debug.json) ----------
 function wmiLog(source, data, ev, did) {
@@ -60,9 +62,9 @@ function wmiBindLearned(ev, slot) {
 
 // ---------- visning ----------
 function wmiOptions(kind) {
-  const groups = { laser: 'wmidi.gLaser', show: 'wmidi.gShow', look: 'wmidi.gLook', preset: 'wmidi.gPreset', scene: 'wmidi.gScene', wolfmix: 'wmidi.gWolf', cont: 'wmidi.gCont' };
+  const groups = { laser: 'wmidi.gLaser', show: 'wmidi.gShow', look: 'wmidi.gLook', preset: 'wmidi.gPreset', scene: 'wmidi.gScene', wolfmix: 'wmidi.gWolf', cont: 'wmidi.gCont', hold: 'wmidi.gHold' };
   let h = `<option value="">${t('wm.f.none')}</option>`, g = null;
-  for (const a of SL_ACTIONS.list) if (a.kind === kind) { if (a.group !== g) { if (g) h += '</optgroup>'; g = a.group; h += `<optgroup label="${t(groups[g] || g)}">`; } h += `<option value="${a.id}">${escHtml(SL_ACTIONS.label(a))}</option>`; }
+  for (const a of SL_ACTIONS.list) if (a.kind === kind || (kind === 'trigger' && a.kind === 'hold')) { if (a.group !== g) { if (g) h += '</optgroup>'; g = a.group; h += `<optgroup label="${t(groups[g] || g)}">`; } h += `<option value="${a.id}">${escHtml(SL_ACTIONS.label(a))}</option>`; }
   return h + (g ? '</optgroup>' : '');
 }
 function escHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -81,12 +83,12 @@ function wmiRender() {
     const saveName = () => { if ((s.name || '') !== nm.value.trim()) { s.name = nm.value.trim(); wmiSave(true); wmiRenderActs(); } };
     nm.onblur = saveName; nm.onkeydown = (e) => { if (e.key === 'Enter') { saveName(); nm.blur(); } if (e.key === 'Escape') { nm.value = s.name || ''; nm.blur(); e.stopPropagation(); } };
     tr.querySelectorAll('select').forEach((sel) => { sel.value = b[sel.dataset.slot] || ''; sel.onchange = () => { WolfMidi.bind(wmiState, id, sel.dataset.slot, sel.value); wmiSave(true); wmiRenderActs(); }; });
-    const thr = tr.querySelector('.wmidi-thr'); if (thr) { thr.value = b.threshold ?? 64; thr.onchange = () => { const bb = WolfMidi.bind(wmiState, id, 'onPress', (wmiState.bindings[id] || {}).onPress); bb.threshold = clamp(+thr.value | 0 || 64, 1, 127); thr.value = bb.threshold; wmiSave(true); }; }
+    const thr = tr.querySelector('.wmidi-thr'); if (thr) { thr.value = b.threshold ?? WolfMidi.DEFAULT_THR; thr.onchange = () => { const bb = WolfMidi.bind(wmiState, id, 'onPress', (wmiState.bindings[id] || {}).onPress); bb.threshold = clamp(+thr.value | 0, 0, 127); thr.value = bb.threshold; wmiSave(true); }; }
     tr.querySelector('[data-a=test]').onclick = () => { const bb = wmiState.bindings[id] || {}; let any = false; if (bb.onPress) any = SL_ACTIONS.run(bb.onPress) || any; if (bb.onChange) any = SL_ACTIONS.run(bb.onChange, (s.lastValue | 0) / 127) || any; wmiFlash(id); if (!any) toast(t('wmidi.noBinding')); };
     tr.querySelector('[data-a=del]').onclick = () => { delete wmiState.signals[id]; delete wmiState.bindings[id]; wmiSave(true); wmiRender(); };
     body.appendChild(tr); WMI.rows[id] = { tr, v: tr.querySelector('[data-c=v]'), n: tr.querySelector('[data-c=n]') };
   }
-  tb.appendChild(body); wmiStatus(); wmiRenderActs();
+  tb.appendChild(body); wmiStatus(); wmiRenderActs(); if (typeof wcRefresh === 'function' && typeof WC !== 'undefined' && Object.keys(WC.els).length) wcRefresh();
 }
 function wmiUpdateRow(id) { const r = WMI.rows[id], s = wmiState.signals[id]; if (!r || !s) return; r.v.textContent = s.lastValue; r.n.textContent = s.count; }
 function wmiFlash(id) { const r = WMI.rows[id]; if (!r) return; r.tr.classList.remove('flash'); void r.tr.offsetWidth; r.tr.classList.add('flash'); }

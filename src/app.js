@@ -45,6 +45,7 @@ if (!cfg.v37) { cfg.posFmt = 's'; cfg.yFlip = false; cfg.v37 = true; store.set('
 if (!(cfg.scan >= 0 && cfg.scan <= 3)) cfg.scan = 0;
 let master = store.get('master', 0.5);
 let blackout = true; // laseren starter altid SLUKKET
+let holdMute = false; // "hold"-blackout fra Wolfmix: laseren er usynlig mens knappen holdes, men stadig tændt (kommer tilbage ved slip)
 let patNames = store.get('patNames', {});   // { "12": "Tunnel" }
 let patFlip = new Set(store.get('patFlip', [])); // mønstre der skal vendes 180° (kun laseren – appen viser filen som den er)
 let patMirror = store.get('patMirror', {}); if (Array.isArray(patMirror)) patMirror = {};
@@ -1629,7 +1630,7 @@ function computeFrame(now) {
   const liveStrobe = live && dropEnv > 0.6 ? 0.35 : 0;
   const bright = live ? clamp(0.55 + 0.45 * Math.max(music.energy, bassP), 0.3, 1) : 1;
 
-  const on = !blackout;
+  const on = !blackout && !holdMute;
   // skærm-koordinater (0..1) inkl. hvor brugeren har flyttet mønsteret hen; laser-koordinater (-1..1, Y vendt)
   x = clamp(x + sm.x / 2, 0, 1); y = clamp(y + sm.y / 2, 0, 1);
   const lx = (x - 0.5) * 2, ly = (y - 0.5) * 2 * YF();
