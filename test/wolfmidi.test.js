@@ -9,8 +9,14 @@ test('Note On vel 0 og Note Off = release', () => { assert.strictEqual(W.parse([
 test('CC = change, PC = press', () => { const c = W.parse([0xb2, 3, 100]); assert.strictEqual(c.id, 'cc:3:3'); assert.strictEqual(c.event, 'change'); assert.strictEqual(c.value, 100); assert.strictEqual(W.parse([0xc0, 5]).id, 'pc:1:5'); });
 test('Clock og Active Sensing ignoreres', () => { assert.strictEqual(W.parse([0xf8]), null); assert.strictEqual(W.parse([0xfe]), null); });
 test('toBytes ↔ parse', () => { for (const [t, v] of [['note', 90], ['note', 0], ['cc', 33], ['pc', 0]]) { const p = W.parse(W.toBytes(t, 5, 12, v)); assert.strictEqual(p.id, `${t}:5:12`); } });
-test('CC som knap: press ved op over tærskel, release ved ned under, ingen gentagelse', () => {
-  const s = {}; assert.strictEqual(W.ccEdges(s, 'cc:1:3', 10), null); assert.strictEqual(W.ccEdges(s, 'cc:1:3', 70), 'press'); assert.strictEqual(W.ccEdges(s, 'cc:1:3', 127), null); assert.strictEqual(W.ccEdges(s, 'cc:1:3', 20), 'release');
+test('CC som knap: press ved op over tærskel, release ved ned under, ingen gentagelse under fader-bevægelse', () => {
+  const s = {}; assert.strictEqual(W.ccEdges(s, 'cc:1:3', 10, 64, 0), null); assert.strictEqual(W.ccEdges(s, 'cc:1:3', 70, 64, 10), 'press'); assert.strictEqual(W.ccEdges(s, 'cc:1:3', 127, 64, 30), null); assert.strictEqual(W.ccEdges(s, 'cc:1:3', 20, 64, 50), 'release');
+});
+test('CC-knap der kun sender 127 ved hvert tryk tæller hver gang', () => { const s = {}; assert.strictEqual(W.ccEdges(s, 'cc:1:9', 127, 64, 0), 'press'); assert.strictEqual(W.ccEdges(s, 'cc:1:9', 127, 64, 1000), 'press'); assert.strictEqual(W.ccEdges(s, 'cc:1:9', 127, 64, 2000), 'press'); });
+test('CC-knap med værdi 0 kan læres (tærskel 0)', () => { const ev = W.parse([0xb0, 9, 0]); assert.strictEqual(W.learnSlot('trigger', ev), 'onPress'); assert.strictEqual(W.learnThreshold(ev), 0); const s = {}; assert.strictEqual(W.ccEdges(s, ev.id, 0, 0, 0), 'press'); });
+test('Note On med hastighed 0 ved tryk (MIDI out value 0) tæller som tryk', () => {
+  const ns = {}, ev = W.normalize(W.parse([0x90, 36, 0]), ns); assert.strictEqual(ev.event, 'press');
+  const a = W.normalize(W.parse([0x90, 36, 100]), ns), b = W.normalize(W.parse([0x80, 36, 0]), ns); assert.strictEqual(a.event, 'press'); assert.strictEqual(b.event, 'release');
 });
 test('dispatch: tryk/slip/ændring normaliseret til 0–1', () => {
   const st = W.newState(), cc = {}; W.bind(st, 'note:1:36', 'onPress', 'laser.on'); W.bind(st, 'note:1:36', 'onRelease', 'laser.off'); W.bind(st, 'cc:1:3', 'onChange', 'master');
@@ -19,7 +25,7 @@ test('dispatch: tryk/slip/ændring normaliseret til 0–1', () => {
   const d = W.dispatch(st, cc, W.parse([0xb0, 3, 127])); assert.strictEqual(d[0].action, 'master'); assert.strictEqual(d[0].value, 1);
 });
 test('record: tæller og bevarer navn', () => { const st = W.newState(); assert.ok(W.record(st, W.parse([0x90, 36, 100]))); st.signals['note:1:36'].name = 'Laser op'; assert.ok(!W.record(st, W.parse([0x90, 36, 50]))); assert.strictEqual(st.signals['note:1:36'].count, 2); assert.strictEqual(st.signals['note:1:36'].name, 'Laser op'); assert.strictEqual(st.signals['note:1:36'].lastValue, 50); });
-test('Lær: trigger kræver tryk, continuous tager CC', () => { assert.strictEqual(W.learnSlot('trigger', W.parse([0x90, 1, 9])), 'onPress'); assert.strictEqual(W.learnSlot('trigger', W.parse([0x80, 1, 0])), null); assert.strictEqual(W.learnSlot('continuous', W.parse([0xb0, 1, 3])), 'onChange'); assert.strictEqual(W.learnSlot('continuous', W.parse([0xc0, 1])), null); });
+test('Lær: trigger kræver tryk, continuous tager CC', () => { assert.strictEqual(W.learnSlot('trigger', W.parse([0x90, 1, 9])), 'onPress'); assert.strictEqual(W.learnSlot('trigger', W.parse([0x80, 1, 0])), null); assert.strictEqual(W.learnSlot('trigger', W.parse([0xb0, 1, 5])), 'onPress'); assert.strictEqual(W.learnSlot('continuous', W.parse([0xb0, 1, 3])), 'onChange'); assert.strictEqual(W.learnSlot('continuous', W.parse([0xc0, 1])), null); });
 test('import fra Wolfmix Monitor', () => {
   const st = W.newState(); const r = W.importMonitor(st, { 'note:1:36': { label: 'Laser op', extra: 1 }, 'bad id': { label: 'x' } }, { 'note:1:36': { type: 'note', channel: 1, number: 36, last_value: 127, count: 14, last_seen: '2026-10-24T02:25:00' }, 'cc:2:7': { type: 'cc', channel: 2, number: 7 } });
   assert.deepStrictEqual(r, { names: 1, signals: 2 }); assert.strictEqual(st.signals['note:1:36'].name, 'Laser op'); assert.strictEqual(st.signals['note:1:36'].count, 14); assert.strictEqual(st.signals['cc:2:7'].type, 'cc');

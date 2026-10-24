@@ -2,7 +2,7 @@
  * Web MIDI (Chromium/CoreMIDI) – ingen ekstra afhængigheder. Hot-plug via onstatechange. Tolkning/datamodel ligger i wolfmidi.js.
  */
 'use strict';
-const WMI = { access: null, err: '', ccState: {}, learn: null, rows: {}, lastAt: 0, lastSrc: '', saveT: null, optsT: '', optsC: '' };
+const WMI = { access: null, err: '', noteState: {}, log: [], dumpT: null, version: '', ccState: {}, learn: null, rows: {}, lastAt: 0, lastSrc: '', saveT: null, optsT: '', optsC: '' };
 let wmiState = WolfMidi.sanitize(store.get('wolfMidi', null));
 if (!wmiState.out) wmiState.out = { name: '', channel: 1, note: 0, velocity: 127 }; // SmartLink → Wolfmix (UI kommer senere)
 const wmiSave = (now) => { clearTimeout(WMI.saveT); if (now) store.set('wolfMidi', wmiState); else WMI.saveT = setTimeout(() => store.set('wolfMidi', wmiState), 800); };
@@ -16,16 +16,28 @@ async function wmiInit() {
 }
 function wmiInputs() { return WMI.access ? [...WMI.access.inputs.values()].filter((i) => i.state !== 'disconnected') : []; }
 function wmiHandle(data, source) {
-  const ev = WolfMidi.parse(data); if (!ev) return; // clock/active sensing m.m. ignoreres
-  WMI.lastAt = Date.now(); WMI.lastSrc = source;
+  const raw = WolfMidi.parse(data); if (!raw) { if (data[0] < 0xf8) wmiLog(source, data, null, ''); return; } // clock/active sensing ignoreres helt
+  const now = Date.now(), ev = WolfMidi.normalize(raw, WMI.noteState); WMI.lastAt = now; WMI.lastSrc = source;
   // 1) udfør først (lav latens), 2) så UI
-  let learned = false;
-  if (WMI.learn) { const slot = WolfMidi.learnSlot(WMI.learn.kind, ev); if (slot) { wmiBindLearned(ev, slot); learned = true; } }
-  else if (wmiState.active) for (const a of WolfMidi.dispatch(wmiState, WMI.ccState, ev)) SL_ACTIONS.run(a.action, a.value);
-  if (!wmiState.active && ev.type === 'cc') WolfMidi.ccEdges(WMI.ccState, ev.id, ev.value, (wmiState.bindings[ev.id] || {}).threshold ?? 64); // hold CC-knaptilstand korrekt også på pause
+  let learned = false, did = '';
+  if (WMI.learn) { const slot = WolfMidi.learnSlot(WMI.learn.kind, ev); if (slot) { wmiBindLearned(ev, slot); learned = true; did = t('wmidi.logLearned'); } }
+  else if (wmiState.active) { const acts = WolfMidi.dispatch(wmiState, WMI.ccState, ev, now); did = acts.map((a) => (SL_ACTIONS.run(a.action, a.value) ? '✓ ' : '✗ ') + SL_ACTIONS.label(SL_ACTIONS.byId[a.action])).join(', '); }
+  else did = t('wmidi.logPaused');
+  if (!wmiState.active && ev.type === 'cc') WolfMidi.ccEdges(WMI.ccState, ev.id, ev.value, (wmiState.bindings[ev.id] || {}).threshold ?? 64, now); // hold CC-knaptilstand korrekt også på pause
   const isNew = WolfMidi.record(wmiState, ev); wmiSave();
   if (isNew || learned) wmiRender(); else wmiUpdateRow(ev.id);
-  wmiFlash(ev.id);
+  wmiFlash(ev.id); wmiLog(source, data, ev, did);
+}
+// ---------- MIDI-log: de seneste beskeder på siden + fejlsøgningsfil (~/Desktop/SmartLink/wolfmidi-debug.json) ----------
+function wmiLog(source, data, ev, did) {
+  const hex = [...data].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  WMI.log.unshift({ at: new Date().toISOString().slice(11, 23), source, hex, id: ev ? ev.id : '?', event: ev ? ev.event + (ev.zeroPress ? '*' : '') : t('wmidi.logUnknown'), value: ev ? ev.value : null, did });
+  WMI.log.length = Math.min(WMI.log.length, 40);
+  const el = $('#wmidiLog'); if (el) el.innerHTML = WMI.log.slice(0, 6).map((l) => `<div><span class="muted">${l.at}</span> <b>${l.hex}</b> → ${escHtml(l.id)} ${escHtml(l.event)} ${l.value ?? ''} ${l.did ? '· ' + escHtml(l.did) : `· <span class="muted">${t('wmidi.logNone')}</span>`}</div>`).join('');
+  wmiDebugDump();
+}
+function wmiDebugDump() {
+  clearTimeout(WMI.dumpT); WMI.dumpT = setTimeout(() => { try { if (window.laser.wolfDebug) window.laser.wolfDebug(JSON.stringify({ at: new Date().toISOString(), version: WMI.version, err: WMI.err, inputs: wmiInputs().map((i) => ({ name: i.name, state: i.state, connection: i.connection })), outputs: WMI.access ? [...WMI.access.outputs.values()].map((o) => o.name) : [], learn: WMI.learn, active: wmiState.active, blackout: typeof blackout !== 'undefined' ? blackout : null, log: WMI.log, signals: wmiState.signals, bindings: wmiState.bindings }, null, 1)); } catch (_) {} }, 500);
 }
 // ---------- MIDI ud: SmartLink → Wolfmix (kræver kabel fra MIDIFLEX Out 3 til MIDIMATE IN) ----------
 function wmiOutput() { if (!WMI.access) return null; const outs = [...WMI.access.outputs.values()]; return outs.find((o) => wmiState.out.name && o.name === wmiState.out.name) || outs.find((o) => /midiflex/i.test(o.name)) || outs[0] || null; }
@@ -42,7 +54,7 @@ function wmiStartLearn(actionId) {
 }
 function wmiStopLearn(msg) { WMI.learn = null; const m = $('#wmidiLearnMsg'); if (msg) { m.textContent = msg; setTimeout(() => { if (!WMI.learn) m.hidden = true; }, 3500); } else m.hidden = true; $('#wmidiLearn').textContent = t('wmidi.learn'); }
 function wmiBindLearned(ev, slot) {
-  const a = SL_ACTIONS.byId[WMI.learn.action]; WolfMidi.record(wmiState, ev); WolfMidi.bind(wmiState, ev.id, slot, a.id); wmiSave(true);
+  const a = SL_ACTIONS.byId[WMI.learn.action]; WolfMidi.record(wmiState, ev); const bb = WolfMidi.bind(wmiState, ev.id, slot, a.id); if (ev.type === 'cc' && slot === 'onPress') { bb.threshold = WolfMidi.learnThreshold(ev); WolfMidi.ccEdges(WMI.ccState, ev.id, ev.value, bb.threshold); } wmiSave(true);
   const nm = wmiState.signals[ev.id].name || ev.id; wmiStopLearn(t('wmidi.learned', { s: nm, a: SL_ACTIONS.label(a) })); wmiRenderActs();
 }
 
@@ -110,6 +122,7 @@ function wmiApplyImport(triggers, signals) { const r = WolfMidi.importMonitor(wm
 // ---------- start ----------
 (() => {
   if (!$('#wmidiTable')) return;
+  $('#wmidiLog').dataset.empty = t('wmidi.logEmpty');
   $('#wmidiActive').checked = wmiState.active; $('#wmidiActive').onchange = (e) => { wmiState.active = e.target.checked; wmiSave(true); };
   $('#wmidiLearn').onclick = () => { if (WMI.learn) wmiStopLearn(); else wmiStartLearn($('#wmidiLearnAct').value); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && WMI.learn) { wmiStopLearn(t('wmidi.learnAborted')); e.stopPropagation(); e.preventDefault(); } }, true);
@@ -124,5 +137,5 @@ function wmiApplyImport(triggers, signals) { const r = WolfMidi.importMonitor(wm
     wmiHandle(WolfMidi.toBytes(ty, ch, nr, v), t('wmidi.simSrc'));
     if (ty === 'note' && v > 0) setTimeout(() => wmiHandle(WolfMidi.toBytes('note', ch, nr, 0), t('wmidi.simSrc')), 150); // knap slippes igen
   };
-  wmiRender(); setInterval(() => { wmiTick(); wmiStatus(); }, 1000); wmiInit();
+  wmiRender(); setInterval(() => { wmiTick(); wmiStatus(); }, 1000); wmiInit().then(wmiDebugDump); window.laser.appVersion().then((v) => { WMI.version = v; }).catch(() => {});
 })();
