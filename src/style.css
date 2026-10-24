@@ -824,3 +824,57 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .cal-num { width: 100%; height: 26px; font-size: 12px; padding: 0 6px; background: #0b0d13; color: var(--text); border: 1px solid rgba(255,255,255,.18); border-radius: 6px; }
 .co-row4 { grid-template-columns: 1fr 80px 70px 52px !important; } .cal-off { display: flex !important; gap: 4px; align-items: center; font-size: 11px; margin: 0 !important; }
 .pv-zoom { display: none !important; }
+
+/* ---------- Vektor-fanen ---------- */
+#page-vector { grid-template-columns: 1.3fr 1fr; grid-template-rows: 1fr; }
+.vec-left, .vec-right { display: flex; flex-direction: column; min-height: 0; }
+.vec-right { overflow-y: auto; }
+.vec-canvaswrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#vecCanvas { border-radius: 6px; cursor: crosshair; touch-action: none; }
+.vec-stats { font-size: 12px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.vec-stats.warn { color: #ffb23c; } .vec-stats.bad { color: #ff4d5e; }
+.vec-text { color: var(--text); font-family: inherit; font-size: 18px; resize: vertical; min-height: 54px; }
+.vec-layers { display: flex; flex-direction: column; gap: 4px; }
+.vec-layer { display: grid; grid-template-columns: auto 34px 1fr auto auto; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+.vec-layer.active { border-color: var(--accent); background: var(--accent-dim); }
+.vec-layer input[type=color] { width: 30px; height: 22px; padding: 0; border: 0; background: none; }
+.vec-num { width: 70px; } .vec-name { width: 100px; text-transform: uppercase; }
+.vec-opt { margin-top: 12px; } .vec-opt summary { cursor: pointer; color: var(--muted); }
+.vec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 8px; }
+.vec-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.vec-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+.vec-table th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding: 4px; }
+.vec-table td { padding: 4px; border-bottom: 1px solid var(--line); }
+.vec-acts { white-space: nowrap; text-align: right; }
+.vec-big { flex: 1; height: 40px; margin-top: 12px; width: 100%; }
+#vecStopBtn.danger { background: #ff3b5c; color: #fff; border-color: #ff3b5c; }
+.vec-msg { font-size: 12px; min-height: 16px; margin-top: 10px; color: var(--muted); word-break: break-word; }
+.vec-msg.ok { color: #3ddc84; } .vec-msg.bad { color: #ff4d5e; }
+@media (max-width: 900px) { #page-vector { grid-template-columns: 1fr; grid-template-rows: auto auto; } .vec-canvaswrap { min-height: 320px; } }
+
+/* ---------- Wolfmix (MIDI) ---------- */
+#page-wolf { grid-template-columns: 1fr; grid-template-rows: auto auto; align-content: start; }
+.wmidi { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wmidi .panel-head { flex-wrap: wrap; height: auto; }
+.wmidi-learnbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.wmidi-learnbar select { max-width: 280px; }
+.wmidi-learnmsg { color: #ffb23c; font-weight: 600; padding: 4px 10px; border: 1px solid rgba(255,170,60,.5); border-radius: 999px; background: rgba(255,170,60,.1); }
+.wmidi-empty { border: 1px dashed var(--line); border-radius: 10px; padding: 16px 18px; }
+.wmidi-empty h3 { margin: 0 0 8px; font-size: 14px; }
+.wmidi-empty ol { margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.8; font-size: 13px; }
+.wmidi-tablewrap { overflow-x: auto; }
+.wmidi-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.wmidi-table th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding: 5px 6px; white-space: nowrap; }
+.wmidi-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.wmidi-table tr.flash td { animation: wmidiFlash .5s ease-out; }
+@keyframes wmidiFlash { from { background: rgba(49,243,172,.28); } to { background: transparent; } }
+.wmidi-table .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+.wmidi-table select { height: 26px; font-size: 12px; max-width: 190px; }
+.wmidi-name { width: 150px; }
+.wmidi-thr { width: 52px; }
+.wmidi-rowacts { text-align: right; }
+.wmidi-sim summary, .wmidi-acts summary, .wolf-dmx > summary { cursor: pointer; color: var(--muted); }
+.wmidi-sim .row label { gap: 6px; }
+.wmidi-actlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 4px 14px; margin-top: 8px; }
+.wmidi-act { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; font-size: 12px; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.wolf-dmx > .wolfpanel { margin-top: 12px; }

@@ -6,3 +6,7 @@ Mac-app til at styre en Laserworld DS-3000RGB MK5 (ShowNET) over Art-Net – ude
 - Appen tjekker selv efter nye versioner (Indstillinger → Opdateringer).
 
 Udvikling: `npm install` → `npm start`. Byg: `npm run dist`.
+
+## Vektor → laser
+
+Tekst/tegninger til laser med SD-kort-eksport og DAC-backends: se [docs/LASER_PIPELINE.md](docs/LASER_PIPELINE.md). ShowNET-mappingen er beskrevet i [docs/SHOWNET.md](docs/SHOWNET.md).

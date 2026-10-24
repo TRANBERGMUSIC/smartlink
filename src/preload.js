@@ -36,5 +36,13 @@ contextBridge.exposeInMainWorld('laser', {
   netStatus: (ip) => ipcRenderer.invoke('net-status', ip),
   netSetup: (ip) => ipcRenderer.invoke('net-setup', ip),
   pollTarget: (ip) => ipcRenderer.send('poll-target', ip),
+  outDiscover: (id) => ipcRenderer.invoke('out-discover', id),
+  outOpen: (id, opts) => ipcRenderer.invoke('out-open', { id, opts }),
+  outFrame: (points, pps) => ipcRenderer.send('out-frame', { points, pps }),
+  outShutter: (open) => ipcRenderer.send('out-shutter', open),
+  outClose: () => ipcRenderer.invoke('out-close'),
+  onOutStatus: (fn) => ipcRenderer.on('out-status', (_e, s) => fn(s)),
+  saveSdPackage: (title, files, table) => ipcRenderer.invoke('save-sd-package', { title, files, table }),
+  wolfMonitorImport: () => ipcRenderer.invoke('wolfmon-import'),
   netRemove: () => ipcRenderer.invoke('net-remove'),
 });

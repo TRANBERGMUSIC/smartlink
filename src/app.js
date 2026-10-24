@@ -158,7 +158,10 @@ const WM_DEFAULT = ['size', 'posX', 'posY', 'rotAngle', 'blackout', 'pattern', '
 const wm = { last: null, seen: 0, learn: null, prevVals: new Int16Array(512).fill(-1), act: {} };
 function wmMap() { if (!cfg.wmMap || !cfg.wmMap.length) cfg.wmMap = WM_DEFAULT.slice(); return cfg.wmMap; }
 function wmApply(ch, v, prev) { // én kanal ændrede sig
-  const fn = wmMap()[ch]; if (!fn || fn === 'none') return; const f = v / 255;
+  const fn = wmMap()[ch]; if (!fn || fn === 'none') return; wmRun(fn, v, prev);
+}
+function wmRun(fn, v, prev) { // udfør funktion med værdi 0–255 (bruges af DMX-ind og af MIDI-handlingsregistret i actions.js)
+  const f = v / 255;
   wm.act[fn] = Date.now();
   switch (fn) {
     case 'master': setMaster(f); break;
@@ -3356,6 +3359,7 @@ $('#diagStop').onclick = () => {
 function setLang(l) {
   LANG = l; try { localStorage.setItem('ls.lang', JSON.stringify(l)); } catch (_) {}
   applyI18n();
+  if (typeof wmiRender === 'function') wmiRender(); // Wolfmix-tabellen har tekster i dropdowns
   $$('#langSeg button').forEach((b) => b.classList.toggle('active', b.dataset.lang === l));
   setBlackout(blackout);
   $('#sceneHint').textContent = t(storing ? 'scene.storeHint' : 'scene.hint');

@@ -186,6 +186,12 @@ ipcMain.handle('save-ild-batch', async (_e, { title, files }) => {
   for (const f of files) { const buf = Buffer.from(f.bytes); const nm = String(f.num).padStart(3, '0') + '.ild'; fs.writeFileSync(path.join(dir, nm), buf); fs.writeFileSync(path.join(patDir(), nm), buf); }
   return { dir, list: listPatterns() };
 });
+// Wolfmix Monitor (hjælpeappen): læs navngivne signaler, så de kan importeres på Wolfmix-siden
+ipcMain.handle('wolfmon-import', () => {
+  const dir = path.join(os.homedir(), 'Library', 'Application Support', 'WolfmixMonitor'), rd = (f) => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (_) { return null; } };
+  const triggers = rd('triggers.json'), signals = rd('signals.json'); return triggers || signals ? { triggers, signals } : null;
+});
+const outputs = require('./backends').install(() => win, () => patDir()); // vektor-pipeline: Ether Dream / Helios / IDN / ShowNET-SDK + SD-pakke
 ipcMain.handle('save-ild', async (_e, { name, bytes, alsoLocal }) => {
   const r = await dialog.showSaveDialog(win, {
     title: 'Gem laser-mønster (.ild)',
@@ -548,6 +554,8 @@ app.whenReady().then(() => {
     session.defaultSession.on('select-serial-port', (event, portList, _wc, callback) => { event.preventDefault(); try { win.webContents.send('usb-list', { kind: 'serial', list: portList.map((p) => ({ portName: p.portName, displayName: p.displayName, vendorId: p.vendorId, productId: p.productId })) }); } catch (_) {} callback(''); });
     session.defaultSession.setPermissionCheckHandler((_wc, permission) => (permission === 'usb' || permission === 'serial' ? true : true));
     session.defaultSession.setDevicePermissionHandler(() => true);
+    // Web MIDI til Wolfmix-siden (kun almindelig MIDI, ikke sysex); alt andet som før
+    session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(perm === 'midiSysex' ? false : true));
   } catch (_) {}
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -555,6 +563,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   // Send blackout før vi lukker
+  try { outputs.stopAll(); } catch (_) {}
   try {
     const zero = new Array(512).fill(0);
     sock.send(artDmx(0, zero), 6454, '2.255.255.255');

@@ -15,6 +15,7 @@
     <button data-tab="keys" class="tab" data-i18n="tab.keys"></button>
     <button data-tab="wolf" class="tab" data-i18n="tab.wolf"></button>
     <button data-tab="design" class="tab" data-i18n="tab.design"></button>
+    <button data-tab="vector" class="tab" data-i18n="tab.vector"></button>
     <button data-tab="settings" class="tab" data-i18n="tab.settings"></button>
   </nav>
   <div class="topright">
@@ -289,7 +290,35 @@
 <!-- ============ SETTINGS ============ -->
 <!-- ============ TASTER ============ -->
 <section class="page" id="page-wolf">
-  <div class="panel wolfpanel">
+  <div class="panel wmidi">
+    <div class="panel-head"><h2 data-i18n="wmidi.title"></h2><span class="wolf-conn" id="wmidiConn"></span><span class="muted small" id="wmidiLast"></span><div class="spacer"></div>
+      <label class="chk"><input type="checkbox" id="wmidiActive"> <span data-i18n="wmidi.active"></span></label>
+      <button class="ghost small" id="wmidiImport" data-i18n="wmidi.import"></button><input type="file" id="wmidiImportFile" accept=".json,application/json" multiple hidden>
+    </div>
+    <div class="wmidi-learnbar">
+      <span data-i18n="wmidi.learnLbl"></span><select id="wmidiLearnAct"></select><button class="primary small" id="wmidiLearn" data-i18n="wmidi.learn"></button>
+      <span class="wmidi-learnmsg" id="wmidiLearnMsg" hidden></span>
+    </div>
+    <div class="wmidi-empty" id="wmidiNoDev" hidden>
+      <h3 data-i18n="wmidi.noDevTitle"></h3>
+      <ol><li data-i18n="wmidi.step1"></li><li data-i18n="wmidi.step2"></li><li data-i18n="wmidi.step3"></li></ol>
+      <p class="hint" id="wmidiErr"></p>
+    </div>
+    <div class="wmidi-empty" id="wmidiNoSig" hidden><h3 data-i18n="wmidi.noSig"></h3><p class="hint" data-i18n="wmidi.noSigHint"></p></div>
+    <div class="wmidi-tablewrap"><table class="wmidi-table" id="wmidiTable"></table></div>
+    <details class="wmidi-sim"><summary data-i18n="wmidi.sim"></summary>
+      <div class="row">
+        <select id="wmidiSimType"><option value="note">Note</option><option value="cc">CC</option><option value="pc">Program</option></select>
+        <label><span data-i18n="wmidi.ch"></span> <input type="number" id="wmidiSimCh" min="1" max="16" value="1" class="vec-num"></label>
+        <label><span data-i18n="wmidi.nr"></span> <input type="number" id="wmidiSimNr" min="0" max="127" value="36" class="vec-num"></label>
+        <label><span data-i18n="wmidi.val"></span> <input type="number" id="wmidiSimVal" min="0" max="127" value="127" class="vec-num"></label>
+        <button class="ghost small" id="wmidiSimGo" data-i18n="wmidi.simGo"></button>
+      </div>
+    </details>
+    <details class="wmidi-acts"><summary data-i18n="wmidi.acts"></summary><div class="wmidi-actlist" id="wmidiActList"></div></details>
+  </div>
+  <details class="panel wolf-dmx"><summary data-i18n="wolf.dmxOld"></summary>
+  <div class="wolfpanel">
     <div class="panel-head"><h2 data-i18n="wolf.title"></h2><span class="wolf-conn" id="wolfConn"></span><div class="spacer"></div><button class="ghost small" id="wolfTest" data-i18n="wolf.test"></button><button class="ghost small" id="wolfSettings" data-i18n="wolf.settings"></button></div>
     <p class="hint" data-i18n="wolf.hint"></p>
     <div class="wolf-console">
@@ -299,6 +328,7 @@
     </div>
     <p class="hint" id="wolfLog"></p>
   </div>
+  </details>
 </section>
 <section class="page" id="page-keys">
   <div class="panel keyspanel">
@@ -371,6 +401,56 @@
       <button class="primary" id="dzSave" data-i18n="dz.save"></button>
     </div>
     <p class="hint" data-i18n-html="dz.saveHint"></p>
+  </div>
+</section>
+
+<section class="page" id="page-vector">
+  <div class="panel vec-left">
+    <div class="panel-head"><h2 data-i18n="vec.title"></h2>
+      <div class="seg" id="vecTool"><button data-tool="text" data-i18n="vec.tText"></button><button data-tool="line" data-i18n="vec.tLine"></button><button data-tool="rect" data-i18n="vec.tRect"></button><button data-tool="circle" data-i18n="vec.tCircle"></button><button data-tool="free" data-i18n="vec.tFree"></button></div>
+    </div>
+    <div class="vec-canvaswrap"><canvas id="vecCanvas"></canvas></div>
+    <div class="vec-stats" id="vecStats"></div>
+    <label class="row small"><input type="checkbox" id="vecShowBlank"> <span data-i18n="vec.showBlank"></span></label>
+  </div>
+  <div class="panel vec-right">
+    <div id="vecTextBox">
+      <h2 data-i18n="vec.textLabel"></h2>
+      <textarea id="vecText" class="dz-input vec-text" rows="2" spellcheck="false">LASER</textarea>
+      <div class="sliders"><label><span data-i18n="dz.size"></span> <input type="range" id="vecTextSize" min="4" max="60" value="25"><output></output></label></div>
+      <div class="row"><span class="seg" id="vecFont"><button data-font="stroke" data-i18n="vec.fStroke"></button><button data-font="outline" data-i18n="vec.fOutline"></button></span><button class="ghost small" id="vecTextAdd" data-i18n="vec.textAdd"></button></div>
+      <p class="hint" data-i18n="vec.textHint"></p>
+    </div>
+    <h2 class="dz-h" data-i18n="vec.layers"></h2>
+    <div class="vec-layers" id="vecLayers"></div>
+    <div class="row"><button class="ghost small" id="vecAddLayer" data-i18n="vec.addLayer"></button><button class="ghost small" id="vecUndo" data-i18n="dz.undo"></button><button class="ghost small" id="vecClear" data-i18n="dz.clear"></button><button class="ghost small" id="vecNewDoc" data-i18n="vec.newDoc"></button></div>
+    <h2 class="dz-h" data-i18n="vec.anim"></h2>
+    <div class="row"><button class="ghost small" id="vecPrev">◀</button><span id="vecFrameLbl" class="small"></span><button class="ghost small" id="vecNext">▶</button><button class="ghost small" id="vecDup" data-i18n="vec.dup"></button><button class="ghost small" id="vecDelFrame" data-i18n="vec.delFrame"></button><label class="small"><span data-i18n="vec.fps"></span> <input type="number" id="vecFps" min="1" max="100" class="vec-num"></label></div>
+    <details class="vec-opt"><summary data-i18n="vec.opt"></summary>
+      <div class="vec-grid">
+        <label><span data-i18n="vec.pps"></span><input type="number" id="vecPps" class="vec-num"></label><span class="muted small" id="vecPpsHint"></span>
+        <label><span data-i18n="vec.step"></span><input type="number" id="vecStep" step="0.25" class="vec-num"></label>
+        <label><span data-i18n="vec.anchor"></span><input type="number" id="vecAnchor" class="vec-num"></label>
+        <label><span data-i18n="vec.dwell"></span><input type="number" id="vecDwell" class="vec-num"></label>
+        <label><span data-i18n="vec.derate"></span><input type="number" id="vecDerate" class="vec-num"></label>
+        <label><span data-i18n="vec.min"></span><input type="number" id="vecMin" step="0.5" class="vec-num"></label>
+        <label><span data-i18n="vec.int"></span><input type="number" id="vecInt" class="vec-num"></label>
+      </div>
+    </details>
+    <h2 class="dz-h" data-i18n="vec.out"></h2>
+    <div class="seg wide" id="vecRoute"><button data-route="sd" data-i18n="vec.rSd"></button><button data-route="dac" data-i18n="vec.rDac"></button></div>
+    <div id="vecSdBox">
+      <div class="row"><label class="small"><span data-i18n="vec.slot"></span> <input type="number" id="vecSlot" min="1" max="255" class="vec-num"></label><label class="small"><span data-i18n="vec.name"></span> <input id="vecName" maxlength="8" class="vec-name"></label><button class="ghost small" id="vecAddPkg" data-i18n="vec.addPkg"></button></div>
+      <div id="vecPkg"></div>
+      <button class="primary vec-big" id="vecExport" data-i18n="vec.export"></button>
+    </div>
+    <div id="vecDacBox" hidden>
+      <p class="hint" data-i18n="vec.dacHint"></p>
+      <div class="row"><select id="vecBackend"><option value="etherdream">Ether Dream (LAN)</option><option value="helios">Helios (USB)</option><option value="idn">IDN (LAN)</option><option value="shownet_sdk">ShowNET SDK (LAN)</option></select><button class="ghost small" id="vecFind" data-i18n="vec.find"></button><select id="vecDev"></select></div>
+      <div class="row small"><label><input type="checkbox" id="vecFlipX"> <span data-i18n="vec.flipX"></span></label><label><input type="checkbox" id="vecFlipY"> <span data-i18n="vec.flipY"></span></label></div>
+      <div class="row"><button class="primary vec-big" id="vecLiveBtn" data-i18n="vec.live"></button><button class="vec-big" id="vecStopBtn" data-i18n="vec.stop"></button></div>
+    </div>
+    <p class="vec-msg" id="vecMsg"></p>
   </div>
 </section>
 
@@ -586,6 +666,12 @@
 <script src="words.js"></script>
 <script src="designer.js"></script>
 <script src="shownet.js"></script>
+<script src="laser_frame.js"></script>
+<script src="ilda_io.js"></script>
+<script src="wolfmidi.js"></script>
 <script src="app.js"></script>
+<script src="actions.js"></script>
+<script src="wolfpage.js"></script>
+<script src="vector.js"></script>
 </body>
 </html>
