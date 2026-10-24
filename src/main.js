@@ -554,8 +554,9 @@ app.whenReady().then(() => {
     session.defaultSession.on('select-serial-port', (event, portList, _wc, callback) => { event.preventDefault(); try { win.webContents.send('usb-list', { kind: 'serial', list: portList.map((p) => ({ portName: p.portName, displayName: p.displayName, vendorId: p.vendorId, productId: p.productId })) }); } catch (_) {} callback(''); });
     session.defaultSession.setPermissionCheckHandler((_wc, permission) => (permission === 'usb' || permission === 'serial' ? true : true));
     session.defaultSession.setDevicePermissionHandler(() => true);
-    // Web MIDI til Wolfmix-siden (kun almindelig MIDI, ikke sysex); alt andet som før
-    session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(perm === 'midiSysex' ? false : true));
+    // Web MIDI til Wolfmix-siden. Nyere Chromium spørger om 'midiSysex' for AL MIDI (også når siden beder om sysex: false),
+    // så begge skal tillades – ellers afvises adgangen. Appen sender/læser stadig kun almindelige MIDI-beskeder.
+    session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(true));
   } catch (_) {}
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
