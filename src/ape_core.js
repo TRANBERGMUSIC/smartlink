@@ -57,8 +57,8 @@
     lines.push('', profile === 'show' ? 'Til sidst: More → DMX transmitter → Gruppe 1 → Enable (eller hold CONNECT-knappen i 6 s fra slukket).' : 'Til sidst: slå DMX transmitter FRA, så CONNECT bliver i app-mode.');
     return lines.join('\n');
   }
-  function exportWolfmixPatch(p) {
-    return ['Wolfmix patch (XLR A = univers 1, CONNECT DMX IN)', 'Fixture: "Ape Labs Neon Tube PIX ' + (p.tubes[0] && p.tubes[0].mode) + '" (egen fra Fixture Builder ved 32/64ch)', '']
+  function exportWolfmixPatch(p, out = 'B') {
+    return [`Wolfmix patch på DMX-udgang ${out} (det XLR-stik der går i CONNECT DMX IN)`, 'Fixture: "Ape Labs Neon Tube PIX ' + (p.tubes[0] && p.tubes[0].mode) + '" (egen fra Fixture Builder ved 32/64ch)', '']
       .concat(p.tubes.map((t) => `${t.name}: adresse ${t.address}–${t.end}, Wolfmix-gruppe ${t.floor === 1 ? 'A' : 'B'} (etage ${t.floor})`)).join('\n');
   }
   function exportFixtureBuilder(mode = '64ch') {

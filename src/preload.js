@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('laser', {
   outClose: () => ipcRenderer.invoke('out-close'),
   onOutStatus: (fn) => ipcRenderer.on('out-status', (_e, s) => fn(s)),
   saveSdPackage: (title, files, table) => ipcRenderer.invoke('save-sd-package', { title, files, table }),
+  artnetNodes: () => ipcRenderer.invoke('artnet-nodes'),
+  usbFind: () => ipcRenderer.invoke('usb-find'),
   apeLinks: () => ipcRenderer.invoke('ape-links'),
   wolfDebug: (txt) => ipcRenderer.send('wolf-debug', txt),
   wolfMonitorImport: () => ipcRenderer.invoke('wolfmon-import'),

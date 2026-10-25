@@ -439,6 +439,10 @@ ipcMain.handle('remote-info', async () => {
   if (url) { try { qr = await require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#000000', light: '#ffffff' } }); } catch (_) {} }
   return { enabled: remote.cfg.enabled && !!remote.server, url, httpsUrl: remote.https ? remoteURL(true) : null, qr, clients: remote.clients.size, error: remote.lastError || null, ips: lanIPs() };
 });
+ipcMain.handle('artnet-nodes', () => Object.entries(nodes).map(([ip, n]) => ({ ip, name: n.name, longName: n.longName, universe: n.universe, ago: Date.now() - n.seen })).filter((n) => n.ago < 15000 && !laserAddrs().map((a) => a.address).includes(n.ip)));
+ipcMain.handle('usb-find', () => { // kan Mac'en se en Ape Labs CONNECT på USB? (kun til info – DMX går via XLR)
+  try { const out = require('child_process').execSync('system_profiler SPUSBDataType 2>/dev/null', { encoding: 'utf8', timeout: 15000 }); const hits = out.split('\n').filter((l) => /ape\s*labs|connect/i.test(l)).map((l) => l.trim()); return { ok: true, hits }; } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle('ape-links', async () => { // links + QR til Ape Labs-telefonerne (Etage 1, Etage 2, Alle)
   const ip = lanIPs()[0], urls = {}, qr = {};
   for (const [r, k] of Object.entries(remote.cfg.apeTokens || {})) { urls[r] = ip ? `http://${ip.address}:${REMOTE_PORT}/?k=${k}` : null; if (urls[r]) { try { qr[r] = await require('qrcode').toDataURL(urls[r], { margin: 1, width: 300 }); } catch (_) {} } }

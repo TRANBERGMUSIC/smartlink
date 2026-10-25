@@ -1073,3 +1073,20 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 /* plads til fanen "Lys" i toppen */
 .topright .lang { flex-wrap: nowrap; }
 .tabs .tab { padding-left: 11px; padding-right: 11px; }
+
+/* Lys: forbindelse */
+.ape-top { grid-template-columns: auto 1fr auto auto; }
+.ape-linksum { height: 34px; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 0 14px; }
+.ape-linksum.ok { color: var(--accent); border-color: rgba(49,243,172,.5); } .ape-linksum.warn { color: #ffb23c; border-color: rgba(255,178,60,.5); } .ape-linksum.bad { color: #ff6b78; border-color: rgba(255,77,94,.5); }
+.ape-chain { display: flex; flex-direction: column; align-items: stretch; gap: 2px; max-width: 760px; }
+.ape-link-seg { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.ape-link-seg b { display: block; font-size: 13px; } .ape-link-seg small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; } .ape-link-seg em { display: block; font-style: normal; font-size: 10.5px; margin-top: 3px; letter-spacing: .04em; text-transform: uppercase; }
+.ape-ls-i { font-size: 18px; text-align: center; }
+.ape-link-seg.ok { border-color: rgba(49,243,172,.35); } .ape-link-seg.ok .ape-ls-i, .ape-link-seg.ok em { color: var(--accent); }
+.ape-link-seg.bad { border-color: rgba(255,77,94,.45); } .ape-link-seg.bad .ape-ls-i, .ape-link-seg.bad em { color: #ff6b78; }
+.ape-link-seg.unknown .ape-ls-i, .ape-link-seg.unknown em { color: #ffb23c; }
+.ape-link-seg.confirmed { border-color: rgba(49,243,172,.25); } .ape-link-seg.confirmed .ape-ls-i, .ape-link-seg.confirmed em { color: #8fe3c2; }
+.ape-link-seg.na { opacity: .55; }
+.ape-chain-arrow { text-align: center; color: #3a4152; font-size: 14px; line-height: 1; padding-left: 20px; text-align: left; }
+.ape-test { max-width: 760px; } .ape-test p { margin: 0; font-size: 13px; } .ape-test ol { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 12.5px; color: var(--text); }
+@media (max-width: 1100px) { .ape-top { grid-template-columns: 1fr; } .ape-linksum { justify-self: start; } }

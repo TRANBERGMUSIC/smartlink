@@ -8,7 +8,7 @@
 const T = (da, en) => (typeof LANG !== 'undefined' && LANG === 'en' ? en : da);
 const APE_DEF = () => ({
   profile: 'show', topology: 'A', chMode: '64ch', tubes: ApeCore.DEFAULT_TUBES(), artnet: { ip: '2.255.255.255', universe: 1 }, out: false,
-  owners: { 1: 'app', 2: 'app' }, locks: { 1: false, 2: false }, sel: [1, 2], tab: 'control',
+  owners: { 1: 'app', 2: 'app' }, locks: { 1: false, 2: false }, sel: [1, 2], tab: 'link', wolfOut: 'B', checks: {},
   colors: [['Rød', [255, 0, 0, 0]], ['Orange', [255, 90, 0, 0]], ['Gul', [255, 200, 0, 0]], ['Grøn', [0, 255, 0, 0]], ['Cyan', [0, 255, 255, 0]], ['Blå', [0, 30, 255, 0]], ['Lilla', [140, 0, 255, 0]], ['Pink', [255, 0, 140, 0]], ['Varm hvid', [0, 0, 0, 255]], ['Kold hvid', [255, 255, 255, 0]]]
     .map(([name, rgbw], i) => ({ id: 'c' + i, name, folder: T('Standard', 'Default'), rgbw })),
   programs: [{ id: 'p0', name: 'Rød/blå', folder: T('Standard', 'Default'), steps: [{ color: [255, 0, 0, 0], fade: 1, hold: 1 }, { color: [0, 30, 255, 0], fade: 1, hold: 1 }] }],
@@ -37,6 +37,10 @@ function apeTick() {
   let u = ApeCore.render(apeState, p, { t: now / 1000, beat: beat != null ? Math.min(beat, 4) : null, programs });
   const wolfLive = AP.wolfIn && Date.now() - AP.wolfInAt < 2000;
   if (APE.topology === 'B' && wolfLive) u = ApeCore.merge(AP.wolfIn, u, p, APE.owners, AP.ltp);
+  if (AP.ident) { // rør-test: hvert rør lyser hvidt ét ad gangen (1 → 6), så man kan se at signalet når frem – og i hvilken rækkefølge
+    const k = Math.floor((now - AP.ident.t0) / 700); if (k >= p.tubes.length * 2) AP.ident = null;
+    else { u = new Uint8Array(512); const tube = p.tubes.slice().sort((a, b) => a.id - b.id)[k % p.tubes.length]; AP.ident.cur = tube.id; u.set(ApeCore.tubeChannels(tube.mode, [[255, 255, 255, 255]], { dimmer: 1, strobeDmx: 0, strobeOn: true }), tube.address - 1); }
+  }
   AP.uni = u;
   // vagthund: kun DMX i SHOW og kun når appen faktisk er i kæden (B/C)
   if (APE.out && APE.topology !== 'A') {
@@ -128,7 +132,7 @@ function apeTopBar() {
   const node = (icon, label, sub, cls = '') => `<div class="ape-node ${cls}"><span class="ape-node-i">${icon}</span><b>${label}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
   const arrow = '<span class="ape-arrow"></span>';
   const flow = lounge ? [node('⌘', 'SmartLink', 'MIDI'), node('▣', 'CONNECT-app', T('tablet/telefon', 'tablet/phone')), node('◉', 'CONNECT', T('app-mode', 'app mode')), node('▬', T('6 rør', '6 tubes'), T('gruppe 1 + 2', 'group 1 + 2'))]
-    : APE.topology === 'A' ? [node('▦', 'Wolfmix', 'XLR A', 'wolf'), node('◉', 'CONNECT', T('DMX-transmitter', 'DMX transmitter')), node('▬', T('6 rør', '6 tubes'), T('gruppe 1', 'group 1'))]
+    : APE.topology === 'A' ? [node('▦', 'Wolfmix', 'DMX ' + (APE.wolfOut || 'B'), 'wolf'), node('◉', 'CONNECT', T('DMX-transmitter', 'DMX transmitter')), node('▬', T('6 rør', '6 tubes'), T('gruppe 1', 'group 1'))]
     : APE.topology === 'B' ? [node('▦', 'Wolfmix', 'DMX-IN', 'wolf'), node('⌘', 'SmartLink', 'merge'), node('⇄', 'Art-Net', T('univers ', 'universe ') + APE.artnet.universe), node('◉', 'CONNECT', 'DMX IN'), node('▬', T('6 rør', '6 tubes'), '')]
     : [node('⌘', 'SmartLink', ''), node('⇄', 'Art-Net', T('univers ', 'universe ') + APE.artnet.universe), node('◉', 'CONNECT', 'DMX IN'), node('▬', T('6 rør', '6 tubes'), '')];
   const sending = APE.out && APE.topology !== 'A' && !lounge;
@@ -138,9 +142,11 @@ function apeTopBar() {
     <div class="ape-flowwrap"><div class="ape-flow">${flow.join(arrow)}</div>
       ${!lounge ? `<div class="ape-topo">${[['A', T('Wolfmix direkte', 'Wolfmix direct')], ['B', T('Wolfmix + app', 'Wolfmix + app')], ['C', T('Kun app', 'App only')]].map(([k, l]) => `<button data-topo="${k}" class="${APE.topology === k ? 'on' : ''}"><b>${k}</b> ${l}</button>`).join('')}</div>` : ''}
     </div>
+    <button class="ape-linksum ${apeLinkSummary().cls}" id="apeLinkSum">${apeLinkSummary().txt}</button>
     <div class="ape-out">${!lounge && APE.topology !== 'A' ? `<label class="ape-switch"><input type="checkbox" id="apeOut" ${APE.out ? 'checked' : ''}><span></span>${T('Send DMX', 'Send DMX')}</label><span class="ape-dot ${sending ? 'on' : ''}"></span><small>${sending ? T('sender 40 Hz', 'sending 40 Hz') : T('stoppet', 'stopped')} · ${escHtml(APE.artnet.ip)}</small>` : `<small class="muted">${lounge ? T('MIDI → ', 'MIDI → ') + escHtml(APE.bridge.port || T('ingen udgang valgt', 'no output selected')) : T('MIDI → ', 'MIDI → ') + escHtml(APE.wolf.port || T('ingen udgang valgt', 'no output selected'))}</small>`}</div>
     ${warn || !plan_.ok ? `<div class="ape-note ${lounge || !plan_.ok ? 'bad' : ''}">${warn}${plan_.ok ? '' : ' ' + T(`${APE.chMode} × 6 = ${plan_.need} kanaler passer ikke i ét univers (512). Vælg 64ch eller mindre.`, `${APE.chMode} × 6 = ${plan_.need} channels does not fit one universe.`)}</div>` : ''}`;
   el.querySelectorAll('[data-p]').forEach((b) => { b.onclick = () => { if (b.dataset.p !== APE.profile) apeSwitchDialog(); }; });
+  $('#apeLinkSum').onclick = () => { APE.tab = 'link'; apeSave(); apeRenderTabs(); apeRenderLink(); };
   el.querySelectorAll('[data-topo]').forEach((b) => { b.onclick = () => { APE.topology = b.dataset.topo; apeSave(); apeRenderAll(); }; });
   const ob = $('#apeOut'); if (ob) ob.onchange = () => { APE.out = ob.checked; apeSave(); apeTopBar(); };
 }
@@ -183,7 +189,7 @@ function apeDrawPreview() { // rørene tegnes som neonrør med glød; etage 2 ø
 function apeLoop() { apeDrawPreview(); requestAnimationFrame(apeLoop); }
 
 function apeRenderTabs() { $$('#apeTabs button').forEach((b) => b.classList.toggle('active', b.dataset.t === APE.tab)); $$('.ape-pane').forEach((p) => { p.hidden = p.dataset.t !== APE.tab; }); }
-function apeRenderAll() { apePlan(); apeTopBar(); apeRenderTabs(); apeRenderControl(); apeRenderPrograms(); apeRenderScenes(); apeRenderPatch(); apeRenderBridge(); apeRenderPhones(); }
+function apeRenderAll() { apePlan(); apeTopBar(); apeRenderTabs(); apeRenderLink(); apeRenderControl(); apeRenderPrograms(); apeRenderScenes(); apeRenderPatch(); apeRenderBridge(); apeRenderPhones(); }
 
 // ---- kontrol ----
 function apeGrouped(list) { const g = {}; for (const x of list) (g[x.folder || '—'] = g[x.folder || '—'] || []).push(x); return Object.entries(g).sort(([a], [b]) => a.localeCompare(b)); }
@@ -280,18 +286,20 @@ function apeRenderPatch() {
       <span class="${p.ok ? 'muted' : 'ape-bad'} small">${p.ok ? T(`${p.total} af 512 kanaler brugt`, `${p.total} of 512 channels used`) : T(`${p.need} kanaler – passer IKKE i ét univers. Én CONNECT = ét univers.`, `${p.need} channels – does NOT fit one universe.`)}</span></div>
     <table class="vec-table ape-tubes"><tr><th>${T('Navn', 'Name')}</th><th>${T('Etage', 'Floor')}</th><th>${T('Rækkefølge', 'Order')}</th><th>${T('Vend', 'Flip')}</th><th>Mode</th><th>${T('Adresse', 'Address')}</th><th>${T('Gruppe SHOW / LOUNGE', 'Group SHOW / LOUNGE')}</th><th>${T('Batteri · firmware · online', 'Battery · firmware · online')}</th></tr>
     ${APE.tubes.map((t) => { const pt = (p.tubes || []).find((x) => x.id === t.id) || {}; return `<tr data-id="${t.id}"><td><input class="ape-tname" value="${escHtml(t.name)}"></td><td><select class="ape-tfloor"><option value="1" ${t.floor === 1 ? 'selected' : ''}>1</option><option value="2" ${t.floor === 2 ? 'selected' : ''}>2</option></select></td><td><input type="number" class="vec-num ape-torder" min="1" max="6" value="${t.order ?? t.id}"></td><td><input type="checkbox" class="ape-tflip" ${t.flip ? 'checked' : ''}></td><td>${APE.chMode}</td><td>${pt.address ? pt.address + '–' + pt.end : '—'}</td><td>1 / ${t.floor}</td><td class="muted small">${T('ukendt – se CONNECT-app', 'unknown – see CONNECT app')}</td></tr>`; }).join('')}</table>
+    <div class="ape-row"><label>${T('Wolfmix DMX-udgang der går i CONNECT', 'Wolfmix DMX output into CONNECT')} <select id="apeWolfOut">${['A', 'B', 'C', 'D'].map((o) => `<option ${o === (APE.wolfOut || 'B') ? 'selected' : ''}>${o}</option>`).join('')}</select></label><span class="muted small">${T('Rørene skal patches på samme udgang i Wolfmix.', 'Patch the tubes on the same output in Wolfmix.')}</span></div>
     <div class="ape-row ape-exports"><button class="ghost small" data-x="show">${T('CONNECT-trin: SHOW', 'CONNECT steps: SHOW')}</button><button class="ghost small" data-x="lounge">${T('CONNECT-trin: LOUNGE', 'CONNECT steps: LOUNGE')}</button><button class="ghost small" data-x="wolf">${T('Wolfmix-patchliste', 'Wolfmix patch list')}</button><button class="ghost small" data-x="fb">Fixture Builder ${APE.chMode}</button></div>
     <h4>Art-Net (${T('når du får en node', 'once you have a node')})</h4><div class="ape-row"><label>IP <input id="apeIp" value="${escHtml(APE.artnet.ip)}"></label><label>${T('Univers ud', 'Universe out')} <input type="number" id="apeUni" class="vec-num" min="0" max="32767" value="${APE.artnet.universe}"></label><label>${T('Wolfmix ind (topologi B)', 'Wolfmix in (topology B)')} <input type="number" id="apeUniIn" class="vec-num" min="0" value="${APE.wolfInUniverse ?? 2}"></label></div>
     <p class="hint">${T('Laseren bruger univers 0 – brug et andet univers til rørene. USB-DMX-bokse understøttes ikke endnu (kræver en driver); en Art-Net-node med XLR-udgang virker med det samme.', 'The laser uses universe 0 – use another universe for the tubes. USB-DMX boxes are not supported yet; an Art-Net node with XLR out works right away.')}</p>
     ${APE.topology === 'B' ? `<h4>${T('Ejerskab pr. etage (topologi B)', 'Ownership per floor (topology B)')}</h4><div class="ape-row">${[1, 2].map((f) => `<label>${T('Etage ', 'Floor ')}${f} <select data-own="${f}"><option value="wolfmix">${T('Wolfmix ejer', 'Wolfmix owns')}</option><option value="app">${T('App ejer', 'App owns')}</option><option value="merge">Merge (HTP/LTP)</option></select></label>`).join('')}</div>` : ''}
     <h4>${T('Kan kun gøres i CONNECT-appen', 'Only possible in the CONNECT app')}</h4><p class="hint">${T('Pairing-netværk, service-mode, firmware-opdatering, flicker-free, powersave (2–48 t), tyverialarm, cloud-sync, tænd/sluk på ekstern strøm og radar kræver CONNECT-appen med CONNECT i app-mode. Åbn CONNECT-appen på telefonen/tabletten → More.', 'Pairing network, service mode, firmware, flicker-free, power save, theft alarm, cloud sync, external power on/off and radar need the CONNECT app with CONNECT in app mode.')}</p>`;
   $('#apeChMode').onchange = (e) => { APE.chMode = e.target.value; apeSave(); apeRenderAll(); };
+  $('#apeWolfOut').onchange = (e) => { APE.wolfOut = e.target.value; apeSave(); apeTopBar(); };
   el.querySelectorAll('tr[data-id]').forEach((tr) => { const t = APE.tubes.find((x) => x.id === +tr.dataset.id);
     tr.querySelector('.ape-tname').onchange = (e) => { t.name = e.target.value; apeSave(); };
     tr.querySelector('.ape-tfloor').onchange = (e) => { t.floor = +e.target.value; apeSave(); apeRenderPatch(); };
     tr.querySelector('.ape-torder').onchange = (e) => { t.order = +e.target.value; apeSave(); apePlan(); };
     tr.querySelector('.ape-tflip').onchange = (e) => { t.flip = e.target.checked; apeSave(); apePlan(); }; });
-  el.querySelectorAll('[data-x]').forEach((b) => { b.onclick = () => { const x = b.dataset.x, txt = x === 'wolf' ? ApeCore.exportWolfmixPatch(p) : x === 'fb' ? ApeCore.exportFixtureBuilder(APE.chMode) : ApeCore.exportConnectSteps(p, x);
+  el.querySelectorAll('[data-x]').forEach((b) => { b.onclick = () => { const x = b.dataset.x, txt = x === 'wolf' ? ApeCore.exportWolfmixPatch(p, APE.wolfOut || 'B') : x === 'fb' ? ApeCore.exportFixtureBuilder(APE.chMode) : ApeCore.exportConnectSteps(p, x);
     apeDialog(b.textContent, `<pre class="ape-pre">${escHtml(txt)}</pre>`, [[T('Kopiér', 'Copy'), () => { try { navigator.clipboard.writeText(txt); toast(T('Kopieret', 'Copied')); } catch (_) {} }], [T('Luk', 'Close'), null]]); }; });
   $('#apeIp').onchange = (e) => { APE.artnet.ip = e.target.value.trim(); apeSave(); apeTopBar(); };
   $('#apeUni').onchange = (e) => { APE.artnet.universe = Math.max(0, +e.target.value | 0); apeSave(); apeTopBar(); };
@@ -347,10 +355,69 @@ async function apeRenderPhones() {
     <h4>${T('Lås etage til Wolfmix', 'Lock floor to Wolfmix')}</h4><div class="ape-row">${[1, 2].map((f) => `<label class="chk"><input type="checkbox" data-lock="${f}" ${APE.locks[f] ? 'checked' : ''}> ${T('Etage ', 'Floor ')}${f} ${T('(telefonen bliver read-only)', '(phone becomes read-only)')}</label>`).join('')}</div>`;
   el.querySelectorAll('[data-lock]').forEach((c) => { c.onchange = () => { APE.locks[c.dataset.lock] = c.checked; apeSave(); }; });
 }
+// ---------- forbindelse: hvad kan måles, og hvad skal bekræftes ved at se på rørene ----------
+// CONNECT sender intet tilbage (ingen batteri-, link- eller DMX-status), så kun appens egen side kan måles. Resten testes med lys.
+function apeLinkSegments() {
+  const lounge = APE.profile === 'lounge', topo = APE.topology, out = APE.wolfOut || 'B', seg = [], now = Date.now(), ck = APE.checks || {};
+  const conf = (key, title, detail, howTo) => seg.push({ key, title, detail, howTo, state: ck[key] ? 'confirmed' : 'unknown', at: ck[key] });
+  if (lounge) {
+    const port = APE.bridge.port, has = apeMidiOuts().some((o) => o.name === port);
+    seg.push({ key: 'bridge', title: T('Mac → MIDI-udgang', 'Mac → MIDI output'), state: has ? 'ok' : 'bad', detail: has ? port : port ? T('udgangen findes ikke lige nu: ', 'output missing: ') + port : T('ingen udgang valgt (MIDI-bro)', 'no output selected (MIDI bridge)') });
+    conf('app', T('CONNECT-appen ↔ CONNECT (Bluetooth)', 'CONNECT app ↔ CONNECT (Bluetooth)'), T('CONNECT i APP-mode og forbundet i CONNECT-appen', 'CONNECT in app mode and connected in the app'));
+    conf('ext', T('"External control via MIDI" + bindinger lært', '"External control via MIDI" + bindings learned'), T('Brug bind-guiden under MIDI-bro', 'Use the binding guide under MIDI bridge'));
+  } else if (topo === 'A') {
+    const ins = typeof wmiInputs === 'function' ? wmiInputs() : [], ago = typeof WMI !== 'undefined' && WMI.lastAt ? Math.round((now - WMI.lastAt) / 1000) : null;
+    seg.push({ key: 'midiIn', title: T('Wolfmix → Mac (MIDI)', 'Wolfmix → Mac (MIDI)'), state: ins.length ? 'ok' : 'bad', detail: ins.length ? ins.map((i) => i.name).join(', ') + (ago != null ? T(' · sidste signal ', ' · last signal ') + ago + T(' sek. siden', ' s ago') : '') : T('ingen MIDI-indgang – kun nødvendig hvis Wolfmix-knapper skal styre appen', 'no MIDI input') });
+    const wp = APE.wolf.port, wHas = apeMidiOuts().some((o) => o.name === wp);
+    seg.push({ key: 'midiOut', title: T('Mac → Wolfmix (MIDI ud)', 'Mac → Wolfmix (MIDI out)'), state: !wp ? 'na' : wHas ? 'ok' : 'bad', detail: !wp ? T('valgfrit – kun hvis appen skal styre rørene via Wolfmix (MIDI-bro)', 'optional – only if the app should drive the tubes via Wolfmix') : wHas ? wp : T('udgangen findes ikke: ', 'output missing: ') + wp });
+    conf('dmx', T(`Wolfmix DMX ${out} → CONNECT DMX IN`, `Wolfmix DMX ${out} → CONNECT DMX IN`), T(`3-pin XLR fra udgang ${out}. Rørene patchet på udgang ${out} i Wolfmix (64ch, adresse 1, 65, 129, 193, 257, 321).`, `3-pin XLR from output ${out}; tubes patched on output ${out}.`));
+  } else {
+    const nodes = AP.nodes || [];
+    seg.push({ key: 'node', title: T('Art-Net-node på netværket', 'Art-Net node on the network'), state: nodes.length ? 'ok' : 'bad', detail: nodes.length ? nodes.map((n) => `${n.name || n.longName || 'node'} (${n.ip})`).join(', ') : T('ingen node svarer – tjek kabel/IP (laseren tæller ikke)', 'no node answers') });
+    const sending = APE.out && now - AP.sentAt < 1000;
+    seg.push({ key: 'send', title: T('SmartLink sender DMX', 'SmartLink sends DMX'), state: sending ? 'ok' : 'bad', detail: sending ? `${T('univers', 'universe')} ${APE.artnet.universe} → ${APE.artnet.ip} · 40 Hz` : T('"Send DMX" er slået fra', '"Send DMX" is off') });
+    if (topo === 'B') seg.push({ key: 'wolfIn', title: T('Wolfmix ind (DMX-IN)', 'Wolfmix in (DMX-IN)'), state: now - AP.wolfInAt < 2000 ? 'ok' : 'bad', detail: now - AP.wolfInAt < 2000 ? T('modtager univers ', 'receiving universe ') + (APE.wolfInUniverse ?? 2) : T('intet fra Wolfmix på univers ', 'nothing from Wolfmix on universe ') + (APE.wolfInUniverse ?? 2) });
+  }
+  if (!lounge) conf('connect', T('CONNECT som DMX-transmitter, gruppe 1', 'CONNECT as DMX transmitter, group 1'), T('More → DMX transmitter → Gruppe 1 → Enable (eller 6 sek. tryk fra slukket)', 'More → DMX transmitter → Group 1 → Enable'));
+  conf('tubes', T('Rørene reagerer', 'The tubes respond'), lounge ? T('Rør 1–3 i gruppe 1, rør 4–6 i gruppe 2', 'Tubes 1–3 in group 1, 4–6 in group 2') : T(`Alle 6 rør i gruppe 1, ${APE.chMode}, adresser fra Rør & patch`, `All 6 tubes in group 1, ${APE.chMode}`));
+  return seg;
+}
+function apeLinkSummary() {
+  const seg = apeLinkSegments().filter((x) => x.state !== 'na'), bad = seg.filter((x) => x.state === 'bad').length, okN = seg.filter((x) => x.state === 'ok' || x.state === 'confirmed').length;
+  return { cls: bad ? 'bad' : okN === seg.length ? 'ok' : 'warn', txt: (bad ? '● ' : okN === seg.length ? '● ' : '◐ ') + T('Forbindelse ', 'Link ') + okN + '/' + seg.length };
+}
+const APE_TROUBLE = () => APE.profile === 'lounge' ? [T('Er CONNECT i APP-mode (ikke DMX)? Hold knappen 6 sek. fra slukket for at skifte.', 'Is CONNECT in app mode?'), T('Er CONNECT-appen forbundet og "External control via MIDI" slået til?', 'Is the CONNECT app connected and External control on?'), T('Sender du på den rigtige MIDI-udgang (MIDI-bro)? Brug ▶ ud for en binding og se om CONNECT-appen reagerer.', 'Right MIDI output?'), T('Er bindingerne lært (bind-guiden)?', 'Are the bindings learned?')]
+  : [T(`Sidder kablet i Wolfmix' DMX ${APE.wolfOut || 'B'} og i CONNECT DMX IN (ikke OUT)?`, 'Cable in the right ports?'), T('Er CONNECT i DMX-transmitter-mode på gruppe 1? (CONNECT-appen er låst i DMX-mode – det er normalt.)', 'Is CONNECT a DMX transmitter on group 1?'), T('Står alle 6 rør i gruppe 1 med DMX-mode og adresse fra trinlisten? (Sættes i CONNECT-appen FØR der skiftes til DMX.)', 'Are all tubes in group 1 with DMX mode and address?'), T('Er rørene tændt og parret til samme CONNECT-netværk?', 'Are the tubes on and paired to the same network?'), APE.topology === 'A' ? T(`Er rørene patchet på udgang ${APE.wolfOut || 'B'} i Wolfmix, og lyser et preset dem op (master oppe, ingen blackout)?`, 'Are the tubes patched on the right Wolfmix output?') : T('Svarer Art-Net-noden, og står den på samme univers som her?', 'Does the Art-Net node answer on the same universe?')];
+function apeRenderLink() {
+  const el = $('#apePaneLink'); if (!el) return; const seg = apeLinkSegments(), lounge = APE.profile === 'lounge', topo = APE.topology;
+  const icon = { ok: '●', bad: '●', unknown: '○', confirmed: '✓', na: '–' }, word = { ok: T('målt OK', 'measured OK'), bad: T('fejl', 'problem'), unknown: T('kan ikke måles – bekræft', 'cannot be measured – confirm'), confirmed: T('bekræftet', 'confirmed'), na: T('bruges ikke', 'not used') };
+  const testTxt = lounge ? T('Appen sender blackout til/fra to gange via CONNECT-appen. Blinker rørene?', 'The app sends blackout on/off twice via the CONNECT app. Do the tubes blink?')
+    : topo === 'A' ? T(`Appen kan ikke sende DMX i topologi A (Wolfmix ejer kablet). Tryk et preset på Wolfmix, der bruger rørene (patchet på DMX ${APE.wolfOut || 'B'}). Lyser de?`, `Press a Wolfmix preset that uses the tubes. Do they light?`)
+    : T('Appen tænder rør 1 → 6 hvidt ét ad gangen (2 runder). Lyser de – og i den rækkefølge?', 'The app lights tube 1 → 6 one at a time. Do they light in order?');
+  el.innerHTML = `<p class="hint">${T('CONNECT sender intet tilbage (ingen link-, batteri- eller DMX-status). Grøn = appen har målt det. Ring = kan ikke måles – kør testen og se på rørene.', 'CONNECT gives no feedback. Green = measured. Ring = cannot be measured – run the test and look at the tubes.')}</p>
+    <div class="ape-chain">${seg.map((x, i) => `<div class="ape-link-seg ${x.state}"><span class="ape-ls-i">${icon[x.state]}</span><div><b>${x.title}</b><small>${escHtml(x.detail || '')}</small><em>${word[x.state]}${x.at ? ' · ' + new Date(x.at).toLocaleTimeString().slice(0, 5) : ''}</em></div>${x.state === 'unknown' || x.state === 'confirmed' ? `<label class="chk small"><input type="checkbox" data-ck="${x.key}" ${x.state === 'confirmed' ? 'checked' : ''}> ${T('OK', 'OK')}</label>` : ''}</div>${i < seg.length - 1 ? '<span class="ape-chain-arrow">↓</span>' : ''}`).join('')}</div>
+    <section class="ape-card ape-test"><h4>${T('Lys-test', 'Light test')}</h4><p>${testTxt}</p>
+      <div class="ape-row">${lounge || topo !== 'A' ? `<button class="primary" id="apeTestRun">${AP.ident ? T('Kører… rør ', 'Running… tube ') + (AP.ident.cur || '') : T('▶ Kør test', '▶ Run test')}</button>` : ''}<button id="apeTestYes">${T('Ja, det virker', 'Yes, it works')}</button><button id="apeTestNo">${T('Nej, intet lys', 'No light')}</button></div>
+      <div id="apeTrouble" ${AP.trouble ? '' : 'hidden'}><h4>${T('Tjek i denne rækkefølge', 'Check in this order')}</h4><ol>${APE_TROUBLE().map((x) => `<li>${escHtml(x)}</li>`).join('')}</ol></div>
+      ${!lounge && topo !== 'A' && APE.profile === 'show' && !APE.out ? `<p class="ape-bad small">${T('Slå "Send DMX" til i toppen før testen.', 'Turn on "Send DMX" first.')}</p>` : ''}
+    </section>
+    <div class="ape-row"><button class="ghost small" id="apeUsb">${T('Kan Mac\'en se CONNECT på USB?', 'Can the Mac see CONNECT on USB?')}</button><span class="muted small" id="apeUsbRes">${AP.usbRes || T('CONNECT\'s USB bruges kun til strøm/firmware – DMX går via XLR, og styring via Bluetooth.', 'CONNECT USB is power/firmware only.')}</span></div>`;
+  el.querySelectorAll('[data-ck]').forEach((c) => { c.onchange = () => { APE.checks = APE.checks || {}; if (c.checked) APE.checks[c.dataset.ck] = Date.now(); else delete APE.checks[c.dataset.ck]; apeSave(); apeRenderLink(); apeTopBar(); }; });
+  const run = $('#apeTestRun'); if (run) run.onclick = () => {
+    if (lounge) { apeBridgeSend([1, 2], 'blackout.toggle'); setTimeout(() => apeBridgeSend([1, 2], 'blackout.toggle'), 700); setTimeout(() => apeBridgeSend([1, 2], 'blackout.toggle'), 1400); setTimeout(() => apeBridgeSend([1, 2], 'blackout.toggle'), 2100); return; }
+    if (!APE.out) { toast(T('Slå "Send DMX" til først', 'Turn on "Send DMX" first')); return; }
+    AP.ident = { t0: performance.now(), cur: 1 }; const tick = setInterval(() => { if (!AP.ident) { clearInterval(tick); apeRenderLink(); return; } const b = $('#apeTestRun'); if (b) b.textContent = T('Kører… rør ', 'Running… tube ') + AP.ident.cur; }, 150);
+  };
+  $('#apeTestYes').onclick = () => { APE.checks = APE.checks || {}; const t = Date.now(); for (const x of seg) if (x.state === 'unknown') APE.checks[x.key] = t; APE.checks.tubes = t; AP.trouble = false; apeSave(); apeRenderLink(); apeTopBar(); toast(T('✓ Forbindelsen er bekræftet', '✓ Link confirmed')); };
+  $('#apeTestNo').onclick = () => { APE.checks = {}; AP.trouble = true; apeSave(); apeRenderLink(); apeTopBar(); };
+  $('#apeUsb').onclick = async () => { $('#apeUsbRes').textContent = T('Søger…', 'Searching…'); try { const r = await window.laser.usbFind(); AP.usbRes = !r.ok ? T('Kunne ikke søge: ', 'Search failed: ') + r.error : r.hits.length ? T('Mac\'en ser: ', 'The Mac sees: ') + r.hits.join(' · ') + T(' (USB = strøm/firmware, ikke DMX)', ' (USB = power/firmware, not DMX)') : T('Ingen CONNECT på USB. Det er OK – DMX går via XLR-kablet fra Wolfmix.', 'No CONNECT on USB. That is fine – DMX goes via XLR.'); } catch (e) { AP.usbRes = e.message; } $('#apeUsbRes').textContent = AP.usbRes; };
+}
 function apeInit() {
   if (!$('#page-ape')) return;
   $$('#apeTabs button').forEach((b) => { b.onclick = () => { APE.tab = b.dataset.t; apeSave(); apeRenderTabs(); if (APE.tab === 'phones') apeRenderPhones(); if (APE.tab === 'bridge') apeRenderBridge(); }; });
   document.querySelector('[data-tab="ape"]').addEventListener('click', () => requestAnimationFrame(apeRenderAll));
   apeRenderAll(); requestAnimationFrame(apeLoop);
+  setInterval(() => { if (!$('#page-ape').classList.contains('active')) return; const sum = $('#apeLinkSum'); if (sum) { const x = apeLinkSummary(); sum.textContent = x.txt; sum.className = 'ape-linksum ' + x.cls; } if (APE.tab === 'link' && !$('#apePaneLink').contains(document.activeElement)) apeRenderLink(); }, 1500);
+  window.laser.artnetNodes && setInterval(async () => { try { AP.nodes = await window.laser.artnetNodes(); } catch (_) {} }, 3000);
 }
 apeInit();

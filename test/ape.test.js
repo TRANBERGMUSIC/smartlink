@@ -28,7 +28,7 @@ test('128ch × 6 = 768 afvises', () => { const p = A.plan('128ch'); assert.stric
 test('overlap opdages', () => { assert.deepStrictEqual(A.overlaps([{ id: 1, address: 1, end: 64 }, { id: 2, address: 60, end: 123 }]), [1, 2]); });
 test('eksport: CONNECT-trin SHOW sætter gruppe 1 og adresser, LOUNGE gruppe = etage', () => {
   const p = A.plan('64ch'), s = A.exportConnectSteps(p, 'show'), l = A.exportConnectSteps(p, 'lounge');
-  assert.ok(/Rør 4.*Gruppe 1, DMX-mode 64ch, DMX-adresse 193/.test(s)); assert.ok(/Rør 4.*Gruppe 2 → Apply/.test(l)); assert.ok(/gruppe B/i.test(A.exportWolfmixPatch(p).split('\n').find((x) => x.startsWith('Rør 4'))));
+  assert.ok(/Rør 4.*Gruppe 1, DMX-mode 64ch, DMX-adresse 193/.test(s)); assert.ok(/Rør 4.*Gruppe 2 → Apply/.test(l)); assert.ok(/gruppe B/i.test(A.exportWolfmixPatch(p).split('\n').find((x) => x.startsWith('Rør 4')))); assert.ok(/udgang B/.test(A.exportWolfmixPatch(p, 'B')));
   assert.ok(/Celle 16: kanal 61 R, 62 G, 63 B, 64 WW/.test(A.exportFixtureBuilder('64ch')));
 });
 // ---------- program ----------
