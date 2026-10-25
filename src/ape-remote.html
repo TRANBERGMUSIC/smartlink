@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#07080b">
+<title>SmartLink Lys</title>
+<style>
+  :root { --bg: #07080b; --panel: #11141b; --line: #232838; --text: #e8ecf3; --muted: #8a93a6; --accent: #31f3ac; --bad: #ff4d5e; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 -apple-system, system-ui, sans-serif; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); user-select: none; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  h1 { font-size: 17px; margin: 0; } .chip { font-size: 11px; font-weight: 800; letter-spacing: .06em; padding: 3px 9px; border-radius: 999px; background: var(--accent); color: #000; }
+  .chip.lounge { background: #c9a6ff; } .info { font-size: 12px; color: #ffb23c; margin: 4px 0 10px; } .info:empty { display: none; } .info.bad { color: var(--bad); }
+  .tubes { display: flex; flex-direction: column; gap: 10px; background: #000; border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 12px; }
+  .floor { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; } .floor small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+  .tube { display: flex; height: 16px; border-radius: 3px; overflow: hidden; background: #111; } .tube i { flex: 1; }
+  .seg { display: flex; gap: 6px; margin-bottom: 12px; } .seg button { flex: 1; }
+  button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; height: 48px; padding: 0 10px; }
+  button.on { background: var(--accent); color: #000; border-color: var(--accent); }
+  button:disabled { opacity: .35; }
+  .colors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .colors button { height: 58px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 6px; font-size: 11px; color: var(--muted); background: linear-gradient(180deg, var(--c) 0 58%, var(--panel) 58%); }
+  label.sl { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; } input[type=range] { width: 100%; height: 34px; accent-color: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+  select { width: 100%; height: 44px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 16px 0 8px; }
+  .list { display: flex; flex-wrap: wrap; gap: 8px; } .list button { height: 44px; }
+  .lock { position: fixed; inset: auto 12px 12px 12px; background: #3a1c22; border: 1px solid var(--bad); color: #ffd0d5; padding: 12px; border-radius: 12px; text-align: center; font-size: 13px; }
+  .lock[hidden] { display: none; } .by { font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header><h1 id="title">Lys</h1><span class="chip" id="mode">—</span></header>
+<div class="info" id="info"></div>
+<div class="tubes" id="tubes"></div>
+<div class="seg" id="floors"></div>
+<div class="colors" id="colors"></div>
+<label class="sl">Lysstyrke</label><input type="range" id="bri" min="0" max="100">
+<label class="sl">Speed</label><input type="range" id="spd" min="0" max="100">
+<div class="grid2">
+  <button id="boHold">Blackout (hold)</button><button id="boTog">Blackout til/fra</button>
+  <button id="stHold">Strobe (hold)</button><button id="stTog">Strobe til/fra</button>
+</div>
+<div class="grid2">
+  <select id="music"><option value="off">Musik: fra</option><option value="lights">Musik: lampens mik.</option><option value="beat">Musik: beat</option></select>
+  <select id="fx"><option value="none">Effekt: ingen</option><option value="sparkle">Sparkle</option><option value="sweep">Sweep</option><option value="cascade">Cascade</option><option value="wave">Wave</option></select>
+</div>
+<h2>Programmer</h2><div class="list" id="progs"></div>
+<h2>Scener</h2><div class="list" id="scenes"></div>
+<p class="by" id="by"></p>
+<div class="lock" id="lock" hidden>🔒 Denne etage er låst til Wolfmix – du kan se, men ikke styre.</div>
+<script>
+'use strict';
+const k = new URLSearchParams(location.search).get('k'), $ = (s) => document.querySelector(s);
+const ROLE_FLOORS = { f1: [1], f2: [2], all: [1, 2], admin: [1, 2] };
+let role = 'all', sel = [1, 2], S = null, dragging = null, lastCmd = 0;
+const send = (cmd) => { fetch('/cmd?k=' + encodeURIComponent(k), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ape', floors: sel, ...cmd }) }).catch(() => {}); lastCmd = Date.now(); };
+const throttled = (() => { let t = 0, pend = null; return (cmd) => { pend = cmd; const now = Date.now(); if (now - t > 60) { t = now; send(pend); pend = null; } else setTimeout(() => { if (pend) { t = Date.now(); send(pend); pend = null; } }, 70); }; })();
+const locked = () => S && sel.some((f) => S.floors[f] && S.floors[f].locked) && role !== 'admin';
+fetch('/whoami?k=' + encodeURIComponent(k)).then((r) => r.json()).then((j) => { role = j.role || 'all'; sel = ROLE_FLOORS[role] || [1, 2]; buildFloors(); render(); });
+function buildFloors() {
+  const box = $('#floors'), opts = role === 'f1' ? [[[1], 'Etage 1']] : role === 'f2' ? [[[2], 'Etage 2']] : [[[1], 'Etage 1'], [[2], 'Etage 2'], [[1, 2], 'Alle']];
+  $('#title').textContent = role === 'f1' ? 'Lys · Etage 1' : role === 'f2' ? 'Lys · Etage 2' : 'Lys · alle etager';
+  box.innerHTML = ''; for (const [fl, l] of opts) { const b = document.createElement('button'); b.textContent = l; b.className = sel.join() === fl.join() ? 'on' : ''; b.onclick = () => { sel = fl; buildFloors(); render(); }; box.appendChild(b); }
+  render();
+}
+function hold(btn, op) { const down = (e) => { e.preventDefault(); if (locked()) return; btn.classList.add('on'); send({ op, hold: true }); }, up = () => { if (!btn.classList.contains('on')) return; btn.classList.remove('on'); send({ op, hold: false }); }; btn.addEventListener('pointerdown', down); btn.addEventListener('pointerup', up); btn.addEventListener('pointercancel', up); btn.addEventListener('pointerleave', up); }
+hold($('#boHold'), 'blackout'); hold($('#stHold'), 'strobe');
+$('#boTog').onclick = () => !locked() && send({ op: 'blackout' }); $('#stTog').onclick = () => !locked() && send({ op: 'strobe' });
+$('#bri').oninput = (e) => { dragging = 'bri'; if (!locked()) throttled({ op: 'brightness', value: e.target.value / 100 }); }; $('#spd').oninput = (e) => { dragging = 'spd'; if (!locked()) throttled({ op: 'speed', value: e.target.value / 100 }); };
+$('#bri').onchange = $('#spd').onchange = () => { dragging = null; };
+$('#music').onchange = (e) => send({ op: 'music', source: e.target.value, rest: 0 }); $('#fx').onchange = (e) => send({ op: 'fx', fx: e.target.value });
+function render() {
+  if (!S) return; const f0 = S.floors[sel[0]] || {};
+  $('#mode').textContent = S.profile === 'lounge' ? 'LOUNGE' : 'SHOW'; $('#mode').className = 'chip ' + S.profile;
+  $('#info').textContent = S.profile === 'lounge' ? 'Wolfmix kan ikke styre rørene i LOUNGE.' : S.wolfmix ? 'Wolfmix har kontrol – dine ændringer går via Wolfmix.' : '';
+  const tb = $('#tubes'); tb.innerHTML = ''; for (const f of [2, 1]) { const row = document.createElement('div'); row.className = 'floor'; row.innerHTML = `<small>Etage ${f}${S.floors[f] && S.floors[f].locked ? ' 🔒' : ''} · ${S.floors[f] ? S.floors[f].lastBy : ''}</small>` + S.tubes.filter((t) => t.floor === f).map((t) => `<div class="tube">${t.px.map((c) => `<i style="background:${c}"></i>`).join('')}</div>`).join(''); tb.appendChild(row); }
+  const cs = $('#colors'); if (cs.dataset.v !== JSON.stringify(S.colors)) { cs.dataset.v = JSON.stringify(S.colors); cs.innerHTML = ''; for (const c of S.colors) { const b = document.createElement('button'); b.style.setProperty('--c', c.css); b.textContent = c.name; b.onclick = () => !locked() && send({ op: 'colorId', id: c.id }); cs.appendChild(b); } }
+  const lst = (el, items, fn) => { const v = JSON.stringify(items); if (el.dataset.v === v) return; el.dataset.v = v; el.innerHTML = ''; for (const it of items) { const b = document.createElement('button'); b.textContent = it.name; b.onclick = () => !locked() && fn(it); el.appendChild(b); } };
+  lst($('#progs'), S.programs, (p) => send({ op: 'program', program: p.id })); lst($('#scenes'), S.scenes.filter((s) => s.floors.some((f) => sel.includes(f))), (s) => send({ op: 'scene', id: s.id }));
+  if (dragging !== 'bri' && Date.now() - lastCmd > 400) $('#bri').value = Math.round((f0.brightness ?? 1) * 100);
+  if (dragging !== 'spd' && Date.now() - lastCmd > 400) $('#spd').value = Math.round((f0.speed ?? 0.5) * 100);
+  $('#boTog').classList.toggle('on', !!f0.blackout); $('#stTog').classList.toggle('on', !!f0.strobe);
+  if (document.activeElement !== $('#music')) $('#music').value = (f0.music && f0.music.source) || 'off'; if (document.activeElement !== $('#fx')) $('#fx').value = f0.fx || 'none';
+  $('#lock').hidden = !locked(); document.querySelectorAll('button, input, select').forEach((x) => { if (!x.closest('#floors')) x.disabled = locked(); });
+  $('#by').textContent = 'Sidst ændret af: ' + sel.map((f) => `etage ${f}: ${S.floors[f] ? S.floors[f].lastBy : '—'}`).join(', ');
+}
+const es = new EventSource('/events?k=' + encodeURIComponent(k));
+es.onmessage = (e) => { try { const j = JSON.parse(e.data); if (j && j.ape) { S = j.ape; render(); } } catch (_) {} };
+</script>
+</body>
+</html>

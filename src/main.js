@@ -300,6 +300,8 @@ function remoteLoad() {
   remote.cfgPath = path.join(app.getPath('userData'), 'remote.json');
   try { remote.cfg = Object.assign(remote.cfg, JSON.parse(fs.readFileSync(remote.cfgPath, 'utf8'))); } catch (_) {}
   if (!remote.cfg.token) remote.cfg.token = crypto.randomBytes(6).toString('base64url');
+  // Ape Labs-telefoner: én nøgle pr. rolle – rollen kommer fra nøglen, ikke fra telefonen
+  remote.cfg.apeTokens = remote.cfg.apeTokens || {}; for (const r of ['f1', 'f2', 'all']) if (!remote.cfg.apeTokens[r]) remote.cfg.apeTokens[r] = crypto.randomBytes(6).toString('base64url');
   remoteSave();
 }
 function remoteSave() { try { fs.writeFileSync(remote.cfgPath, JSON.stringify(remote.cfg)); } catch (_) {} }
@@ -346,7 +348,10 @@ function remoteHandler(req, res) {
       req.on('end', () => { const now = Date.now(); if (now - camFrameLast >= 60 && win && !win.isDestroyed()) { camFrameLast = now; const buf = Buffer.concat(chunks); win.webContents.send('cam-frame', { w: +u.searchParams.get('w') || 320, h: +u.searchParams.get('h') || 180, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }); } res.writeHead(204); res.end(); });
       return;
     }
-    const ok = u.searchParams.get('k') === remote.cfg.token;
+    const key = u.searchParams.get('k'), role = key && key === remote.cfg.token ? 'admin' : (Object.entries(remote.cfg.apeTokens || {}).find(([, v]) => v === key) || [])[0] || null;
+    const ok = !!role;
+    if ((u.pathname === '/' || u.pathname === '/index.html') && role && role !== 'admin') return sendFile(res, path.join(__dirname, 'ape-remote.html'), 'text/html; charset=utf-8'); // etage-telefon → lys-siden
+    if (u.pathname === '/ape') return sendFile(res, path.join(__dirname, 'ape-remote.html'), 'text/html; charset=utf-8');
     if (u.pathname === '/' || u.pathname === '/index.html') return sendFile(res, path.join(__dirname, 'remote.html'), 'text/html; charset=utf-8');
     if (u.pathname === '/touch-icon.png') return sendFile(res, path.join(__dirname, 'touch-icon.png'), 'image/png');
     if (u.pathname === '/logo-star.png') return sendFile(res, path.join(__dirname, 'logo-star.png'), 'image/png');
@@ -356,6 +361,7 @@ function remoteHandler(req, res) {
       return res.end(JSON.stringify({ name: 'SmartLink', short_name: 'SmartLink', display: 'standalone', background_color: '#050505', theme_color: '#050505', start_url: '/?k=' + (u.searchParams.get('k') || ''), icons: [{ src: '/touch-icon.png', sizes: '180x180', type: 'image/png' }] }));
     }
     if (!ok) { res.writeHead(403, { 'Content-Type': 'application/json' }); return res.end('{"error":"bad key"}'); }
+    if (u.pathname === '/whoami') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ role })); }
     if (u.pathname === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       res.write(`data: ${remote.state}\n\n`);
@@ -368,7 +374,7 @@ function remoteHandler(req, res) {
       let body = '';
       req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
       req.on('end', () => {
-        try { const cmd = JSON.parse(body); if (win && !win.isDestroyed()) win.webContents.send('remote-cmd', cmd); res.writeHead(204); }
+        try { const cmd = JSON.parse(body); if (!cmd || typeof cmd !== 'object') throw 0; cmd._role = role; if (win && !win.isDestroyed()) win.webContents.send('remote-cmd', cmd); res.writeHead(204); } // _role overskrives altid her
         catch (_) { res.writeHead(400); }
         res.end();
       });
@@ -432,6 +438,11 @@ ipcMain.handle('remote-info', async () => {
   let qr = null;
   if (url) { try { qr = await require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#000000', light: '#ffffff' } }); } catch (_) {} }
   return { enabled: remote.cfg.enabled && !!remote.server, url, httpsUrl: remote.https ? remoteURL(true) : null, qr, clients: remote.clients.size, error: remote.lastError || null, ips: lanIPs() };
+});
+ipcMain.handle('ape-links', async () => { // links + QR til Ape Labs-telefonerne (Etage 1, Etage 2, Alle)
+  const ip = lanIPs()[0], urls = {}, qr = {};
+  for (const [r, k] of Object.entries(remote.cfg.apeTokens || {})) { urls[r] = ip ? `http://${ip.address}:${REMOTE_PORT}/?k=${k}` : null; if (urls[r]) { try { qr[r] = await require('qrcode').toDataURL(urls[r], { margin: 1, width: 300 }); } catch (_) {} } }
+  return { enabled: remote.cfg.enabled && !!remote.server, urls, qr };
 });
 ipcMain.handle('remote-enable', (_e, on) => {
   remote.cfg.enabled = !!on; remoteSave();

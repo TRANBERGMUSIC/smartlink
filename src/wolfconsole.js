@@ -31,7 +31,7 @@ function wcMigrate() { // før 5.4: pads hed "pad1" (= side 1)
 // ---------- tegning ----------
 function wcBuild() {
   const root = $('#wc'); if (!root) return; WC.els = {};
-  const btn = (id, label, color, cls, color2) => { const b = document.createElement('button'); b.className = 'wc-btn ' + (cls || ''); b.dataset.c = id; b.style.setProperty('--c', color || '#dfe4ee'); b.style.setProperty('--c2', color2 || color || '#dfe4ee'); b.innerHTML = `<span class="wc-lbl">${label}</span><span class="wc-fn"></span>`; b.onclick = () => wcSelect(wcKey(id)); WC.els[id] = b; return b; };
+  const btn = (id, label, color, cls, color2) => { const b = document.createElement('button'); b.className = 'wc-btn ' + (cls || ''); b.dataset.c = id; b.style.setProperty('--c', color || '#dfe4ee'); b.style.setProperty('--c2', color2 || color || '#dfe4ee'); b.dataset.c1 = color || '#dfe4ee'; b.dataset.c2 = color2 || color || '#dfe4ee'; b.innerHTML = `<span class="wc-lbl">${label}</span><span class="wc-fn"></span>`; b.onclick = () => wcSelect(wcKey(id)); WC.els[id] = b; return b; };
   const col = (list, el) => { el.innerHTML = ''; let grp = null; for (const c of list) { if (c[0] === '|static') { grp = document.createElement('div'); grp.className = 'wc-static'; grp.innerHTML = '<span class="wc-static-lbl">STATIC</span>'; el.appendChild(grp); continue; } if (c[0] === '|/static') { grp = null; continue; } (grp || el).appendChild(btn(c[0], c[1], c[2], 'wc-side' + (c[0] === 'groups' ? ' wc-groups' : '') + (c[4] === 'mode' ? ' wc-mode' : ''), c[3])); } };
   col(WC_LEFT, $('#wcLeft')); col(WC_RIGHT, $('#wcRight'));
   const encs = $('#wcEncs'); encs.innerHTML = '';
@@ -47,10 +47,19 @@ function wcRefresh() { // mærkater + tilstand for alle knapper (pads for den vi
     if (pad) el.querySelector('.wc-lbl').textContent = wcPresetNo(pad.page, pad.n);
     el.classList.toggle('linked', !!sig); el.classList.toggle('sel', WC.sel === key); el.classList.toggle('listening', WC.sel === key && WC.listen);
     el.classList.toggle('lit', WC.litKeys.has(key));
+    wcApplyColor(el, key);
     el.querySelector('.wc-fn').textContent = sig ? ((s && s.name) || wcFuncText(sig) || sig) : '';
     el.title = sig ? `${wcLabel(key)} → ${sig}${s && s.name ? ' (' + s.name + ')' : ''}\n${wcFuncText(sig) || t('wc.noFunc')}` : t('wc.clickToLink');
   }
   wcScreen(); wcInspector();
+}
+// egne farver pr. knap (så tegningen matcher farverne på din pult) – wmiState.btnColors[kontrol] = '#rrggbb'
+const wcColors = () => (wmiState.btnColors = wmiState.btnColors || {});
+function wcShade(hex, k) { const n = parseInt(hex.slice(1), 16), f = (v) => Math.max(0, Math.min(255, Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k))); return '#' + [n >> 16, (n >> 8) & 255, n & 255].map((v) => f(v).toString(16).padStart(2, '0')).join(''); }
+function wcApplyColor(el, key) {
+  const col = wcColors()[key], pad = el.classList.contains('wc-pad');
+  if (pad) { if (col) { el.style.setProperty('--pc', col); el.classList.add('custom'); } else { el.style.removeProperty('--pc'); el.classList.remove('custom'); } return; }
+  el.style.setProperty('--c', col ? wcShade(col, 0.35) : el.dataset.c1); el.style.setProperty('--c2', col || el.dataset.c2);
 }
 function wcSetPage(p) { WC.page = clamp(p, 1, WC_PAGES); wmiState.wcPage = WC.page; wmiSave(); wcRefresh(); }
 // skærmen: preset-gitter for siden (som på pulten) + linje med det seneste signal / lær-besked + side-skift
@@ -63,7 +72,8 @@ function wcScreen() {
   let cells = '';
   for (let n = 1; n <= WC_PADS; n++) {
     const key = `p${WC.page}.pad${n}`, sig = L[key], s = sig && wmiState.signals[sig];
-    cells += `<button class="wc-cell${sig ? ' linked' : ''}${WC.litKeys.has(key) ? ' lit' : ''}${WC.sel === key ? ' sel' : ''}" data-k="${key}" style="--h:${(n - 1) % 4}">${escHtml((s && s.name) || t('wc.presetShort', { n: wcPresetNo(WC.page, n) }))}</button>`;
+    const pc = wcColors()[key];
+    cells += `<button class="wc-cell${sig ? ' linked' : ''}${WC.litKeys.has(key) ? ' lit' : ''}${WC.sel === key ? ' sel' : ''}${pc ? ' custom' : ''}" data-k="${key}" style="--h:${(n - 1) % 4}${pc ? ';--pc:' + pc : ''}">${escHtml((s && s.name) || t('wc.presetShort', { n: wcPresetNo(WC.page, n) }))}</button>`;
   }
   el.innerHTML = `<div class="wc-scr-top"><b>PRESET</b><span class="wc-scr-msg">${msg}</span></div><div class="wc-scr-grid">${cells}</div>
     <div class="wc-scr-bot"><span>${t('wc.hint')}</span><span class="wc-pg"><button data-pg="-1">◀</button><b>PAGE</b> <span class="wc-pgn">${WC.page} / ${WC_PAGES}</span><button data-pg="1">▶</button></span></div>`;
@@ -79,6 +89,7 @@ function wcInspector() {
     <div class="wc-i-row"><span class="muted">${t('wc.signal')}</span><b class="mono">${sig || '—'}</b></div>
     ${WC.listen ? `<p class="wc-listen">${t('wc.pressNow')}</p>` : ''}
     <div class="wc-i-btns"><button class="primary small" data-a="listen">${WC.listen ? t('wc.cancel') : sig ? t('wc.relink') : t('wc.link')}</button>${sig ? `<button class="ghost small" data-a="unlink">${t('wc.unlink')}</button><button class="ghost small" data-a="test">▶ ${t('wc.test')}</button>` : ''}</div>
+    <div class="wc-i-row"><span class="muted">${t('wc.color')}</span><span class="wc-colrow"><input type="color" data-a="color" value="${wcColors()[id] || wcDefaultColor(id)}"><button class="ghost small" data-a="colorReset">${t('wc.colorReset')}</button>${wcPadOf(id) ? `<button class="ghost small" data-a="colorPage">${t('wc.colorAll')}</button>` : ''}</span></div>
     <label class="wc-i-row"><span class="muted">${t('wc.pick')}</span><select data-a="pick"><option value="">—</option>${seen.map(([sid, x]) => `<option value="${sid}">${escHtml(x.name ? x.name + ' · ' + sid : sid)}</option>`).join('')}</select></label>
     ${sig ? `<label class="wc-i-row"><span class="muted">${t('wmidi.thName')}</span><input data-a="name" placeholder="${t('wmidi.namePh')}"></label>
     <label class="wc-i-row"><span class="muted">${t('wmidi.thPress')}</span><select data-slot="onPress">${WMI.optsT || wmiOptions('trigger')}</select></label>
@@ -89,11 +100,15 @@ function wcInspector() {
   box.querySelector('[data-a=listen]').onclick = () => { WC.listen = !WC.listen; wcRefresh(); };
   const ul = box.querySelector('[data-a=unlink]'); if (ul) ul.onclick = () => { delete wcLayout()[id]; wmiSave(true); WC.listen = false; wcRefresh(); };
   const ts = box.querySelector('[data-a=test]'); if (ts) ts.onclick = () => wcTest(id, b, s);
+  const ci = box.querySelector('[data-a=color]'); ci.oninput = () => { wcColors()[id] = ci.value; wmiSave(); wcRefresh(); };
+  box.querySelector('[data-a=colorReset]').onclick = () => { delete wcColors()[id]; wmiSave(true); wcRefresh(); };
+  const cp = box.querySelector('[data-a=colorPage]'); if (cp) cp.onclick = () => { const pg = wcPadOf(id).page; for (let n = 1; n <= WC_PADS; n++) wcColors()[`p${pg}.pad${n}`] = ci.value; wmiSave(true); wcRefresh(); };
   const pk = box.querySelector('[data-a=pick]'); pk.value = sig || ''; pk.onchange = () => { if (pk.value) wcLink(id, pk.value); };
   const nm = box.querySelector('[data-a=name]'); if (nm) { nm.value = (s && s.name) || ''; const save = () => { if (s && (s.name || '') !== nm.value.trim()) { s.name = nm.value.trim(); wmiSave(true); wmiRender(); wcRefresh(); } }; nm.onblur = save; nm.onkeydown = (e) => { if (e.key === 'Enter') nm.blur(); }; }
   box.querySelectorAll('select[data-slot]').forEach((se) => { se.value = b[se.dataset.slot] || ''; se.onchange = () => { WolfMidi.bind(wmiState, sig, se.dataset.slot, se.value); wmiSave(true); wmiRender(); wcRefresh(); }; });
   const th = box.querySelector('[data-a=thr]'); if (th) { th.value = b.threshold ?? WolfMidi.DEFAULT_THR; th.onchange = () => { const bb = WolfMidi.bind(wmiState, sig, 'onPress', (wmiState.bindings[sig] || {}).onPress); bb.threshold = clamp(+th.value | 0, 0, 127); th.value = bb.threshold; wmiSave(true); }; }
 }
+function wcDefaultColor(key) { if (wcPadOf(key)) return '#ff9a3c'; if (/^enc/.test(key)) return '#31f3ac'; const f = [...WC_LEFT, ...WC_RIGHT].find((c) => c[0] === key); return f ? f[3] || f[2] : '#dfe4ee'; }
 function wcTest(key, b, s) { // kør funktionen uden pulten; en hold-funktion holdes i 1 sek.
   const hold = b.onPress && SL_ACTIONS.byId[b.onPress] && SL_ACTIONS.byId[b.onPress].kind === 'hold';
   let any = false; if (b.onPress) any = SL_ACTIONS.run(b.onPress, 1) || any; if (b.onChange) any = SL_ACTIONS.run(b.onChange, ((s && s.lastValue) | 0) / 127) || any;

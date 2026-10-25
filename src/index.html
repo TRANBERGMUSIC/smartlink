@@ -14,6 +14,7 @@
     <button data-tab="show" class="tab" data-i18n="tab.show"></button>
     <button data-tab="keys" class="tab" data-i18n="tab.keys"></button>
     <button data-tab="wolf" class="tab" data-i18n="tab.wolf"></button>
+    <button data-tab="ape" class="tab" data-i18n="tab.ape"></button>
     <button data-tab="design" class="tab" data-i18n="tab.design"></button>
     <button data-tab="vector" class="tab" data-i18n="tab.vector"></button>
     <button data-tab="settings" class="tab" data-i18n="tab.settings"></button>
@@ -347,6 +348,21 @@
 </section>
 
 <!-- ============ DESIGNER ============ -->
+<section class="page" id="page-ape">
+  <div class="panel ape">
+    <div class="panel-head"><h2 data-i18n="ape.title"></h2><span class="ape-status" id="apeStatus"></span></div>
+    <div class="ape-top" id="apeTop"></div>
+    <div class="ape-preview"><canvas id="apeCanvas"></canvas></div>
+    <div class="seg wide ape-tabs" id="apeTabs"><button data-t="control" data-i18n="ape.tControl"></button><button data-t="programs" data-i18n="ape.tPrograms"></button><button data-t="scenes" data-i18n="ape.tScenes"></button><button data-t="patch" data-i18n="ape.tPatch"></button><button data-t="bridge" data-i18n="ape.tBridge"></button><button data-t="phones" data-i18n="ape.tPhones"></button></div>
+    <div class="ape-pane" data-t="control" id="apePaneControl"></div>
+    <div class="ape-pane" data-t="programs" id="apePanePrograms" hidden></div>
+    <div class="ape-pane" data-t="scenes" id="apePaneScenes" hidden></div>
+    <div class="ape-pane" data-t="patch" id="apePanePatch" hidden></div>
+    <div class="ape-pane" data-t="bridge" id="apePaneBridge" hidden></div>
+    <div class="ape-pane" data-t="phones" id="apePanePhones" hidden></div>
+  </div>
+</section>
+
 <section class="page" id="page-design">
   <div class="panel dz-left">
     <div class="panel-head"><h2 data-i18n="dz.title"></h2>
@@ -682,6 +698,8 @@
 <script src="actions.js"></script>
 <script src="wolfpage.js"></script>
 <script src="wolfconsole.js"></script>
+<script src="ape_core.js"></script>
+<script src="ape.js"></script>
 <script src="vector.js"></script>
 </body>
 </html>

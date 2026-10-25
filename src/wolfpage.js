@@ -62,7 +62,7 @@ function wmiBindLearned(ev, slot) {
 
 // ---------- visning ----------
 function wmiOptions(kind) {
-  const groups = { laser: 'wmidi.gLaser', show: 'wmidi.gShow', look: 'wmidi.gLook', preset: 'wmidi.gPreset', scene: 'wmidi.gScene', wolfmix: 'wmidi.gWolf', cont: 'wmidi.gCont', hold: 'wmidi.gHold' };
+  const groups = { laser: 'wmidi.gLaser', show: 'wmidi.gShow', look: 'wmidi.gLook', preset: 'wmidi.gPreset', scene: 'wmidi.gScene', wolfmix: 'wmidi.gWolf', cont: 'wmidi.gCont', hold: 'wmidi.gHold', ape: 'wmidi.gApe' };
   let h = `<option value="">${t('wm.f.none')}</option>`, g = null;
   for (const a of SL_ACTIONS.list) if (a.kind === kind || (kind === 'trigger' && a.kind === 'hold')) { if (a.group !== g) { if (g) h += '</optgroup>'; g = a.group; h += `<optgroup label="${t(groups[g] || g)}">`; } h += `<option value="${a.id}">${escHtml(SL_ACTIONS.label(a))}</option>`; }
   return h + (g ? '</optgroup>' : '');

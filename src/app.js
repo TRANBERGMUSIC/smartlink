@@ -3118,6 +3118,7 @@ $('#testPattern').addEventListener('change', () => { $('#lineNow').textContent =
 $$('.tab').forEach((t) => t.onclick = () => {
   $$('.tab').forEach((x) => x.classList.toggle('active', x === t));
   $$('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-' + t.dataset.tab));
+  if (t.dataset.tab === 'keys') requestAnimationFrame(renderKeyboard); // mønstrene kan først tegnes når fanen er synlig (ellers er tasterne 0 px brede)
 });
 // ---------- tastatur-styring: hver tast kan skyde et mønster ----------
 const KEY_ROWS = [['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'å'], ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'æ', 'ø'], ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '-']];
@@ -3133,7 +3134,8 @@ function renderKeyboard() {
       d.onclick = () => editKey(k);
       d.oncontextmenu = (e) => { e.preventDefault(); if (n) { setPattern(n); flashKey(k); } };
       r.appendChild(d);
-      if (n && patAvail.has(n)) requestAnimationFrame(() => drawThumb(d, n));
+      if (n && patAvail.has(n) && kb.offsetParent) requestAnimationFrame(() => drawThumb(d, n));
+      if (n) { d.onmouseenter = () => startHover(d, n); d.onmouseleave = () => { if (hoverAnim && hoverAnim.tile === d) stopHover(); }; } // animér mønstret ved hover, som i mønster-listen
     }
     kb.appendChild(r);
   }
@@ -3402,6 +3404,7 @@ function remoteSnapshot() {
     scenes: scenes.map((s) => (s ? s.name : null)), activeScene, patAvail: [...patAvail], patNames, favs: [...favs], patCount: cfg.patCount,
     zone: cfg.zone, zoneSide: cfg.zoneSide, presets: PRESETS.map((p, i) => ['#' + p.pat, presetName(p, i)]), special, posX: st.posX, posY: st.posY, freeze: false, ang: Math.round(out.ang), cal: cfg.cal, calib: cfg.calib, calPts: cfg.calPts, calStep,
     music: { b: +music.bass.toFixed(2), m: +music.mid.toFixed(2), h: +music.hi.toFixed(2) },
+    ape: typeof apeSnapshot === 'function' ? apeSnapshot() : null,
   });
 }
 setInterval(() => window.laser.remoteState(remoteSnapshot()), 80);
@@ -3409,6 +3412,8 @@ setInterval(() => window.laser.remoteState(remoteSnapshot()), 80);
 // kommandoer fra telefonen
 window.laser.onRemoteCmd((c) => {
   if (!c || typeof c !== 'object') return;
+  if (c.type === 'ape') { if (typeof apeRemoteCmd === 'function') apeRemoteCmd(c); return; } // Ape Labs-rør (rolle tjekkes i ape.js)
+  if (c._role && c._role !== 'admin') return; // etage-telefoner må kun styre rørene, ikke laseren
   switch (c.type) {
     case 'pattern': if (c.n >= 1 && c.n <= 255) { if (st.pattern === (c.n | 0)) { setPattern(0); recordHook(t('pat.offName')); } else { setPattern(c.n | 0); recordHook(t('pat.name', { n: c.n })); } } break;
     case 'color': if (c.mode === 'orig') setColor({ mode: 'orig', rgb: st.color.rgb }); else if (Array.isArray(c.rgb)) setColor({ mode: 'rgb', rgb: c.rgb.slice(0, 3).map((v) => clamp(v | 0, 0, 255)) }); break;
