@@ -178,20 +178,26 @@ function apeDrawPreview() { // rørene tegnes som neonrør med glød; etage 2 ø
   const cv = $('#apeCanvas'); if (!cv || !cv.offsetParent) return; const p = AP.plan; if (!p || !p.ok) return;
   const W = cv.clientWidth, H = cv.clientHeight, dpr = devicePixelRatio || 1; if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-  const dec = ApeCore.decode(AP.uni, p), padL = 92, gap = 18, tw = (W - padL - 16 - gap * 2) / 3, th = 16, rowH = H / 2;
+  const dec = ApeCore.decode(AP.uni, p), padL = 104, gap = 22, tw = (W - padL - 20 - gap * 2) / 3, th = 18, rowH = H / 2;
   for (const f of [2, 1]) {
     const cy = (f === 2 ? 0 : rowH) + rowH / 2, s = apeState.floors[f], tubes = dec.filter((t) => t.floor === f), sel = APE.sel.includes(f);
-    g.fillStyle = sel ? '#e8ecf3' : '#7f8796'; g.font = '700 13px -apple-system, sans-serif'; g.textBaseline = 'middle'; g.fillText(T('Etage ', 'Floor ') + f, 14, cy - 8);
-    g.font = '11px -apple-system, sans-serif'; g.fillStyle = '#6b7385'; g.fillText((APE.locks[f] ? '🔒 ' : '') + (s.blackout || s.blackoutHold ? 'blackout' : s.lastBy || ''), 14, cy + 9);
-    if (sel) { g.fillStyle = '#31f3ac'; g.fillRect(4, cy - 14, 3, 28); }
+    g.fillStyle = sel ? '#e8ecf3' : '#7f8796'; g.font = '600 13px Inter, -apple-system, sans-serif'; g.textBaseline = 'middle'; g.fillText(T('Etage ', 'Floor ') + f, 16, cy - 8);
+    g.font = '11px "JetBrains Mono", ui-monospace, monospace'; g.fillStyle = '#8a8c92'; g.fillText((APE.locks[f] ? '🔒 ' : '') + (s.blackout || s.blackoutHold ? 'blackout' : s.lastBy || ''), 14, cy + 9);
+    if (sel) { g.fillStyle = '#31f3ac'; g.fillRect(0, cy - 16, 1, 32); }
     tubes.forEach((t, i) => {
       const x0 = padL + i * (tw + gap), y0 = cy - th / 2, pw = tw / t.px.length;
-      g.fillStyle = '#0d0f13'; g.strokeStyle = '#2a2f3a'; g.lineWidth = 1; g.beginPath(); g.roundRect(x0 - 4, y0 - 4, tw + 8, th + 8, (th + 8) / 2); g.fill(); g.stroke();
+      // lyset fra rørene rammer væggen bag dem og gulvet under (kun en visning – det er de samme pixel-farver)
+      g.save(); g.globalCompositeOperation = 'lighter'; g.filter = 'blur(18px)';
+      t.px.forEach((c, j) => { const lum = Math.max(c[0], c[1], c[2], c[3]); if (lum < 8) return; g.globalAlpha = 0.42 * lum / 255; g.fillStyle = rgbwCss(c); g.fillRect(x0 + j * pw - pw * 0.3, y0 - th * 1.4, pw * 1.6, th * 3.8); });
+      g.filter = 'blur(6px)'; t.px.forEach((c, j) => { const lum = Math.max(c[0], c[1], c[2], c[3]); if (lum < 8) return; g.globalAlpha = 0.16 * lum / 255; g.fillStyle = rgbwCss(c); g.fillRect(x0 + j * pw, y0 + th + 7, pw, 5); });
+      g.restore();
+      g.fillStyle = '#0b0c0f'; g.strokeStyle = '#25272e'; g.lineWidth = 1; g.beginPath(); g.roundRect(x0 - 4, y0 - 4, tw + 8, th + 8, (th + 8) / 2); g.fill(); g.stroke();
       g.save(); g.beginPath(); g.roundRect(x0, y0, tw, th, th / 2); g.clip();
       t.px.forEach((c, j) => { const css = rgbwCss(c), lum = Math.max(c[0], c[1], c[2], c[3]); g.fillStyle = lum > 4 ? css : '#14171d'; g.shadowColor = css; g.shadowBlur = lum > 20 ? 18 : 0; g.fillRect(x0 + j * pw, y0, pw + 0.6, th); });
-      g.restore(); g.shadowBlur = 0;
+      g.shadowBlur = 0; g.fillStyle = 'rgba(0,0,0,.28)'; for (let j = 1; j < t.px.length; j++) g.fillRect(x0 + j * pw - 0.5, y0, 1, th); /* pixel-segmenterne */
+      g.restore();
       const grd = g.createLinearGradient(0, y0, 0, y0 + th); grd.addColorStop(0, 'rgba(255,255,255,.22)'); grd.addColorStop(0.5, 'rgba(255,255,255,0)'); g.fillStyle = grd; g.beginPath(); g.roundRect(x0, y0, tw, th / 2, th / 2); g.fill();
-      g.fillStyle = '#596173'; g.font = '10.5px -apple-system, sans-serif'; g.fillText((APE.tubes.find((x) => x.id === t.id) || {}).name || '', x0 + 4, y0 + th + 15);
+      g.fillStyle = '#8a8c92'; g.font = '11px "JetBrains Mono", ui-monospace, monospace'; g.fillText((APE.tubes.find((x) => x.id === t.id) || {}).name || '', x0 + 4, y0 + th + 21);
     });
   }
 }

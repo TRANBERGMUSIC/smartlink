@@ -1,6 +1,8 @@
 /* SmartLink · bevægelse (GSAP, lokal kopi i vendor/). Én signatur + rolig koreografi:
  *  - opstart: ordmærket løfter sig bogstav for bogstav, strålen under toppen tændes, panelerne kommer ind i læseretning
- *  - faneskift: en mint linje glider hen under den aktive fane; den nye sides paneler kommer ind med 50 ms forskydning (én gang pr. skift)
+ *  - faneskift: en 1px mint linje glider op/ned langs skinnens kant; titlen i toppen "dekrypteres" (react-bits DecryptedText);
+ *  - klik-gnister på pads, taster og mønsterfelter (react-bits ClickSpark);
+ *  - den nye sides paneler kommer ind med 50 ms forskydning (én gang pr. skift)
  *  - tilstand: <body> får laser-on / laser-off, så strålen scanner når laseren er tændt
  *  - skydere: fyldet op til tommelfingeren følger værdien
  * Respekterer "reducér bevægelse" (gsap.matchMedia). Kun transform/opacity animeres.
@@ -29,7 +31,38 @@
   // ---- fane-indikator ----
   const tabs = document.querySelector('.tabs'); let ind = null;
   if (tabs) { ind = document.createElement('span'); ind.className = 'tab-ind'; tabs.appendChild(ind); }
-  const moveInd = (instant) => { const a = tabs && tabs.querySelector('.tab.active'); if (!a || !ind) return; const x = a.offsetLeft + 10, w = a.offsetWidth - 20; if (instant || reduce) G.set(ind, { x, width: w }); else G.to(ind, { x, width: w, duration: 0.42, ease: EXPO }); };
+  // skinnen er lodret: linjen sidder på skinnens højre kant, lige så høj som den valgte knap
+  const moveInd = (instant) => { const a = tabs && tabs.querySelector('.tab.active'); if (!a || !ind) return; const y = a.offsetTop, h = a.offsetHeight; if (instant || reduce) G.set(ind, { y, height: h }); else G.to(ind, { y, height: h, duration: 0.42, ease: EXPO }); setTitle(a, instant); };
+
+  // ---- sidens titel i toppen (react-bits DecryptedText, porteret): bogstaverne falder på plads fra venstre ----
+  const CTX = { live: 'DS-3000RGB MK5 · ShowNET Pro · Art-Net 0', wolf: 'Wolfmix W1 MK3 · MIDI', ape: 'Ape Labs Neon Tube PIX · 6 rør · DMX B' };
+  const ttl = document.getElementById('pageTitle'), ctx = document.getElementById('pageCtx'); let ttlRun = 0;
+  function setTitle(tab, instant) {
+    if (!ttl || !tab) return; const label = (tab.querySelector('span') || tab).textContent.trim(); if (ctx) ctx.textContent = CTX[tab.dataset.tab] || '';
+    if (ttl.dataset.v === label) return; ttl.dataset.v = label; const run = ++ttlRun;
+    if (instant || reduce) { ttl.textContent = label; return; }
+    const AB = 'ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ0123456789', t0 = performance.now(), dur = 340;
+    const step = (now) => { if (run !== ttlRun) return; const k = Math.min(1, (now - t0) / dur), n = Math.floor(k * label.length);
+      ttl.textContent = label.slice(0, n) + [...label.slice(n)].map((c) => (c === ' ' ? ' ' : AB[(Math.random() * AB.length) | 0])).join('');
+      if (k < 1) requestAnimationFrame(step); else ttl.textContent = label; };
+    requestAnimationFrame(step);
+  }
+  // sproget kan skifte: titlen følges med
+  if (tabs) new MutationObserver(() => { const a = tabs.querySelector('.tab.active'); if (a && ttl && ttl.dataset.v !== (a.querySelector('span') || a).textContent.trim()) setTitle(a, true); }).observe(tabs, { subtree: true, characterData: true, childList: true });
+
+  // ---- klik-gnister (react-bits ClickSpark, porteret): kort feedback på de knapper man spiller på ----
+  const sparkCv = document.createElement('canvas'); sparkCv.className = 'spark-layer'; document.body.appendChild(sparkCv);
+  const sg = sparkCv.getContext('2d'); let sparks = [], sparkOn = false;
+  const sizeSpark = () => { const d = devicePixelRatio || 1; sparkCv.width = innerWidth * d; sparkCv.height = innerHeight * d; sg.setTransform(d, 0, 0, d, 0, 0); }; sizeSpark(); window.addEventListener('resize', sizeSpark);
+  const sparkLoop = (now) => { sg.clearRect(0, 0, innerWidth, innerHeight); sparks = sparks.filter((s) => now - s.t < 420);
+    for (const s of sparks) { const k = (now - s.t) / 420, e = 1 - Math.pow(1 - k, 3), r0 = s.r + 22 * e, len = 9 * (1 - k); sg.strokeStyle = s.c; sg.globalAlpha = 1 - k; sg.lineWidth = 1.6; sg.lineCap = 'round';
+      for (let i = 0; i < 8; i++) { const a = s.a + (i / 8) * Math.PI * 2, cs = Math.cos(a), sn = Math.sin(a); sg.beginPath(); sg.moveTo(s.x + cs * r0, s.y + sn * r0); sg.lineTo(s.x + cs * (r0 + len), s.y + sn * (r0 + len)); sg.stroke(); } }
+    sg.globalAlpha = 1; if (sparks.length) requestAnimationFrame(sparkLoop); else { sparkOn = false; sg.clearRect(0, 0, innerWidth, innerHeight); } };
+  document.addEventListener('pointerdown', (e) => {
+    if (reduce || e.button !== 0) return; const el = e.target.closest && e.target.closest('.wc-pad, .wc-btn, .ape-cbtn, .ape-pbtn, .ape-sbtn, .key, .pat, .blackout, .rail .tab'); if (!el) return;
+    const cs = getComputedStyle(el), pc = cs.getPropertyValue('--pc').trim(); const c = pc || (el.classList.contains('blackout') && el.classList.contains('armed') ? '#ff4d5e' : '#31f3ac');
+    sparks.push({ x: e.clientX, y: e.clientY, t: performance.now(), c, r: 4, a: Math.random() * 0.8 }); if (!sparkOn) { sparkOn = true; requestAnimationFrame(sparkLoop); }
+  }, true);
 
   // ---- sidens paneler kommer ind i læseretning ----
   const enter = (page) => {
@@ -43,6 +76,7 @@
   };
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => { requestAnimationFrame(() => { moveInd(); enter(document.querySelector('.page.active')); }); }));
   window.addEventListener('resize', () => moveInd(true));
+  if (tabs) new MutationObserver(() => moveInd()).observe(tabs, { subtree: true, attributes: true, attributeFilter: ['class'] }); // også når koden selv skifter side
 
   // ---- ordmærket ----
   const wm = document.querySelector('.wordmark');
@@ -72,8 +106,9 @@
     const chars = splitWordmark(), tl = G.timeline({ defaults: { ease: EXPO } });
     if (chars.length) tl.from(chars, { yPercent: 110, autoAlpha: 0, duration: 0.7, stagger: 0.03 }, 0);
     const logo = document.querySelector('.logo'); if (logo) tl.from(logo, { rotate: -90, scale: 0.6, autoAlpha: 0, duration: 0.8 }, 0);
-    tl.from('.tabs .tab', { y: -8, autoAlpha: 0, duration: 0.5, stagger: 0.035, clearProps: 'transform,opacity,visibility' }, 0.15);
+    tl.from('.rail .tab', { x: -10, autoAlpha: 0, duration: 0.5, stagger: 0.035, clearProps: 'transform,opacity,visibility' }, 0.15);
     tl.from('.topright > *', { y: -8, autoAlpha: 0, duration: 0.5, stagger: 0.05, clearProps: 'transform,opacity,visibility' }, 0.2);
+    tl.from('.ttl', { x: -8, autoAlpha: 0, duration: 0.6, clearProps: 'transform,opacity,visibility' }, 0.3);
     tl.fromTo('.beam', { scaleX: 0, transformOrigin: '0 50%' }, { scaleX: 1, duration: 1.0, ease: 'power2.inOut' }, 0.1);
     tl.add(() => enter(document.querySelector('.page.active')), 0.25);
   };
