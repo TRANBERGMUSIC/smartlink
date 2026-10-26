@@ -2357,7 +2357,7 @@ function previewTick(now) {
         g.stroke(); g.restore();
       }
       g.fillStyle = '#9a9a95'; g.font = '11px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.lineInfo', { n: special === 'line' ? cfg.testPattern : cfg.linePattern }), W / 2, B.y + 20);
-    } else if (!out.on) { g.fillStyle = '#ff3b5c'; g.font = '700 13px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.off'), W / 2, H / 2 + 4); }
+    } else if (!out.on) { const msg = t('pv.off'); g.font = '600 13px Inter, -apple-system, sans-serif'; g.textAlign = 'center'; const mw = g.measureText(msg).width + 32, my = H / 2 + 26; g.fillStyle = 'rgba(255,77,94,.10)'; g.strokeStyle = 'rgba(255,77,94,.45)'; g.lineWidth = 1; g.beginPath(); g.roundRect(W / 2 - mw / 2, my, mw, 32, 16); g.fill(); g.stroke(); g.fillStyle = '#ff8593'; g.fillText(msg, W / 2, my + 20.5); }
     else if (st.pattern === 0) { g.fillStyle = '#5b6375'; g.font = '12px -apple-system'; g.textAlign = 'center'; g.fillText(t('pv.noPat'), W / 2, H / 2 + 4); }
     else {
       const strobeOff = st.strobe > 0 && Math.floor(now / (220 - st.strobe * 190)) % 2;

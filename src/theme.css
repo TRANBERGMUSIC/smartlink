@@ -1,0 +1,120 @@
+/* SmartLink · designlag v6 (indlæses efter style.css).
+ * Retning (taste-skill, app-skærme): ægte neutrale mørke flader, én farve = laseren (mint) på data og tilstand – ikke på kromen,
+ * én grotesk (Inter) + Space Grotesk kun til ordmærket og store tal, flade paneler med 1px kant, ingen glas/glød på kromen.
+ * Signatur: "strålen" under toppen – en 1px linje der scanner i mint når laseren er tændt, og står rød og stille når den er slukket.
+ */
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(fonts/inter-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(fonts/inter-latin-ext-wght-normal.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Space Grotesk"; font-style: normal; font-display: swap; font-weight: 300 700; src: url(fonts/space-grotesk-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Space Grotesk"; font-style: normal; font-display: swap; font-weight: 300 700; src: url(fonts/space-grotesk-latin-ext-wght-normal.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+:root {
+  --bg: #0a0a0b; --panel: #121214; --panel2: #18181b; --raised: #1e1e22; --line: #26262b; --line-strong: #34343b;
+  --text: #f4f4f5; --muted: #a1a1aa; --faint: #8b8b94;
+  --accent: #31f3ac; --accent-ink: #04130c; --accent-dim: rgba(49, 243, 172, .12); --gold: #31f3ac; --warn: #ff4d5e;
+  --r: 12px; --r-ctl: 8px;
+  --ease-out: cubic-bezier(.22, 1, .36, 1); --ease-expo: cubic-bezier(.16, 1, .3, 1); --ease-io: cubic-bezier(.76, 0, .24, 1);
+  --t-press: 140ms; --t-hover: 180ms; --t-ui: 240ms;
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; --display: "Space Grotesk", "Inter", sans-serif;
+}
+html, body { font-family: var(--font); font-size: 13px; font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; background: var(--bg); }
+.num, output, #masterVal, .conn, .wm-val, .mono { font-variant-numeric: tabular-nums; }
+
+/* ---------- toppen ---------- */
+.topbar { height: 56px; background: var(--bg); border-bottom: 0; position: relative; gap: 18px; }
+.topbar::after { /* strålen */ content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); }
+.beam { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; overflow: hidden; pointer-events: none; z-index: 1; }
+.beam i { position: absolute; top: 0; bottom: 0; width: 34%; left: -34%; background: linear-gradient(90deg, transparent, var(--accent) 45%, #eafff6 50%, var(--accent) 55%, transparent); opacity: 0; }
+body.laser-on .beam i { opacity: 1; animation: beamScan 2.6s var(--ease-io) infinite; }
+body.laser-on .beam { box-shadow: 0 0 10px rgba(49, 243, 172, .35); }
+body.laser-off .beam { background: linear-gradient(90deg, transparent, rgba(255, 77, 94, .45), transparent); }
+@keyframes beamScan { from { left: -34%; } to { left: 100%; } }
+.wordmark { font-family: var(--display); font-weight: 400; letter-spacing: .02em; font-size: 17px; }
+.wordmark b { font-weight: 700; color: var(--accent); }
+.wordmark .ch { display: inline-block; }
+.brand small { font-family: var(--font); color: var(--faint); font-size: 10px; letter-spacing: .1em; font-weight: 600; }
+.logo { filter: none; }
+/* faner: tekst der lysner + en mint linje der glider hen under den aktive */
+.tabs { position: relative; background: transparent; padding: 0; gap: 0; border-radius: 0; height: 56px; align-items: center; }
+.tabs .tab, .tab { height: 34px; padding: 0 10px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13px; transition: color var(--t-hover) ease, background-color var(--t-hover) ease; }
+.tab:hover { color: var(--text); background: var(--panel); }
+.tab.active { background: transparent; color: var(--text); font-weight: 600; }
+.tab-ind { position: absolute; bottom: 0; left: 0; height: 2px; width: 40px; background: var(--accent); border-radius: 2px 2px 0 0; pointer-events: none; z-index: 2; box-shadow: 0 0 12px rgba(49,243,172,.6); }
+.topright { gap: 14px; }
+.conn { color: var(--muted); font-size: 12px; }
+.led { width: 8px; height: 8px; } .led.ok { box-shadow: 0 0 0 3px rgba(49,243,172,.15); }
+.mobbtn { background: var(--panel); border-color: var(--line); }
+.lang.seg { background: var(--panel); border: 1px solid var(--line); }
+/* tænd/sluk */
+.blackout { position: relative; height: 38px; border-radius: 10px; font-family: var(--display); font-weight: 700; letter-spacing: .04em; transition: transform var(--t-press) var(--ease-out), background-color var(--t-ui) ease, box-shadow var(--t-ui) ease; }
+.blackout.on { background: #2a0f14; color: #ff8593; border: 1px solid rgba(255, 77, 94, .55); box-shadow: none; }
+.blackout.on:hover { background: #3a121a; }
+.blackout.armed { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); box-shadow: 0 0 0 0 rgba(49,243,172,.5); animation: armPulse 2.4s var(--ease-out) infinite; }
+@keyframes armPulse { 0% { box-shadow: 0 0 0 0 rgba(49,243,172,.45); } 70%, 100% { box-shadow: 0 0 0 12px rgba(49,243,172,0); } }
+
+/* ---------- flader ---------- */
+.page { padding: 14px; gap: 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: none; }
+.panel:where(:not(.wc):not(.ape-card)) { background-image: none; }
+h2 { font-size: 12.5px; letter-spacing: .01em; text-transform: none; color: var(--text); font-weight: 600; }
+h2::first-letter { text-transform: uppercase; }
+.hint { color: var(--muted); }
+.muted { color: var(--muted); }
+.netbar { background: var(--panel); border-bottom: 1px solid var(--line); }
+
+/* ---------- kontroller ---------- */
+button { border-radius: var(--r-ctl); background: var(--panel2); border: 1px solid var(--line); color: var(--text); transition: transform var(--t-press) var(--ease-out), background-color var(--t-hover) ease, border-color var(--t-hover) ease, color var(--t-hover) ease, box-shadow var(--t-hover) ease; }
+button:hover { border-color: var(--line-strong); background: var(--raised); }
+button:active:not(:disabled) { transform: scale(.97); }
+button.ghost { background: transparent; } button.ghost:hover { background: var(--panel2); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+button.primary:hover { background: #5cf7c0; border-color: #5cf7c0; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.seg button { color: var(--muted); border-radius: 7px; } .seg button:hover { color: var(--text); background: var(--panel2); }
+.seg button.active { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+select, input:not([type]), input[type=number], input[type=text], textarea { background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--r-ctl); color: var(--text); transition: border-color var(--t-hover) ease; }
+select:hover, input:not([type]):hover, input[type=number]:hover { border-color: #4a4a53; }
+input[type=checkbox] { accent-color: var(--accent); }
+/* skydere: tynd skinne, fyld i mint op til tommelfingeren (--p sættes af motion.js) */
+input[type=range] { --p: 50%; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent) 0 var(--p), var(--line-strong) var(--p) 100%); }
+input[type=range]::-webkit-slider-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 0 0 4px rgba(49,243,172,.0), 0 1px 3px rgba(0,0,0,.6); transition: box-shadow var(--t-hover) ease, transform var(--t-press) var(--ease-out); }
+input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 5px rgba(49,243,172,.18), 0 1px 3px rgba(0,0,0,.6); }
+input[type=range]:active::-webkit-slider-thumb { transform: scale(1.12); box-shadow: 0 0 0 7px rgba(49,243,172,.22), 0 1px 3px rgba(0,0,0,.6); }
+/* scrollbarer */
+::-webkit-scrollbar { width: 10px; height: 10px; } ::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 10px; border: 3px solid var(--bg); } ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+
+/* ---------- mønstre og taster ---------- */
+.pat, .key { transition: transform var(--t-ui) var(--ease-out), border-color var(--t-hover) ease, box-shadow var(--t-ui) ease; }
+.pat:hover, .key:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+.pat.active, .key.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 6px 20px rgba(49,243,172,.18); }
+.key { background: var(--panel); border-color: var(--line); }
+.key.set { border-color: rgba(49,243,172,.3); }
+.key.hit { background: var(--accent-dim); transform: scale(.94); }
+
+/* ---------- dialoger og beskeder ---------- */
+.modal, .ape-dlg { background: rgba(4, 4, 6, .72); }
+.modal-box, .ape-dlg-box { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.55); }
+.modal-box h3, .ape-dlg-box h3 { font-family: var(--display); font-size: 17px; font-weight: 600; }
+#toast { background: var(--raised); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.5); transition: opacity var(--t-ui) ease, transform 420ms var(--ease-expo); }
+
+/* ---------- store tal ---------- */
+#masterVal, .f-val, .vec-stats b, .ape-big output, .wc-scr-big { font-family: var(--display); }
+
+/* ---------- reduceret bevægelse ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  body.laser-on .beam i { animation: none; left: 33%; }
+}
+
+@media (max-width: 1560px) { .brand small { display: none; } .topright { gap: 10px; } .master input { width: 96px; } }
+@media (max-width: 1380px) { .tabs .tab, .tab { padding: 0 8px; font-size: 12.5px; } }
+
+/* LIVE: billedfeltet er produktets ansigt – en svag lysning bag strålerne når laseren er tændt, og en scanlinje når den tændes */
+.preview-panel { position: relative; overflow: hidden; }
+body.laser-on .preview-panel { border-color: rgba(49,243,172,.28); }
+.pv-sweep { position: absolute; left: 0; right: 0; top: 0; height: 2px; pointer-events: none; z-index: 3; opacity: 0;
+  background: linear-gradient(90deg, transparent, var(--accent) 20%, #eafff6 50%, var(--accent) 80%, transparent); box-shadow: 0 0 18px 2px rgba(49,243,172,.55); }
+.pv-label { letter-spacing: .14em; }
