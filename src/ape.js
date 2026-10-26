@@ -108,6 +108,14 @@ function apeSnapshot() {
   return { profile: APE.profile, topology: APE.topology, wolfmix: APE.profile === 'show' && APE.topology !== 'C', floors: fl, tubes, colors: APE.colors.map((c) => ({ id: c.id, name: c.name, folder: c.folder, css: rgbwCss(c.rgbw) })), programs: APE.programs.map((x) => ({ id: x.id, name: x.name, folder: x.folder })), scenes: APE.scenes.map((x) => ({ id: x.id, name: x.name, folder: x.folder, floors: Object.keys(x.floors).map(Number) })) };
 }
 
+// blinder: fuldt hvidt (RGB+WW) og fuld lysstyrke mens knappen holdes; slip = tilbage som før
+function apeBlinder(floors, on) {
+  AP.blind = AP.blind || {};
+  for (const f of floors) { const s = apeState.floors[f];
+    if (on && !AP.blind[f]) { AP.blind[f] = { look: s.look, color: s.color.slice(), brightness: s.brightness, blackout: s.blackout, fx: s.fx }; apeCmd({ op: 'color', color: [255, 255, 255, 255] }, [f], 'wolfmix'); apeCmd({ op: 'brightness', value: 1 }, [f], 'wolfmix'); apeCmd({ op: 'fx', fx: 'none' }, [f], 'wolfmix'); }
+    else if (!on && AP.blind[f]) { const p = AP.blind[f]; delete AP.blind[f]; Object.assign(s, { look: p.look, color: p.color, brightness: p.brightness, blackout: p.blackout, fx: p.fx }); apeCmd({ op: 'brightness', value: p.brightness }, [f], 'wolfmix'); }
+  }
+}
 // ---------- Wolfmix-handlinger (registreres i det fælles handlingsregister) ----------
 (() => {
   if (typeof SL_ACTIONS === 'undefined') return;
@@ -116,6 +124,7 @@ function apeSnapshot() {
     add('ape.' + sfx + '.blackoutHold', `Lys ${nm}: hold blackout`, 'hold', (d) => apeCmd({ op: 'blackout', hold: !!d }, fl, 'wolfmix'));
     add('ape.' + sfx + '.blackout', `Lys ${nm}: blackout til/fra`, 'trigger', () => apeCmd({ op: 'blackout' }, fl, 'wolfmix'));
     add('ape.' + sfx + '.strobeHold', `Lys ${nm}: hold strobe`, 'hold', (d) => apeCmd({ op: 'strobe', hold: !!d }, fl, 'wolfmix'));
+    add('ape.' + sfx + '.blinderHold', `Lys ${nm}: hold blinder (fuldt hvidt)`, 'hold', (d) => apeBlinder(fl, !!d));
     add('ape.' + sfx + '.colorNext', `Lys ${nm}: næste farve`, 'trigger', () => { const i = (APE.colors.findIndex((c) => c.rgbw.join() === apeState.floors[fl[0]].color.join()) + 1) % APE.colors.length; apeCmd({ op: 'color', color: APE.colors[i].rgbw }, fl, 'wolfmix'); });
     add('ape.' + sfx + '.fxNext', `Lys ${nm}: næste pixel-effekt`, 'trigger', () => { const i = (ApeCore.FX.indexOf(apeState.floors[fl[0]].fx) + 1) % ApeCore.FX.length; apeCmd({ op: 'fx', fx: ApeCore.FX[i] }, fl, 'wolfmix'); });
     add('ape.' + sfx + '.brightness', `Lys ${nm}: lysstyrke`, 'continuous', (v) => apeCmd({ op: 'brightness', value: v }, fl, 'wolfmix'));

@@ -76,14 +76,15 @@ function wmiRender() {
   for (const [id, s] of wmiSorted()) {
     const b = wmiState.bindings[id] || {}, isCc = s.type === 'cc', tr = document.createElement('tr'); tr.dataset.id = id;
     tr.innerHTML = `<td><input class="wmidi-name" placeholder="${t('wmidi.namePh')}"></td><td class="mono">${id}</td><td>${t(isCc ? 'wmidi.dimmer' : 'wmidi.button')}</td><td>${s.channel}</td><td>${s.number}</td><td class="mono" data-c="v">${s.lastValue}</td><td class="mono" data-c="n">${s.count}</td>
-      <td><select data-slot="onPress">${WMI.optsT}</select></td><td><select data-slot="onRelease">${WMI.optsT}</select></td>
+      <td><select data-slot="onPress">${WMI.optsT}</select>${b.onPress === 'pattern.set' ? ` <input type="number" class="wmidi-thr" data-arg min="1" max="255" value="${b.onPressArg || ''}" title="#">` : ''}</td><td><select data-slot="onRelease">${WMI.optsT}</select></td>
       <td>${isCc ? `<select data-slot="onChange">${WMI.optsC}</select> <input type="number" class="wmidi-thr" min="1" max="127" title="${t('wmidi.thr')}">` : '<span class="muted">–</span>'}</td>
       <td class="wmidi-rowacts"><button class="ghost small" data-a="test" title="${t('wmidi.testTip')}">▶</button><button class="ghost small" data-a="del" title="${t('wmidi.del')}">×</button></td>`;
     const nm = tr.querySelector('.wmidi-name'); nm.value = s.name || '';
     const saveName = () => { if ((s.name || '') !== nm.value.trim()) { s.name = nm.value.trim(); wmiSave(true); wmiRenderActs(); } };
     nm.onblur = saveName; nm.onkeydown = (e) => { if (e.key === 'Enter') { saveName(); nm.blur(); } if (e.key === 'Escape') { nm.value = s.name || ''; nm.blur(); e.stopPropagation(); } };
-    tr.querySelectorAll('select').forEach((sel) => { sel.value = b[sel.dataset.slot] || ''; sel.onchange = () => { WolfMidi.bind(wmiState, id, sel.dataset.slot, sel.value); wmiSave(true); wmiRenderActs(); }; });
-    const thr = tr.querySelector('.wmidi-thr'); if (thr) { thr.value = b.threshold ?? WolfMidi.DEFAULT_THR; thr.onchange = () => { const bb = WolfMidi.bind(wmiState, id, 'onPress', (wmiState.bindings[id] || {}).onPress); bb.threshold = clamp(+thr.value | 0, 0, 127); thr.value = bb.threshold; wmiSave(true); }; }
+    tr.querySelectorAll('select').forEach((sel) => { sel.value = b[sel.dataset.slot] || ''; sel.onchange = () => { WolfMidi.bind(wmiState, id, sel.dataset.slot, sel.value); wmiSave(true); wmiRenderActs(); if (sel.dataset.slot === 'onPress') wmiRender(); }; });
+    const arg = tr.querySelector('[data-arg]'); if (arg) arg.onchange = () => { const bb = WolfMidi.bind(wmiState, id, 'onPress', 'pattern.set'); bb.onPressArg = Math.max(1, Math.min(255, +arg.value | 0)); arg.value = bb.onPressArg; wmiSave(true); if (typeof wcRefresh === 'function') wcRefresh(); };
+    const thr = tr.querySelector('.wmidi-thr:not([data-arg])'); if (thr) { thr.value = b.threshold ?? WolfMidi.DEFAULT_THR; thr.onchange = () => { const bb = WolfMidi.bind(wmiState, id, 'onPress', (wmiState.bindings[id] || {}).onPress); bb.threshold = clamp(+thr.value | 0, 0, 127); thr.value = bb.threshold; wmiSave(true); }; }
     tr.querySelector('[data-a=test]').onclick = () => { const bb = wmiState.bindings[id] || {}; let any = false; if (bb.onPress) any = SL_ACTIONS.run(bb.onPress) || any; if (bb.onChange) any = SL_ACTIONS.run(bb.onChange, (s.lastValue | 0) / 127) || any; wmiFlash(id); if (!any) toast(t('wmidi.noBinding')); };
     tr.querySelector('[data-a=del]').onclick = () => { delete wmiState.signals[id]; delete wmiState.bindings[id]; wmiSave(true); wmiRender(); };
     body.appendChild(tr); WMI.rows[id] = { tr, v: tr.querySelector('[data-c=v]'), n: tr.querySelector('[data-c=n]') };

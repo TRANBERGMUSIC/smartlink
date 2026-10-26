@@ -63,11 +63,11 @@
     if (ev.type === 'cc') {
       if (b.onChange) out.push({ action: b.onChange, value: ev.value / 127, slot: 'onChange' });
       const edge = ccEdges(ccState, ev.id, ev.value, b.threshold ?? DEFAULT_THR, now);
-      if (edge === 'press' && b.onPress) out.push({ action: b.onPress, slot: 'onPress' });
+      if (edge === 'press' && b.onPress) out.push({ action: b.onPress, slot: 'onPress', value: b.onPressArg ?? undefined });
       if (edge === 'release' && b.onRelease) out.push({ action: b.onRelease, slot: 'onRelease' });
       if (edge === 'release' && b.onPress && isHold && isHold(b.onPress)) out.push({ action: b.onPress, value: 0, slot: 'holdRelease' });
     } else {
-      if (ev.event === 'press' && b.onPress) out.push({ action: b.onPress, slot: 'onPress' });
+      if (ev.event === 'press' && b.onPress) out.push({ action: b.onPress, slot: 'onPress', value: b.onPressArg ?? undefined }); // onPressArg: fx mønster-nr. til 'pattern.set'
       if (ev.event === 'release' && b.onRelease) out.push({ action: b.onRelease, slot: 'onRelease' });
       if (ev.event === 'release' && b.onPress && isHold && isHold(b.onPress)) out.push({ action: b.onPress, value: 0, slot: 'holdRelease' });
       if (ev.event === 'press' && b.onChange) out.push({ action: b.onChange, value: ev.value / 127, slot: 'onChange' }); // fx anslagsstyrke → dimmer

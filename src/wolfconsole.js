@@ -21,7 +21,7 @@ function wcLabel(key) {
 const wcControlsFor = (sigId) => Object.entries(wcLayout()).filter(([, s]) => s === sigId).map(([c]) => c);
 function wcFuncText(sigId) { // kort tekst: hvad gør signalet
   const b = sigId && wmiState.bindings[sigId]; if (!b) return '';
-  return ['onPress', 'onChange', 'onRelease'].map((k) => b[k] && SL_ACTIONS.byId[b[k]] ? SL_ACTIONS.label(SL_ACTIONS.byId[b[k]]) : '').filter(Boolean).join(' · ');
+  return ['onPress', 'onChange', 'onRelease'].map((k) => b[k] === 'pattern.set' && k === 'onPress' ? t('wc.patShort', { n: b.onPressArg || '?' }) : b[k] && SL_ACTIONS.byId[b[k]] ? SL_ACTIONS.label(SL_ACTIONS.byId[b[k]]) : '').filter(Boolean).join(' · ');
 }
 function wcMigrate() { // før 5.4: pads hed "pad1" (= side 1)
   const L = wcLayout(); for (const k of Object.keys(L)) if (/^pad\d+$/.test(k)) { L['p1.' + k] = L['p1.' + k] || L[k]; delete L[k]; }
@@ -48,6 +48,8 @@ function wcRefresh() { // mærkater + tilstand for alle knapper (pads for den vi
     el.classList.toggle('linked', !!sig); el.classList.toggle('sel', WC.sel === key); el.classList.toggle('listening', WC.sel === key && WC.listen);
     el.classList.toggle('lit', WC.litKeys.has(key));
     wcApplyColor(el, key);
+    const pn = sig && wmiState.bindings[sig] && wmiState.bindings[sig].onPress === 'pattern.set' ? wmiState.bindings[sig].onPressArg : 0, cvOld = el.querySelector('canvas');
+    if (pn && patAvail.has(pn) && el.offsetParent) { if (el.dataset.pat !== String(pn)) { el.dataset.pat = pn; requestAnimationFrame(() => drawThumb(el, pn)); } } else if (cvOld) { cvOld.remove(); el.dataset.pat = ''; el.classList.remove('has'); }
     el.querySelector('.wc-fn').textContent = sig ? ((s && s.name) || wcFuncText(sig) || sig) : '';
     el.title = sig ? `${wcLabel(key)} → ${sig}${s && s.name ? ' (' + s.name + ')' : ''}\n${wcFuncText(sig) || t('wc.noFunc')}` : t('wc.clickToLink');
   }
@@ -92,6 +94,8 @@ function wcInspector() {
     <div class="wc-i-row"><span class="muted">${t('wc.color')}</span><span class="wc-colrow"><input type="color" data-a="color" value="${wcColors()[id] || wcDefaultColor(id)}"><button class="ghost small" data-a="colorReset">${t('wc.colorReset')}</button>${wcPadOf(id) ? `<button class="ghost small" data-a="colorPage">${t('wc.colorAll')}</button>` : ''}</span></div>
     <label class="wc-i-row"><span class="muted">${t('wc.pick')}</span><select data-a="pick"><option value="">—</option>${seen.map(([sid, x]) => `<option value="${sid}">${escHtml(x.name ? x.name + ' · ' + sid : sid)}</option>`).join('')}</select></label>
     ${sig ? `<label class="wc-i-row"><span class="muted">${t('wmidi.thName')}</span><input data-a="name" placeholder="${t('wmidi.namePh')}"></label>
+    ${sig ? `<div class="wc-i-row"><span class="muted">${t('wc.patPick')}</span><span class="wc-colrow"><b class="mono">${b.onPress === 'pattern.set' && b.onPressArg ? '#' + b.onPressArg : '—'}</b><button class="ghost small" data-a="patOpen">${t('wc.patChoose')}</button>${b.onPress === 'pattern.set' ? `<button class="ghost small" data-a="patClear">×</button>` : ''}</span></div>
+    <div class="wc-patgrid" ${WC.patOpen ? '' : 'hidden'}><p class="hint">${patAvail.size ? t('wc.patHint') : t('wc.patNone')}</p><div class="wc-pats">${[...patAvail].sort((a, c) => a - c).map((n) => `<button class="wc-pat${b.onPressArg === n && b.onPress === 'pattern.set' ? ' on' : ''}" data-n="${n}"><span>#${n}</span></button>`).join('')}</div></div>` : ''}
     <label class="wc-i-row"><span class="muted">${t('wmidi.thPress')}</span><select data-slot="onPress">${WMI.optsT || wmiOptions('trigger')}</select></label>
     <label class="wc-i-row"><span class="muted">${t('wmidi.thRelease')}</span><select data-slot="onRelease">${WMI.optsT || wmiOptions('trigger')}</select></label>
     ${isCc ? `<label class="wc-i-row"><span class="muted">${t('wmidi.thChange')}</span><select data-slot="onChange">${WMI.optsC || wmiOptions('continuous')}</select></label>
@@ -103,6 +107,9 @@ function wcInspector() {
   const ci = box.querySelector('[data-a=color]'); ci.oninput = () => { wcColors()[id] = ci.value; wmiSave(); wcRefresh(); };
   box.querySelector('[data-a=colorReset]').onclick = () => { delete wcColors()[id]; wmiSave(true); wcRefresh(); };
   const cp = box.querySelector('[data-a=colorPage]'); if (cp) cp.onclick = () => { const pg = wcPadOf(id).page; for (let n = 1; n <= WC_PADS; n++) wcColors()[`p${pg}.pad${n}`] = ci.value; wmiSave(true); wcRefresh(); };
+  const po = box.querySelector('[data-a=patOpen]'); if (po) po.onclick = () => { WC.patOpen = !WC.patOpen; wcInspector(); };
+  const pcl = box.querySelector('[data-a=patClear]'); if (pcl) pcl.onclick = () => { const bb = WolfMidi.bind(wmiState, sig, 'onPress', null); delete bb.onPressArg; wmiSave(true); wmiRender(); wcRefresh(); };
+  box.querySelectorAll('.wc-pat').forEach((pb) => { requestAnimationFrame(() => drawThumb(pb, +pb.dataset.n)); pb.onclick = () => { const bb = WolfMidi.bind(wmiState, sig, 'onPress', 'pattern.set'); bb.onPressArg = +pb.dataset.n; WC.patOpen = false; wmiSave(true); wmiRender(); wcRefresh(); SL_ACTIONS.run('pattern.set', bb.onPressArg); }; });
   const pk = box.querySelector('[data-a=pick]'); pk.value = sig || ''; pk.onchange = () => { if (pk.value) wcLink(id, pk.value); };
   const nm = box.querySelector('[data-a=name]'); if (nm) { nm.value = (s && s.name) || ''; const save = () => { if (s && (s.name || '') !== nm.value.trim()) { s.name = nm.value.trim(); wmiSave(true); wmiRender(); wcRefresh(); } }; nm.onblur = save; nm.onkeydown = (e) => { if (e.key === 'Enter') nm.blur(); }; }
   box.querySelectorAll('select[data-slot]').forEach((se) => { se.value = b[se.dataset.slot] || ''; se.onchange = () => { WolfMidi.bind(wmiState, sig, se.dataset.slot, se.value); wmiSave(true); wmiRender(); wcRefresh(); }; });
@@ -121,7 +128,8 @@ function wcSelect(key) {
   if (WC.sel === key && WC.listen) { WC.listen = false; } else { WC.sel = key; WC.listen = !wcLayout()[key]; } // ikke forbundet → lyt med det samme
   wcRefresh();
 }
-function wcLink(key, sigId) { wcLayout()[key] = sigId; WC.listen = false; wmiSave(true); wcRefresh(); wcLight(key, 'flash'); }
+const WC_DEFAULT_FN = { strobe: 'hold.strobe', blinder: 'hold.blinder', speed: 'auto.toggleMusic', blackout: 'hold.blank', bpmtap: 'tap' }; // pultens egne knapper får den oplagte funktion
+function wcLink(key, sigId) { const def = WC_DEFAULT_FN[key], b0 = wmiState.bindings[sigId]; if (def && SL_ACTIONS.byId[def] && !(b0 && (b0.onPress || b0.onChange))) WolfMidi.bind(wmiState, sigId, 'onPress', def); wcLayout()[key] = sigId; WC.listen = false; wmiSave(true); wcRefresh(); wcLight(key, 'flash'); }
 // kaldes fra wmiHandle FØR handlinger køres: lytter vi, forbindes signalet og der udføres intet
 function wcIntercept(ev) {
   if (!WC.listen || !WC.sel) return false;
@@ -149,5 +157,6 @@ function wcSignal(ev) { // kaldes for hvert signal (efter handlinger)
 }
 (() => {
   if (!$('#wc')) return; wcMigrate(); wcBuild();
+  const wt = document.querySelector('[data-tab="wolf"]'); if (wt) wt.addEventListener('click', () => requestAnimationFrame(wcRefresh)); // miniaturer kan først tegnes når fanen er synlig
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && WC.listen) { WC.listen = false; wcRefresh(); e.stopPropagation(); e.preventDefault(); } }, true);
 })();
