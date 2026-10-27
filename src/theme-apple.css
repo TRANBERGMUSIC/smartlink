@@ -1,0 +1,139 @@
+/* SmartLink · udseende "Apple" (efter den nye CENTRA-app): macOS-sidebar med navngivne rækker og lilla linje-ikoner,
+ * gradient-mærke (amber → orange → rosa → violet) kun på logo og den valgte række, store titler, bløde kort uden kanter,
+ * systemets skrift (SF Pro på Mac). Alt er afgrænset til html.th-apple – "Terminal" (5.9) er uændret.
+ * Mønstrene og LIVE-billedet tegnes som før.
+ */
+html.th-apple {
+  --bg: #141416; --side: #1b1b1e; --panel: #1e1e21; --panel2: #26262a; --raised: #2c2c30; --line: #2a2a2e; --line-strong: #3a3a3f; --rule: #232326;
+  --text: #f5f5f7; --muted: #a1a1a8; --faint: #8e8e95;
+  --tint: #b4a7ff; --tint-ic: #a99cf5; --tint-wash: rgba(180, 167, 255, .12);
+  --grad: linear-gradient(180deg, #f5a524 0%, #f97316 35%, #ec4899 70%, #8b5cf6 100%);
+  --grad-h: linear-gradient(90deg, #f5a524, #f97316 35%, #ec4899 70%, #8b5cf6);
+  --accent: #34d399; --accent-ink: #052016; --accent-dim: rgba(52, 211, 153, .12); --warn: #ff5c6c;
+  --r: 14px; --r-ctl: 9px; --rail: 240px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", sans-serif; --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+  --mono: var(--font); --line1: linear-gradient(var(--text), var(--text));
+}
+html.th-apple, html.th-apple body { font-family: var(--font); font-size: 13px; font-feature-settings: normal; background: var(--bg); color: var(--text); letter-spacing: -.003em; }
+html.th-apple .num, html.th-apple output, html.th-apple #masterVal, html.th-apple .conn, html.th-apple #pvInfo, html.th-apple .vb-v, html.th-apple .ttl-ctx, html.th-apple .pv-label,
+html.th-apple input[type=number], html.th-apple .ape-big output, html.th-apple .ape-tubes td { font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+
+/* ---------- sidebar ---------- */
+html.th-apple .tabs.rail { top: 0; width: var(--rail); background: var(--side); border-right: 1px solid var(--line); padding: 104px 12px 14px; gap: 2px; }
+html.th-apple .rail .tab { flex-direction: row; justify-content: flex-start; height: 36px; flex: none; gap: 12px; padding: 0 12px; border-radius: 9px; color: var(--text); font: 500 14px/1 var(--font); letter-spacing: -.01em; }
+html.th-apple .rail .tab svg { width: 18px; height: 18px; stroke: var(--tint-ic); stroke-width: 1.6; }
+html.th-apple .rail .tab:hover { background: rgba(255,255,255,.04); }
+html.th-apple .rail .tab:hover svg { transform: none; }
+html.th-apple .rail .tab.active { background: var(--raised); font-weight: 600; color: var(--text); }
+html.th-apple .rail .tab.active::after { content: ''; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--grad); }
+html.th-apple .rail .tab[data-tab="vector"] { margin-bottom: 0; }
+html.th-apple .rail .tab[data-tab="settings"] { margin-top: 2px; }
+html.th-apple .rail .tab[data-tab="settings"]::before { display: none; }
+html.th-apple .tab-ind { display: none; }
+html.th-apple .rail-grp { margin-top: 22px; padding: 0 12px 6px; font-size: 12px; font-weight: 500; color: var(--faint); }
+html.th-apple .rail-dev { display: grid; grid-template-columns: 8px 1fr; column-gap: 12px; align-items: center; padding: 6px 12px; border-radius: 9px; }
+html.th-apple .rail-dev span { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.th-apple .rail-dev small { grid-column: 2; font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+html.th-apple .rail-dev:last-of-type { margin-bottom: auto; }
+html.th-apple .rail .dot { width: 7px; height: 7px; border-radius: 50%; background: #4a4a50; }
+html.th-apple .rail .dot.ok { background: #30d158; } html.th-apple .rail .dot.on { background: var(--accent); box-shadow: 0 0 0 3px rgba(52,211,153,.18); } html.th-apple .rail .dot.bad { background: var(--warn); }
+html.th-apple .rail-sync { order: 0; display: flex; align-items: center; gap: 9px; padding: 10px 12px 8px; font-size: 12px; color: var(--muted); }
+html.th-apple .rail-sync span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html:not(.th-apple) .rail-x { display: none !important; }
+/* sync-linjen ligger over Indstillinger, som i CENTRA */
+html.th-apple .rail { display: flex; } html.th-apple .rail-sync { order: 1; } html.th-apple .rail .tab[data-tab="settings"] { order: 2; }
+
+/* ---------- mærket øverst i sidebaren (under vinduesknapperne) ---------- */
+html.th-apple .brand { position: fixed; top: 46px; left: 0; width: var(--rail); height: 44px; padding: 0 22px; z-index: 31; gap: 12px; -webkit-app-region: drag; }
+html.th-apple .logo { width: 26px; height: 26px; }
+html.th-apple .wordmark { font-family: var(--display); font-size: 15px; font-weight: 500; letter-spacing: .24em; text-transform: uppercase; color: var(--text); }
+html.th-apple .wordmark b { font-weight: 500; color: var(--text); background: none; }
+
+/* ---------- værktøjslinjen: stor titel + handlinger ---------- */
+html.th-apple .topbar { height: 72px; padding-left: calc(var(--rail) + 24px); padding-right: 20px; background: var(--bg); }
+html.th-apple .topbar::after, html.th-apple .beam { display: none; }
+html.th-apple .ttl { border-left: 0; padding-left: 0; gap: 14px; align-items: baseline; }
+html.th-apple #pageTitle { font: 700 28px/1.1 var(--display); letter-spacing: -.022em; }
+html.th-apple .ttl-ctx { font-size: 12.5px; color: var(--faint); }
+html.th-apple main { height: calc(100% - 72px); }
+html.th-apple body.hasbar main { height: calc(100% - 116px); }
+html.th-apple main, html.th-apple .netbar { margin-left: var(--rail); }
+html.th-apple .topright { gap: 8px; }
+html.th-apple .topright > * + * { margin-left: 0; }
+html.th-apple .mobbtn, html.th-apple .connbtn, html.th-apple .lang.seg, html.th-apple .master { height: 34px; border: 0; border-radius: 999px; background: var(--panel2); color: var(--text); padding: 0 14px; }
+html.th-apple .mobbtn .ico { stroke: var(--tint-ic); }
+html.th-apple .mobbtn:hover, html.th-apple .connbtn:hover { background: var(--raised); }
+html.th-apple .lang.seg { padding: 3px; gap: 2px; }
+html.th-apple .lang button { height: 28px; border-radius: 999px; font: 600 11.5px var(--font); letter-spacing: .02em; padding: 0 10px; }
+html.th-apple .lang.seg button.active { background: var(--raised); color: var(--text); background-image: none; }
+html.th-apple .master { border-left: 0; gap: 10px; }
+html.th-apple #masterVal { font-weight: 600; }
+html.th-apple .blackout { height: 34px; min-width: 150px; border-radius: 999px; margin-left: 4px; font: 600 12.5px var(--font); letter-spacing: .02em; }
+html.th-apple .blackout.on { background: rgba(255, 92, 108, .14); color: #ff8a96; border: 0; }
+html.th-apple .blackout.on:hover { background: rgba(255, 92, 108, .2); }
+html.th-apple .blackout.armed { background: var(--accent); color: var(--accent-ink); border: 0; }
+
+/* ---------- flader ---------- */
+html.th-apple .page { padding: 4px 24px 24px; gap: 16px; }
+html.th-apple .panel { background: var(--panel); border: 0; border-radius: var(--r); }
+html.th-apple h2 { font: 600 15px/1.3 var(--display); letter-spacing: -.012em; }
+html.th-apple .hint, html.th-apple .muted { color: var(--muted); }
+html.th-apple .netbar { background: var(--panel); border-bottom: 0; margin: 0 24px 10px calc(var(--rail) + 24px); border-radius: 12px; }
+
+/* ---------- kontroller ---------- */
+html.th-apple button { border: 0; background: var(--panel2); border-radius: var(--r-ctl); font-family: var(--font); }
+html.th-apple button:hover { background: var(--raised); }
+html.th-apple button.ghost { background: var(--panel2); } html.th-apple button.ghost:hover { background: var(--raised); }
+html.th-apple button.primary { background: var(--tint-wash); color: var(--tint); border: 0; border-radius: 999px; font-weight: 600; }
+html.th-apple button.primary:hover { background: rgba(180, 167, 255, .2); }
+html.th-apple button:focus-visible, html.th-apple input:focus-visible, html.th-apple select:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+/* segmenter som macOS: en grå skinne med den valgte som en lysere pille */
+html.th-apple .seg, html.th-apple .ape-seg, html.th-apple .ape-modeswitch { background: var(--bg); border: 0; border-radius: 10px; padding: 3px; gap: 2px; }
+html.th-apple .seg button, html.th-apple .ape-seg button, html.th-apple .ape-modeswitch button { background-image: none; border-radius: 8px; color: var(--muted); }
+html.th-apple .seg button.active, html.th-apple .seg button.on, html.th-apple .ape-seg button.active, html.th-apple .ape-seg button.on, html.th-apple .ape-modeswitch button.active, html.th-apple .ape-modeswitch button.on, html.th-apple .ape-tabs button.active {
+  background: var(--raised); background-image: none; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+html.th-apple .ape-modeswitch button.on[data-p=show] { color: var(--accent); } html.th-apple .ape-modeswitch button.on[data-p=lounge] { color: var(--tint); }
+html.th-apple select, html.th-apple input:not([type]), html.th-apple input[type=number], html.th-apple input[type=text], html.th-apple textarea { background: var(--panel2); border: 0; border-radius: 8px; color: var(--text); }
+html.th-apple select:hover, html.th-apple input[type=number]:hover, html.th-apple input[type=text]:hover { background: var(--raised); }
+html.th-apple input[type=checkbox] { accent-color: var(--tint); }
+/* skydere som macOS: tynd skinne, lys fyldning, rund knop */
+html.th-apple input[type=range] { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--text) 0 var(--p), #3a3a40 var(--p) 100%); }
+html.th-apple input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5), 0 0 0 .5px rgba(0,0,0,.2); }
+html.th-apple input[type=range]:active::-webkit-slider-thumb { background: #fff; transform: scale(1.08); }
+html.th-apple .ape-big input[type=range] { height: 6px; } html.th-apple .ape-big input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; }
+html.th-apple .ape-floorbar button, html.th-apple .ape-fxgrid button { background-image: none; border: 0; border-radius: 12px; }
+html.th-apple .ape-floorbar button.on, html.th-apple .ape-fxgrid button.on { background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--tint); background-image: none; }
+html.th-apple ::-webkit-scrollbar-thumb { background: #3a3a40; border-color: var(--bg); }
+
+/* ---------- mønster-felter og taster: kun rammen ---------- */
+html.th-apple .pat, html.th-apple .key { border-radius: 10px; }
+html.th-apple .pat.active, html.th-apple .key.active { border-color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent); }
+
+/* ---------- LIVE ---------- */
+html.th-apple .preview-panel { background: #000; border: 0; }
+html.th-apple body.laser-on .preview-panel { box-shadow: inset 0 0 0 1px rgba(52,211,153,.35); }
+html.th-apple .pv-label { font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+
+/* ---------- Lys ---------- */
+html.th-apple .ape-preview { background: #08080a; border: 0; border-radius: var(--r); }
+html.th-apple .ape-top, html.th-apple .ape-card, html.th-apple .ape-prog, html.th-apple .ape-scene, html.th-apple .ape-link, html.th-apple .ape-link-seg { background: var(--panel); border: 0; border-radius: var(--r); }
+html.th-apple .ape-top { background: var(--panel); }
+
+/* ---------- dialoger og beskeder ---------- */
+html.th-apple .modal-box, html.th-apple .ape-dlg-box { background: #232326; border: .5px solid #3a3a3f; border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,.6); }
+html.th-apple .modal-box h3, html.th-apple .ape-dlg-box h3 { font: 700 18px var(--display); letter-spacing: -.015em; }
+html.th-apple #toast { background: #2a2a2e; border: .5px solid #3a3a3f; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.5); }
+html.th-apple .lookrow { margin-top: 10px; }
+html.th-apple { --rail: 224px; }
+html.th-apple .rail-dev:last-of-type { margin-bottom: 0; }
+html.th-apple .rail-sync { margin-top: auto; }
+html.th-apple .seg button:not(.active):not(.on), html.th-apple .ape-seg button:not(.active):not(.on), html.th-apple .ape-modeswitch button:not(.on) { background-color: transparent; }
+html.th-apple .seg button:not(.active):not(.on):hover { color: var(--text); background-color: rgba(255,255,255,.04); }
+html.th-apple .seg button { padding: 0 10px; }
+html.th-apple .rail-dev small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.th-apple .panel-head .seg { flex-wrap: nowrap; } html.th-apple .panel-head .seg button { padding: 0 8px; font-size: 12.5px; }
+html.th-apple .sliders label { grid-template-columns: minmax(0, 130px) minmax(0, 1fr) 52px; }
+html.th-apple .sliders output { text-align: right; }
+/* kort inde i et panel: ét toneskridt lysere */
+html.th-apple .panel .ape-top, html.th-apple .panel .ape-card, html.th-apple .panel .ape-prog, html.th-apple .panel .ape-scene, html.th-apple .panel .ape-link, html.th-apple .panel .ape-link-seg { background: #252528; }
+html.th-apple .panel .ape-card button:not(.on):not(.active), html.th-apple .panel .ape-link-seg button { background-color: #303034; }

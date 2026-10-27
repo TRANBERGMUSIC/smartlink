@@ -19,7 +19,7 @@
   const bo = document.getElementById('blackout');
   const syncLaser = () => { const on = !!(bo && bo.classList.contains('armed')); document.body.classList.toggle('laser-on', on); document.body.classList.toggle('laser-off', !on); };
   let wasOn = !!(bo && bo.classList.contains('armed'));
-  const onLaserChange = () => { syncLaser(); const on = !!(bo && bo.classList.contains('armed')); if (on !== wasOn) { wasOn = on; if (on) sweep(); } };
+  const onLaserChange = () => { syncLaser(); if (typeof railStatus === 'function') setTimeout(railStatus); const on = !!(bo && bo.classList.contains('armed')); if (on !== wasOn) { wasOn = on; if (on) sweep(); } };
   if (bo) new MutationObserver(onLaserChange).observe(bo, { attributes: true, attributeFilter: ['class'] }); syncLaser();
   // laseren tændes: én scanlinje løber ned over LIVE-billedet (bekræfter handlingen dér hvor man kigger)
   function sweep() {
@@ -27,6 +27,16 @@
     let ln = panel.querySelector('.pv-sweep'); if (!ln) { ln = document.createElement('i'); ln.className = 'pv-sweep'; panel.appendChild(ln); }
     G.fromTo(ln, { y: 0, autoAlpha: 1 }, { y: panel.clientHeight, duration: 0.9, ease: 'power2.inOut', onComplete: () => G.to(ln, { autoAlpha: 0, duration: 0.2 }) });
   }
+
+  // ---- sidebarens enheder (udseende "Apple"): status læses fra de eksisterende indikatorer – intet nyt gættes ----
+  const rd = (id) => document.getElementById(id);
+  const railStatus = () => {
+    const tt = (k) => (typeof t === 'function' ? t(k) : k), led = rd('connLed'), conn = !!(led && led.classList.contains('ok')), on = document.body.classList.contains('laser-on');
+    const L = rd('rdLaser'); if (L) { L.querySelector('.dot').className = 'dot' + (on ? ' on' : conn ? ' ok' : led && led.classList.contains('bad') ? ' bad' : ''); L.querySelector('small').textContent = !conn ? tt('rail.noConn') : on ? tt('rail.on') : tt('rail.off'); }
+    const wc = rd('wmidiConn'), W = rd('rdWolf'); if (W) { const ok = !!(wc && wc.classList.contains('ok')); W.querySelector('.dot').className = 'dot' + (ok ? ' ok' : ''); W.querySelector('small').textContent = ok ? 'MIDI · ' + (wc.title.split('\n')[0] || '') : tt('rail.midiOff'); }
+    const S = rd('rdSync'), ct = rd('connTxt'); if (S) { S.querySelector('.dot').className = 'dot' + (conn ? ' ok' : ''); S.querySelector('span').textContent = (ct && ct.textContent.trim()) || '—'; }
+  };
+  setInterval(railStatus, 1000); railStatus();
 
   // ---- fane-indikator ----
   const tabs = document.querySelector('.tabs'); let ind = null;

@@ -6,6 +6,8 @@
 <title>SmartLink</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="theme-apple.css">
+<script src="look.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -27,7 +29,12 @@
     <button data-tab="ape" class="tab"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="3.4" height="17" rx="1.7"/><rect x="10.3" y="3.5" width="3.4" height="17" rx="1.7"/><rect x="16.6" y="3.5" width="3.4" height="17" rx="1.7"/></svg><span data-i18n="tab.ape"></span></button>
     <button data-tab="design" class="tab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 7-7 11-7-11z"/><circle cx="12" cy="11" r="1.6"/><path d="M12 3v6.4"/></svg><span data-i18n="tab.design"></span></button>
     <button data-tab="vector" class="tab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18C8 6 16 6 20 18"/><rect x="2.5" y="16.5" width="3" height="3" rx=".5"/><rect x="18.5" y="16.5" width="3" height="3" rx=".5"/><path d="M12 9V4M8.5 4h7"/></svg><span data-i18n="tab.vector"></span></button>
+    <div class="rail-x rail-grp" data-i18n="rail.devices"></div>
+    <div class="rail-x rail-dev" id="rdLaser"><i class="dot"></i><span>DS-3000RGB MK5</span><small></small></div>
+    <div class="rail-x rail-dev" id="rdWolf"><i class="dot"></i><span>Wolfmix W1 MK3</span><small></small></div>
+    <div class="rail-x rail-dev" id="rdApe"><i class="dot"></i><span>Neon Tube PIX</span><small data-i18n="rail.tubes"></small></div>
     <button data-tab="settings" class="tab"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg><span data-i18n="tab.settings"></span></button>
+      <div class="rail-x rail-sync" id="rdSync"><i class="dot"></i><span></span></div>
   </nav>
 <div class="netbar updbar" id="updBar" hidden>
   <span class="netic">⬆</span>
@@ -487,6 +494,7 @@
     <h2 data-i18n="upd.title"></h2>
     <div class="row"><span class="muted" id="updVersion"></span><div class="spacer"></div><button class="ghost small" id="updCheck" data-i18n="upd.check"></button><button class="primary small" id="updGo" hidden></button></div>
     <p class="hint" id="updStatus"></p>
+    <div class="row lookrow"><span class="muted" data-i18n="look.title"></span><div class="spacer"></div><div class="seg" id="lookSeg"><button data-look="apple" data-i18n="look.apple"></button><button data-look="terminal" data-i18n="look.terminal"></button></div></div>
   </div>
   <div class="panel wmpanel">
     <h2 data-i18n="wm.title"></h2>
