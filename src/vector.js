@@ -8,7 +8,7 @@ const VEC = Object.assign({}, VEC_DEF, store.get('vecCfg', {}));
 const vecNewDoc = () => ({ frames: [{ layers: [{ name: 'Lag 1', color: '#00ff66', visible: true, items: [{ type: 'text', text: 'LASER', size: 0.25, font: 'stroke', x: 0, y: 0 }] }] }] });
 let vdoc = store.get('vecDoc', null) || vecNewDoc();
 let vecPkg = store.get('vecPkg', []);
-const vs = { tool: 'text', frame: 0, layer: 0, drag: null, compiled: null, dirty: true, play: 0, lastAdv: 0, live: false, liveTimer: null, devices: [], status: '' };
+const vs = { loading: new Set(), tool: 'text', frame: 0, layer: 0, drag: null, compiled: null, dirty: true, play: 0, lastAdv: 0, live: false, liveTimer: null, devices: [], status: '' };
 const vecSave = () => { store.set('vecDoc', vdoc); store.set('vecCfg', VEC); vs.dirty = true; };
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const curFrame = () => vdoc.frames[clamp(vs.frame, 0, vdoc.frames.length - 1)];
@@ -26,8 +26,27 @@ function outlineText(it, color) {
   });
   return out;
 }
-function itemPaths(it, color) {
+// et mønster fra laserens SD-kort (samme filer som LIVE viser) som stier: ét stykke pr. sammenhængende tændt strækning i samme farve
+function patPaths(it, fi) {
+  const fr = typeof patData !== 'undefined' ? patData.get(it.n) : null;
+  if (!fr) { if (typeof loadPat === 'function' && typeof patAvail !== 'undefined' && patAvail.has(it.n) && !vs.loading.has(it.n)) { vs.loading.add(it.n); loadPat(it.n).then(() => { vs.loading.delete(it.n); vs.dirty = true; }); } return []; }
+  if (!fr.length) return [];
+  const f = fr[((fi | 0) + (it.f0 | 0)) % fr.length], c = Math.cos((it.rot || 0) * Math.PI / 180), sn = Math.sin((it.rot || 0) * Math.PI / 180), k = it.size || 0.5, out = [];
+  let cur = null;
+  for (let i = 0; i < f.n; i++) {
+    if (f.bl[i]) { cur = null; continue; }
+    const x0 = f.xy[i * 2] * (it.mx || 1), y0 = f.xy[i * 2 + 1], pt = [it.x + (x0 * c - y0 * sn) * k, it.y + (x0 * sn + y0 * c) * k];
+    const col = it.c || [f.col[i * 3], f.col[i * 3 + 1], f.col[i * 3 + 2]];
+    if (!cur || cur.color.join() !== col.join()) { const prev = cur && cur.pts[cur.pts.length - 1]; cur = { pts: prev ? [prev] : [], color: col }; out.push(cur); }
+    cur.pts.push(pt);
+  }
+  return out.filter((p) => p.pts.length > 1);
+}
+function itemPaths(it, color, fi) {
+  if (it.c) color = it.c; // egen farve (stråle-effekter) går forud for lagets farve
   switch (it.type) {
+    case 'beam': return [{ pts: [it.a, it.a], color, dwell: it.dwell | 0 }];
+    case 'pat': return patPaths(it, fi);
     case 'text': return it.font === 'outline' ? outlineText(it, color) : LaserFrame.textPaths(it.text, { size: it.size, x: it.x, y: it.y, color });
     case 'line': return [{ pts: [it.a, it.b], color }];
     case 'rect': return [LaserFrame.rect(Math.min(it.a[0], it.b[0]), Math.min(it.a[1], it.b[1]), Math.max(it.a[0], it.b[0]), Math.max(it.a[1], it.b[1]), color)];
@@ -36,22 +55,22 @@ function itemPaths(it, color) {
     default: return [];
   }
 }
-function framePaths(fr) { const out = []; for (const L of fr.layers) if (L.visible) { const c = hexRgb(L.color); for (const it of L.items) out.push(...itemPaths(it, c)); } return out; }
+function framePaths(fr, fi) { const out = []; for (const L of fr.layers) if (L.visible) { const c = hexRgb(L.color); for (const it of L.items) out.push(...itemPaths(it, c, fi)); } return out; }
 function vecOpts() {
   const sd = VEC.route === 'sd';
   return { pps: sd ? (cfg.kpps || 20) * 1000 : VEC.pps, fps: VEC.fps, maxStep: VEC.stepPct / 50, blankStep: VEC.stepPct / 50, anchor: VEC.anchor, cornerDwell: VEC.cornerDwell, derate: VEC.deratePct / 100, minExtent: VEC.minPct / 50 };
 }
 function safetyLine() { return cfg.dmxMode === 'pro' && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom' ? -1 + 2 * zoneEff() : null; }
 // én frame klar til output: optimeret → (live: spejl + klip til zone) → sikkerhed → int16
-function outFrame(fr, forLive) {
-  const f = LaserFrame.optimize(framePaths(fr), vecOpts());
+function outFrame(fr, forLive, fi) {
+  const f = LaserFrame.optimize(framePaths(fr, fi), vecOpts());
   let pts = LaserFrame.safeForOutput(f);
   if (forLive) { pts = pts.map((p) => ({ ...p, x: VEC.flipX ? -p.x : p.x, y: VEC.flipY ? -p.y : p.y })); pts = LaserFrame.clipZone(pts, prof().zone, safetyLine()); }
   return { q: LaserFrame.quantize(pts, VEC.intensity / 100), stats: f.stats };
 }
 function vecCompile() {
   if (!vs.dirty && vs.compiled) return vs.compiled;
-  const live = VEC.route !== 'sd'; vs.compiled = vdoc.frames.map((fr) => outFrame(fr, live)); vs.dirty = false; return vs.compiled;
+  const live = VEC.route !== 'sd'; vs.compiled = vdoc.frames.map((fr, fi) => outFrame(fr, live, fi)); vs.dirty = false; return vs.compiled;
 }
 // fps som laseren faktisk afspiller: SD = kanal 3 kvantiseret (og pps-loft), DAC = stats.fps
 function effFps(c) { const s = c.stats.fps; if (VEC.route !== 'sd') return s; return Math.min(s, ShowNET.fpsDecode(ShowNET.fpsEncode(VEC.fps, 'pro'), 'pro')); }
@@ -93,8 +112,19 @@ function vecDraw(now) {
 function vecPt(e) { const r = $('#vecCanvas').getBoundingClientRect(); return [clamp((e.clientX - r.left) / r.width * 2 - 1, -1, 1), clamp(1 - (e.clientY - r.top) / r.height * 2, -1, 1)]; }
 function vecDown(e) {
   const p = vecPt(e), L = curLayer();
+  if (vs.tool === 'pat') { vecPlacePat(p); return; }
   if (vs.tool === 'text') { const txt = $('#vecText').value; if (!txt.trim()) return; L.items.push({ type: 'text', text: txt, size: +$('#vecTextSize').value / 100, font: VEC.font || 'stroke', x: p[0], y: p[1] }); vecSave(); vecRenderLayers(); return; }
   vs.drag = { a: p, b: p, pts: [p] }; $('#vecCanvas').setPointerCapture(e.pointerId);
+}
+// mønster-værktøjet: læg et af laserens mønstre ind (flere kan kombineres – hvert er ét item med egen plads, størrelse og drejning)
+async function vecPlacePat(p) {
+  const n = clamp(+$('#vecPatN').value | 0, 1, 255); if (!patAvail.has(n)) { vecMsg(t('vec.patMissing', { n }), 'bad'); return; }
+  const fr = await loadPat(n); if (!fr || !fr.length) { vecMsg(t('vec.patMissing', { n }), 'bad'); return; }
+  const it = { type: 'pat', n, x: p[0], y: p[1], size: +$('#vecPatSize').value / 100, rot: +$('#vecPatRot').value || 0, c: $('#vecPatOrig').checked ? null : hexRgb(curLayer().color) };
+  // animeret mønster i et dokument med én frame: udvid til mønstrets længde (højst 120 frames), så animationen kommer med
+  if (fr.length > 1 && vdoc.frames.length === 1) { const base = vdoc.frames[0], N = Math.min(120, fr.length); for (let i = 1; i < N; i++) vdoc.frames.push(structuredClone(base)); }
+  for (const f of vdoc.frames) { const L = f.layers[clamp(vs.layer, 0, f.layers.length - 1)]; L.items.push({ ...it }); }
+  vecSave(); vecRenderLayers(); vecMsg(t('vec.patAdded', { n, f: vdoc.frames.length }), 'ok');
 }
 function vecMove(e) {
   if (!vs.drag) return; const p = vecPt(e); vs.drag.b = p; if (vs.tool === 'free') { const l = vs.drag.pts[vs.drag.pts.length - 1]; if (Math.hypot(p[0] - l[0], p[1] - l[1]) > 0.01) vs.drag.pts.push(p); }
@@ -178,7 +208,7 @@ function vecMsg(s, kind) { const el = $('#vecMsg'); if (el) { el.textContent = s
 // ---------- UI ----------
 function vecSyncUI() {
   $$('#vecTool button').forEach((b) => b.classList.toggle('active', b.dataset.tool === vs.tool));
-  $('#vecTextBox').hidden = vs.tool !== 'text';
+  $('#vecTextBox').hidden = vs.tool !== 'text'; $('#vecPatBox').hidden = vs.tool !== 'pat';
   $$('#vecFont button').forEach((b) => b.classList.toggle('active', b.dataset.font === (VEC.font || 'stroke')));
   $$('#vecRoute button').forEach((b) => b.classList.toggle('active', b.dataset.route === VEC.route));
   $('#vecSdBox').hidden = VEC.route !== 'sd'; $('#vecDacBox').hidden = VEC.route === 'sd';

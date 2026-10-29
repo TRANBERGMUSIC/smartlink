@@ -1101,3 +1101,23 @@ body.hasbar.hasupd main { height: calc(100% - 144px); }
 .wc-pat { position: relative; height: 64px; padding: 0; background: #07080a; border-radius: 8px; overflow: hidden; }
 .wc-pat canvas { position: absolute; inset: 0; width: 100%; height: 100%; } .wc-pat span { position: absolute; left: 4px; top: 3px; font-size: 10px; color: var(--muted); z-index: 1; }
 .wc-pat.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ---------- Effekter (stråle-effekter) ---------- */
+#page-fx { grid-template-columns: minmax(0, 1fr) 380px; align-items: stretch; }
+.fx-stage { display: flex; flex-direction: column; min-height: 0; }
+.fx-canvaswrap { flex: 1; min-height: 320px; border-radius: 10px; overflow: hidden; background: #000; }
+.fx-canvaswrap canvas { width: 100%; height: 100%; display: block; }
+.fx-stats { margin-top: 10px; font-size: 12px; color: var(--muted); } .fx-stats.bad { color: var(--warn); }
+.fx-side { overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.fx-side .row { flex-wrap: wrap; gap: 8px; }
+.fx-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fx-mode { height: auto; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 6px 8px; font-size: 12px; font-weight: 600; }
+.fx-mode canvas { width: 100%; aspect-ratio: 16 / 10; display: block; border-radius: 6px; }
+.fx-mode.active { box-shadow: inset 0 0 0 1.5px var(--accent); }
+html.th-apple .fx-mode.active { box-shadow: inset 0 0 0 1.5px var(--tint); }
+#fxColors { flex-wrap: wrap; }
+.fx-cpick input[type=color] { width: 34px; height: 24px; padding: 0; border: 0; background: none; vertical-align: middle; }
+.fx-sliders label { grid-template-columns: minmax(0, 110px) minmax(0, 1fr) 46px; }
+.fx-warn { color: #ffb23c; }
+.fx-name { width: 96px; }
+@media (max-width: 1100px) { #page-fx { grid-template-columns: 1fr; } }

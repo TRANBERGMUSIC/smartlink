@@ -91,6 +91,7 @@
       for (const q of interp(cur, s0, o.blankStep)) push(q[0], q[1], [0, 0, 0], true); // blanket rejse (scanneren skal nå frem)
       for (let k = 0; k < o.anchor; k++) push(s0[0], s0[1], [0, 0, 0], true); // vent blanket før tænd
       for (let k = 0; k < o.anchor; k++) push(s0[0], s0[1], p.color, false);
+      for (let k = 0; k < (p.dwell | 0); k++) push(s0[0], s0[1], p.color, false); // stråle (beam): punktet holdes tændt længere = kraftigere stråle i røgen
       let prev = s0;
       for (let i = 1; i < p.pts.length; i++) {
         const q = p.pts[i]; for (const r of interp(prev, q, step)) push(r[0], r[1], p.color, false);

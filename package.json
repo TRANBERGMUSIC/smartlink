@@ -1,7 +1,7 @@
 {
   "name": "smartlink",
   "productName": "SmartLink",
-  "version": "5.10.0",
+  "version": "5.11.0",
   "description": "SmartLink – Art-Net styring af Laserworld DS-3000RGB MK5",
   "main": "src/main.js",
   "author": "Willads",
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node tools/unpack-assets.js && node tools/make-remote.js && electron .",
     "dist": "node tools/unpack-assets.js && node tools/make-remote.js && electron-builder --mac zip --arm64 --publish never",
-    "test": "node test/shownet.test.js && node test/laser_frame.test.js && node test/ilda_io.test.js && node test/backends.test.js && node test/wolfmidi.test.js && node test/ape.test.js"
+    "test": "node test/shownet.test.js && node test/laser_frame.test.js && node test/ilda_io.test.js && node test/backends.test.js && node test/wolfmidi.test.js && node test/ape.test.js && node test/beams.test.js"
   },
   "devDependencies": {
     "electron": "44.7.2",

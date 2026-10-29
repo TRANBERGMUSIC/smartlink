@@ -106,3 +106,11 @@ Records:
 - **Status**: 0x80 = sidste punkt, 0x40 = blank.
 
 Filen slutter med en header med 0 records.
+
+## Stråle-effekter (fanen "Effekter") og kombinerede mønstre
+
+- `src/beams_core.js` laver beam-effekter som Vektor-dokumenter: Vifte, Sweep, Kryds, Bølge, Kegle, Jagt, Kaos (stråler = punkter med `dwell`) og Flade, Net (scannede linjer = lysflader). Farver: regnbue, flydende, to farver, én farve, hvid.
+- Effekterne går gennem samme `optimize` → ILDA → SD-pakke som Vektor. "Lav hele sættet" lægger 9 effekter × 3 farver i pakken fra det valgte slot (numre, der allerede er mønstre på laseren, springes over).
+- Previewet "I luften" er en simulering af strålerne i røg. "Punkter" viser selve punkterne i feltet.
+- I Vektor kan værktøjet **Mønster** lægge laserens eksisterende mønstre (fra mønstermappen) ind med plads, størrelse og drejning. Flere mønstre kan kombineres til ét nyt, og animerede mønstre kører med.
+- Stråler skal være over publikum. Brug laserens sikkerhedszone, og kør med hazer.
