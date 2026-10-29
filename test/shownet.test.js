@@ -86,5 +86,11 @@ if (profPath) {
   for (const s of meas.size || []) if (s.off) test(`måling: dmx ${s.dmx} er slukket`, () => assert.ok(s.dmx >= prof.dmxMinVisible[prof.mode === 'dj' ? 'dj' : 'pro']));
 }
 
+// målt profil (ingen databladsvinkel): u = +1 er kanten af det målte felt
+test('målt felt: u=+1 → DMX 65535 (16-bit) og væg-x = D·tan(scan/2)', () => {
+  const P = { scanDegX: 57, scanDegY: 45, throwM: 5 }; assert.strictEqual(S.posEncode(1, 'pro'), 65535); assert.strictEqual(S.posEncode(-1, 'pro'), 0);
+  assert.ok(Math.abs(S.metresOf(1, 'x', P) - 5 * Math.tan(28.5 * Math.PI / 180)) < 1e-9); assert.ok(Math.abs(S.metresOf(1, 'y', P) - 5 * Math.tan(22.5 * Math.PI / 180)) < 1e-9);
+});
+test('størrelse: Pro Mode kanal 0 = maksimum', () => { assert.strictEqual(S.sizeFromDmx(0, {}, 'pro'), 1); assert.strictEqual(S.sizeToDmx(1, {}, 'pro'), 0); });
 console.log(failed ? `${failed} af ${n + failed} tests fejlede` : `✓ alle ${n} tests bestået${profPath ? ' (inkl. målinger fra ' + path.basename(profPath) + ')' : ''}`);
 process.exit(failed ? 1 : 0);

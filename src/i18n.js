@@ -2,6 +2,7 @@
 const I18N = {
   da: {
     'pv.wide': '↔ Fuld bredde', 'pv.wideTip': 'Når sikkerhedszonen begrænser højden, skrumpes kun højden – bredden bliver som på størrelses-slideren (laseren har egen X- og Y-størrelse). Slås fra hvis mønstre ikke må strækkes.',
+    'csn.zrTitle': 'Først: nulstil ShowNET-zonen', 'csn.zrText': 'En zone gemt i laseren (ShowNET Admin Tool → Setup & Store, eller DMX-setup-laget) gør ALT output mindre – også det SmartLink sender. Åbn Admin Tool og sæt zonen til fuld: X/Y-position i midten, størrelse 0 (= maksimum) på alle akser og ingen geo-korrektion (trapez/barrel). Gem i laseren, og genstart den. Mål derefter feltet i trin 2.', 'csn.zrDone': 'Zone-reset er kørt i Admin Tool', 'csn.zrHad': 'Der var en zone gemt før (noter den, hvis du vil bruge den igen som drift-zone)', 'csn.zrAt': 'Gemt i profilen {d}',
     'auto.pool': 'Musikken vælger', 'auto.pBeams': 'Stråler', 'auto.pMix': 'Mest stråler', 'auto.pPresets': 'Presets', 'pat.fx': 'Stråler',
     'tab.fx': 'Effekter', 'fx.title': 'Stråle-effekter', 'fx.vAir': 'I luften', 'fx.vFlat': 'Punkter', 'fx.modes': 'Effekt', 'fx.colors': 'Farver', 'fx.c1': 'Farve 1', 'fx.c2': 'Farve 2',
     'fx.m.fan': 'Vifte', 'fx.m.sweep': 'Sweep', 'fx.m.cross': 'Kryds', 'fx.m.wave': 'Bølge', 'fx.m.cone': 'Kegle', 'fx.m.chase': 'Jagt', 'fx.m.chaos': 'Kaos', 'fx.m.sky': 'Flade', 'fx.m.net': 'Net',
@@ -111,6 +112,7 @@ const I18N = {
   },
   en: {
     'pv.wide': '↔ Full width', 'pv.wideTip': 'When the safety zone limits the height, only the height shrinks – the width follows the size slider (the laser has separate X and Y size). Turn off if patterns must not stretch.',
+    'csn.zrTitle': 'First: reset the ShowNET zone', 'csn.zrText': 'A zone stored in the laser (ShowNET Admin Tool → Setup & Store, or the DMX setup layer) shrinks ALL output – including what SmartLink sends. Open Admin Tool and set the zone to full: X/Y position centred, size 0 (= maximum) on every axis and no geometric correction (keystone/barrel). Store it in the laser and restart it. Then measure the field in step 2.', 'csn.zrDone': 'Zone reset done in Admin Tool', 'csn.zrHad': 'There was a stored zone before (note it if you want to reuse it as the operating zone)', 'csn.zrAt': 'Saved in the profile {d}',
     'auto.pool': 'Music picks', 'auto.pBeams': 'Beams', 'auto.pMix': 'Mostly beams', 'auto.pPresets': 'Presets', 'pat.fx': 'Beams',
     'tab.fx': 'Effects', 'fx.title': 'Beam effects', 'fx.vAir': 'In the air', 'fx.vFlat': 'Points', 'fx.modes': 'Effect', 'fx.colors': 'Colours', 'fx.c1': 'Colour 1', 'fx.c2': 'Colour 2',
     'fx.m.fan': 'Fan', 'fx.m.sweep': 'Sweep', 'fx.m.cross': 'Cross', 'fx.m.wave': 'Wave', 'fx.m.cone': 'Cone', 'fx.m.chase': 'Chase', 'fx.m.chaos': 'Chaos', 'fx.m.sky': 'Sheet', 'fx.m.net': 'Net',

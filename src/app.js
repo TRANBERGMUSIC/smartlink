@@ -337,6 +337,7 @@ function calRender() {
   $('#calSnStep').textContent = t('wiz.stepOf', { n: st_, m: CAL_STEPS });
   const b = (id, txt, cls) => `<button class="ghost small ${cls || ''}" data-k="${id}">${txt}</button>`, num = (id, v, step) => `<input type="number" class="cal-num" data-n="${id}" value="${v ?? ''}" step="${step || 'any'}">`;
   let h = `<h4>${t('csn.t' + st_)}</h4><p class="cal-instr">${t('csn.i' + st_, { mode: m === 'pro' ? 'Professional (34)' : 'DJ (19)' })}</p>`;
+  if (st_ === 1) { const zr = P.zoneReset || {}; h += `<div class="cal-zr${zr.done ? ' ok' : ''}"><b>${t('csn.zrTitle')}</b><p>${t('csn.zrText')}</p><label class="chk"><input type="checkbox" data-zr="done" ${zr.done ? 'checked' : ''}> ${t('csn.zrDone')}</label><label class="chk"><input type="checkbox" data-zr="hadZone" ${zr.hadZone ? 'checked' : ''}> ${t('csn.zrHad')}</label>${zr.at ? `<p class="cal-instr mono">${t('csn.zrAt', { d: new Date(zr.at).toLocaleString(LANG === 'en' ? 'en-GB' : 'da-DK') })}</p>` : ''}</div>`; }
   if (st_ === 1) h += `<div class="co-row"><span>${t('csn.pattern')}</span>${num('pat', cfg.calPattern || cfg.boxPattern || 1, 1)}${b('base', t('con.send'))}</div>`;
   if (st_ === 2) h += `<div class="co-row"><span>${t('csn.W')}</span>${num('W', M.field.W)}<span>cm</span></div><div class="co-row"><span>${t('csn.H')}</span>${num('H', M.field.H)}<span>cm</span></div><div class="co-row"><span>${t('csn.D')}</span>${num('D', M.field.D)}<span>cm</span></div><p class="cal-instr mono">${t('csn.angles', { x: P.scanDegX.toFixed(1), y: P.scanDegY.toFixed(1) })}</p>${b('base', t('csn.resend'))}`;
   if (st_ === 3) {
@@ -357,13 +358,14 @@ function calRender() {
   box.innerHTML = h;
   box.querySelectorAll('[data-k]').forEach((el) => (el.onclick = () => calAct(el.dataset.k)));
   box.querySelectorAll('[data-n]').forEach((el) => el.addEventListener('change', () => calInput(el.dataset.n, el.value)));
+  box.querySelectorAll('[data-zr]').forEach((el) => el.addEventListener('change', () => { const P_ = prof(); P_.zoneReset = { ...(P_.zoneReset || {}), [el.dataset.zr]: el.checked, at: new Date().toISOString() }; saveCfg(); calRender(); }));
   box.querySelectorAll('[data-off]').forEach((el) => el.addEventListener('change', () => { const v = +el.dataset.off, Mm = calMeas(); let r = Mm.size.find((p) => p.mode === m && p.dmx === v); if (!r) Mm.size.push((r = { mode: m, dmx: v })); r.off = el.checked; saveCfg(); }));
   $('#calSnBack').disabled = st_ <= 1; $('#calSnNext').textContent = t(st_ >= CAL_STEPS ? 'csn.finish' : 'wiz.next');
 }
 function calInput(k, val) {
   const M = calMeas(), P = prof(), m = calMode(), v = val === '' ? null : +val;
   if (k === 'pat') { cfg.calPattern = clamp(v | 0, 1, 255); saveCfg(); return; }
-  if (k === 'W' || k === 'H' || k === 'D') { M.field[k] = v; const F = M.field; if (F.W && F.D) P.scanDegX = 2 * Math.atan(F.W / (2 * F.D)) * 180 / Math.PI; if (F.H && F.D) P.scanDegY = 2 * Math.atan(F.H / (2 * F.D)) * 180 / Math.PI; saveCfg(); return calRender(); }
+  if (k === 'W' || k === 'H' || k === 'D') { M.field[k] = v; const F = M.field; if (F.W && F.D) P.scanDegX = 2 * Math.atan(F.W / (2 * F.D)) * 180 / Math.PI; if (F.H && F.D) P.scanDegY = 2 * Math.atan(F.H / (2 * F.D)) * 180 / Math.PI; if (F.W && F.H && F.D) P.source = { ...(P.source || {}), field: { at: new Date().toISOString(), method: `firkant i fuld størrelse målt på væg/loft: B ${F.W} cm, H ${F.H} cm ved ${F.D} cm`, zoneReset: !!(P.zoneReset && P.zoneReset.done) } }; saveCfg(); return calRender(); }
   if (k.startsWith('pos-')) { const c = +k.slice(4); M.pos = M.pos.filter((p) => !(p.axis === calib.axis && p.coarse === c && p.mode === m)); if (v != null) { const half = (calib.axis === 'x' ? M.field.W : M.field.H) / 2; M.pos.push({ mode: m, axis: calib.axis, coarse: c, cm: v, u: half ? v / half : v / 100 }); } saveCfg(); return; }
   if (k.startsWith('sz-')) { const d = +k.slice(3); let r = M.size.find((p) => p.mode === m && p.dmx === d); if (!r) M.size.push((r = { mode: m, dmx: d })); r.cm = v; r.off = false; saveCfg(); return; }
   if (k.startsWith('rt-')) { const x = +k.slice(3); M.rot = M.rot.filter((p) => !(p.mode === m && p.v === x)); if (v != null) M.rot.push({ mode: m, v: x, deg: v }); saveCfg(); return; }
