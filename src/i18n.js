@@ -1,11 +1,12 @@
 /* SmartLink – sprog (dansk / engelsk) */
 const I18N = {
   da: {
+    'pv.wide': '↔ Fuld bredde', 'pv.wideTip': 'Når sikkerhedszonen begrænser højden, skrumpes kun højden – bredden bliver som på størrelses-slideren (laseren har egen X- og Y-størrelse). Slås fra hvis mønstre ikke må strækkes.',
     'tab.fx': 'Effekter', 'fx.title': 'Stråle-effekter', 'fx.vAir': 'I luften', 'fx.vFlat': 'Punkter', 'fx.modes': 'Effekt', 'fx.colors': 'Farver', 'fx.c1': 'Farve 1', 'fx.c2': 'Farve 2',
     'fx.m.fan': 'Vifte', 'fx.m.sweep': 'Sweep', 'fx.m.cross': 'Kryds', 'fx.m.wave': 'Bølge', 'fx.m.cone': 'Kegle', 'fx.m.chase': 'Jagt', 'fx.m.chaos': 'Kaos', 'fx.m.sky': 'Flade', 'fx.m.net': 'Net',
-    'fx.c.rainbow': 'Regnbue', 'fx.c.flow': 'Flydende', 'fx.c.two': 'To farver', 'fx.c.one': 'Én farve', 'fx.c.white': 'Hvid',
+    'fx.c.rainbow': 'Regnbue', 'fx.c.flow': 'Flydende', 'fx.c.palette': 'Egne farver', 'fx.c.paletteFlow': 'Egne, skiftende', 'fx.c.white': 'Hvid', 'fx.addColor': '+ Farve', 'fx.del': 'Fjern farve', 'fx.zoneLbl': 'Sikkerhedszone – publikum, ingen stråler her',
     'fx.p.beams': 'Stråler', 'fx.p.spread': 'Bredde', 'fx.p.height': 'Højde', 'fx.p.amp': 'Udsving', 'fx.p.frames': 'Loop (frames)', 'fx.p.fps': 'Fps', 'fx.p.dwell': 'Styrke',
-    'fx.safety': '⚠ Stråler kun over publikums hoveder. Brug laserens sikkerhedszone, og kør med røg/hazer – ellers ses strålerne ikke.',
+    'fx.safety': '⚠ Effekterne laves altid inden for projektionszonen og over sikkerhedszonen, og ved afspilning holder SmartLink hele effekten over zonen. Sæt sikkerhedszonen (LIVE) så den dækker publikum, og kør med røg/hazer – ellers ses strålerne ikke.',
     'fx.sd': 'Til laserens SD-kort', 'fx.add': 'Læg i pakke', 'fx.all': 'Lav hele sættet (9 × 3)', 'fx.edit': 'Åbn i Vektor', 'fx.play': 'Afspil slot',
     'fx.added': 'Lagt i pakken som kanal 2 = {n} ({name}).', 'fx.allDone': '{k} effekter lagt i pakken (kanal 2 = {a}–{b}). Tryk Eksportér til SD.', 'fx.taken': 'Slot {n} er allerede et mønster på laseren – vælg et andet nummer.',
     'fx.stats': '{n} punkter · {v} tændte · {fps} fps · {f} frames', 'fx.unsafe': 'For få punkter – sendes ikke',
@@ -108,11 +109,12 @@ const I18N = {
     'mob.newKey': 'Lav ny kode', 'mob.count': '{n} telefon(er) forbundet', 'mob.noWifi': "Mac'en er ikke på et Wi-Fi/netværk lige nu", 'mob.err': 'Fejl: {e}',
   },
   en: {
+    'pv.wide': '↔ Full width', 'pv.wideTip': 'When the safety zone limits the height, only the height shrinks – the width follows the size slider (the laser has separate X and Y size). Turn off if patterns must not stretch.',
     'tab.fx': 'Effects', 'fx.title': 'Beam effects', 'fx.vAir': 'In the air', 'fx.vFlat': 'Points', 'fx.modes': 'Effect', 'fx.colors': 'Colours', 'fx.c1': 'Colour 1', 'fx.c2': 'Colour 2',
     'fx.m.fan': 'Fan', 'fx.m.sweep': 'Sweep', 'fx.m.cross': 'Cross', 'fx.m.wave': 'Wave', 'fx.m.cone': 'Cone', 'fx.m.chase': 'Chase', 'fx.m.chaos': 'Chaos', 'fx.m.sky': 'Sheet', 'fx.m.net': 'Net',
-    'fx.c.rainbow': 'Rainbow', 'fx.c.flow': 'Flowing', 'fx.c.two': 'Two colours', 'fx.c.one': 'One colour', 'fx.c.white': 'White',
+    'fx.c.rainbow': 'Rainbow', 'fx.c.flow': 'Flowing', 'fx.c.palette': 'My colours', 'fx.c.paletteFlow': 'My colours, shifting', 'fx.c.white': 'White', 'fx.addColor': '+ Colour', 'fx.del': 'Remove colour', 'fx.zoneLbl': 'Safety zone – audience, no beams here',
     'fx.p.beams': 'Beams', 'fx.p.spread': 'Width', 'fx.p.height': 'Height', 'fx.p.amp': 'Swing', 'fx.p.frames': 'Loop (frames)', 'fx.p.fps': 'Fps', 'fx.p.dwell': 'Strength',
-    'fx.safety': '⚠ Beams only above the audience. Use the laser\'s safety zone and run haze – otherwise the beams are invisible.',
+    'fx.safety': '⚠ Effects are always made inside the projection zone and above the safety zone, and during playback SmartLink keeps the whole effect above the zone. Set the safety zone (LIVE) to cover the audience, and run haze – otherwise the beams are invisible.',
     'fx.sd': 'To the laser\'s SD card', 'fx.add': 'Add to package', 'fx.all': 'Make the whole set (9 × 3)', 'fx.edit': 'Open in Vector', 'fx.play': 'Play slot',
     'fx.added': 'Added to the package as channel 2 = {n} ({name}).', 'fx.allDone': '{k} effects added (channel 2 = {a}–{b}). Press Export to SD.', 'fx.taken': 'Slot {n} is already a pattern on the laser – pick another number.',
     'fx.stats': '{n} points · {v} lit · {fps} fps · {f} frames', 'fx.unsafe': 'Too few points – not sent',

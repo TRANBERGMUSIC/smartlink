@@ -1676,6 +1676,7 @@ function computeFrame(now) {
     sendX = clamp(con.pos[0], -1, 1); sendY = clamp(con.pos[1], -1, 1);
     if (cfg.lim && cfg.lim.on) [axc, ayc] = sentToApp(sendX, sendY);
   }
+  let sizeAppX = null; // egen bredde (kun Pro Mode over sikkerhedszonen – se nedenfor)
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
   if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
     // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
@@ -1683,14 +1684,20 @@ function computeFrame(now) {
     const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
     const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
     const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
-    const want = Math.min(availH / 2 / Math.max(0.01, uy), availW / 2 / Math.max(0.01, ux));
-    if (fr_ > want) { const l = ShowNET.sizeLimits(profFor('pro'), 'pro'), top_ = Math.max(l.min, Math.min(l.max, cfg.sizeMax ?? 1)); sizeApp = Math.min(sizeApp, clamp((want - l.min) / Math.max(1e-6, top_ - l.min), 0, 1)); fr_ = patHalfSent(sizeApp); }
-    const hw = ux * fr_, hh = uy * fr_;
+    const wantH = availH / 2 / Math.max(0.01, uy), wantW = availW / 2 / Math.max(0.01, ux), want = Math.min(wantH, wantW);
+    const l = ShowNET.sizeLimits(profFor('pro'), 'pro'), top_ = Math.max(l.min, Math.min(l.max, cfg.sizeMax ?? 1)), toApp = (w) => clamp((w - l.min) / Math.max(1e-6, top_ - l.min), 0, 1);
+    // fuld bredde: Pro Mode har egen størrelse for X og Y (kanal 10/11). Begrænser zonen kun højden, skrumpes kun Y – bredden bliver som på slideren.
+    // (kun når mønstret ikke drejer – et strakt mønster der drejer kunne ellers nå ned i zonen)
+    const wideOk = cfg.wideX !== false && !rot && Math.abs(s_) < 0.01;
+    let frX = fr_;
+    if (wideOk) { if (fr_ > wantW) { sizeAppX = Math.min(sizeApp, toApp(wantW)); frX = patHalfSent(sizeAppX); } else sizeAppX = sizeApp; if (fr_ > wantH) { sizeApp = Math.min(sizeApp, toApp(wantH)); fr_ = patHalfSent(sizeApp); } }
+    else { if (fr_ > want) { sizeApp = Math.min(sizeApp, toApp(want)); fr_ = patHalfSent(sizeApp); } frX = fr_; }
+    const hw = ux * frX, hh = uy * fr_;
     sendX = clamp(sendX, -edge + hw, Math.max(-edge + hw, edge - hw)); sendY = clamp(sendY, Math.min(edge, line + hh), Math.max(line + hh, edge - hh)); [axc, ayc] = sentToApp(sendX, sendY);
   }
 
   x = clamp(axc / 2 + 0.5, -1, 2); y = clamp(ayc / 2 + 0.5, -1, 2);
-  out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
+  out = { x, y, lx, ly, rawX, rawY, sendX, sendY, ang, size: sizeApp, sizeX: sizeAppX ?? sizeApp, laserSize: size, calScale, reach: { x: limX, y: limY }, clamped, rgb: mode === 'orig' ? null : rgb, on, intensity: master * cfg.maxInt * bright, flip: patFlip.has(st.pattern) };
   dmx.fill(0, cfg.address - 1, cfg.address - 1 + 34);
   if (special) { specialFrame(on); rawOverrides(); return; }
   if (cfg.dmxMode !== 'pro') { djFrame(on, size, ang, mode, rgb, bright, Math.max(st.strobe, liveStrobe)); rawOverrides(); conOverrides(); return; }
@@ -1707,11 +1714,12 @@ function proFrame(on, ang, mode, rgb, bright, strobe) { // Professional Mode: ti
   const P = profFor('pro'), show = on && st.pattern > 0 && (cfg.calibDone || camCal.active);
   let [oX, oY] = posOut(out.sendX, out.sendY); const o = orientPro(oX, oY);
   const lim = ShowNET.sizeLimits(P, 'pro'), top_ = Math.max(lim.min, Math.min(lim.max, cfg.sizeMax ?? 1)), frac = lim.min + clamp(out.size, 0, 1) * (top_ - lim.min); // 100 % på slideren = 'Største størrelse'
+  const fracX = lim.min + clamp(out.sizeX ?? out.size, 0, 1) * (top_ - lim.min); // bredden (kan være større end højden – fuld bredde over zonen)
   const rotDeg = ang + (patFlip.has(st.pattern) ? 180 : 0) + o.rot, invX = o.invX !== !!cfg.invX, invY = o.invY !== !!cfg.invY;
   let rcx = 0, rcy = 0;
-  if (cfg.patCenterFix !== false && !con.pos && !raw.on && !measure && !camCal.active) { const c = patCenter(st.pattern); [rcx, rcy] = rotV(c.x * frac, c.y * frac, rotDeg); }
+  if (cfg.patCenterFix !== false && !con.pos && !raw.on && !measure && !camCal.active) { const c = patCenter(st.pattern); [rcx, rcy] = rotV(c.x * fracX, c.y * frac, rotDeg); }
   const x = (invX ? -oX : oX) - rcx, y = (invY ? -oY : oY) - rcy; out.patOff = [rcx, rcy]; // inversion spejler også positionen (firmwarens rækkefølge)
-  const f = ShowNET.encode({ on: show, intensity: master * cfg.maxInt * bright, pattern: st.pattern, fps: fpsFrac(st.fps) * 100, freeze: st.freeze, x, y, sizeX: frac, sizeY: frac, rotDeg, invX, invY,
+  const f = ShowNET.encode({ on: show, intensity: master * cfg.maxInt * bright, pattern: st.pattern, fps: fpsFrac(st.fps) * 100, freeze: st.freeze, x, y, sizeX: fracX, sizeY: frac, rotDeg, invX, invY,
     color: mode === 'orig' ? { mode: 'orig' } : { mode: 'rgb', rgb }, strobe, zone: zoneEff(), zoneSide: cfg.zoneSide }, P, 'pro');
   const a0 = cfg.address - 1; for (let i = 0; i < f.length; i++) dmx[a0 + i] = f[i];
 }
@@ -2122,6 +2130,7 @@ function syncZoneUI() {
   const o = $('#zone').parentElement.querySelector('output'); if (o) o.textContent = txt;
 }
 $('#zoneLive').addEventListener('input', (e) => { cfg.zone = e.target.value / 100; saveCfg(); syncZoneUI(); });
+{ const wb = $('#pvWide'); if (wb) { const pz = document.querySelector('.pv-zone'); if (pz && pz.parentElement) pz.parentElement.insertBefore(wb, pz); const sync = () => { wb.classList.toggle('active', cfg.wideX !== false); wb.title = t('pv.wideTip'); }; wb.onclick = () => { cfg.wideX = cfg.wideX === false; saveCfg(); sync(); if (typeof sendNow === 'function') sendNow(); }; sync(); } }
 $('#zone').addEventListener('input', syncZoneUI);
 
 // ---------- træk i LIVE: flyt mønsteret, eller træk zonegrænsen ----------

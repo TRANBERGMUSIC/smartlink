@@ -7,14 +7,17 @@
   'use strict';
   const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const MODES = ['fan', 'sweep', 'cross', 'wave', 'cone', 'chase', 'chaos', 'sky', 'net'];
-  const COLORS = ['rainbow', 'flow', 'two', 'one', 'white'];
-  const DEF = { mode: 'cross', beams: 8, spread: 1.5, height: 0.45, amp: 0.25, frames: 48, fps: 25, dwell: 8, colors: 'rainbow', c1: [255, 0, 60], c2: [0, 120, 255], seed: 7 };
+  const COLORS = ['rainbow', 'flow', 'palette', 'paletteFlow', 'white'];
+  const DEF = { mode: 'cross', beams: 8, spread: 1.5, height: 0.45, amp: 0.25, frames: 48, fps: 25, dwell: 8, colors: 'rainbow', c1: [255, 0, 60], c2: [0, 120, 255], palette: [[0, 255, 0], [255, 0, 0]], seed: 7, zone: null, minY: null };
 
   function hsv(h, s = 1, v = 1) { h = ((h % 1) + 1) % 1; const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s); const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6]; return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]; }
   // farve til stråle i af n på tidspunkt t (0..1)
   function colorFor(o, i, n, t) {
     switch (o.colors) {
       case 'flow': return hsv(i / Math.max(1, n) + t);
+      case 'palette': case 'paletteFlow': { // egne farver i den rækkefølge man har valgt (fx grøn, rød, grøn, rød …); "skiftende" ruller dem hen over strålerne
+        const P = o.palette && o.palette.length ? o.palette : [o.c1, o.c2], k = o.colors === 'paletteFlow' ? Math.floor(t * P.length * 2) : 0; return P[(i + k) % P.length].slice();
+      }
       case 'two': return i % 2 ? o.c2.slice() : o.c1.slice();
       case 'one': return o.c1.slice();
       case 'white': return [255, 255, 255];
@@ -50,6 +53,11 @@
         break;
       }
     }
+    // sikkerhed: alt holdes inden for projektionszonen og over sikkerhedslinjen (aldrig ned mod publikum)
+    const z = o.zone || { l: -1, r: 1, b: -1, t: 1 }, lo = Math.max(z.b, o.minY == null ? -1 : o.minY + 0.03) , hi = z.t - 0.01, L = z.l + 0.01, R = z.r - 0.01;
+    const cx = (x) => clamp(x, L, R), cy = (y) => clamp(y, Math.min(lo, hi), hi);
+    for (const b of beams) { b.x = cx(b.x); b.y = cy(b.y); }
+    for (const l of lines) { l.a = [cx(l.a[0]), cy(l.a[1])]; l.b = [cx(l.b[0]), cy(l.b[1])]; }
     return { beams, lines };
   }
   // hele effekten som Vektor-dokument (frames → lag → items). Strålerne bliver items af typen "beam", fladerne "line" med egen farve.
@@ -64,6 +72,6 @@
     return { frames };
   }
   const NAMES = { fan: 'VIFTE', sweep: 'SWEEP', cross: 'KRYDS', wave: 'BOLGE', cone: 'KEGLE', chase: 'JAGT', chaos: 'KAOS', sky: 'FLADE', net: 'NET' };
-  const shortName = (o) => (NAMES[o.mode] || 'BEAM').slice(0, 5) + ({ rainbow: 'RB', flow: 'FL', two: '2F', one: '1F', white: 'HV' }[o.colors] || '');
+  const shortName = (o) => (NAMES[o.mode] || 'BEAM').slice(0, 5) + ({ rainbow: 'RB', flow: 'FL', palette: 'EG', paletteFlow: 'SK', two: '2F', one: '1F', white: 'HV' }[o.colors] || '');
   return { MODES, COLORS, DEF, frame, toDoc, colorFor, hsv, shortName };
 });

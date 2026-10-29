@@ -19,6 +19,12 @@ test('effekt → optimeret → ILDA: sikker, inden for punktbudget ved 20 kpps o
   const frames = doc.frames.map((_, fi) => { const f = L.optimize(paths(doc, fi), { pps: 20000, fps: 25 }); assert.ok(f.stats.safe, 'frame ' + fi); assert.ok(!f.stats.fpsReduced, 'fps sænket i frame ' + fi + ' (' + f.stats.count + ' punkter)'); return { points: L.quantize(f.points) }; });
   const back = I.read(I.write(frames, { format: 5 }).buffer); assert.strictEqual(back.length, 24);
 });
+test('egne farver: grøn og rød skiftes pr. stråle', () => { const b = B.frame({ mode: 'fan', colors: 'palette', palette: [[0, 255, 0], [255, 0, 0]] }, 0).beams; assert.deepStrictEqual(b[0].c, [0, 255, 0]); assert.deepStrictEqual(b[1].c, [255, 0, 0]); assert.deepStrictEqual(b[2].c, [0, 255, 0]); });
+test('sikkerhed: intet under sikkerhedslinjen eller uden for zonen', () => {
+  const zone = { l: -0.8, r: 0.7, b: -1, t: 0.9 }, minY = -0.2;
+  for (const mode of B.MODES) for (let fi = 0; fi < 48; fi += 3) { const f = B.frame({ mode, zone, minY, height: -0.6, amp: 0.9, spread: 1.95 }, fi);
+    for (const b of f.beams) assert.ok(b.y >= minY && b.x >= zone.l && b.x <= zone.r && b.y <= zone.t, mode); for (const l of f.lines) for (const p of [l.a, l.b]) assert.ok(p[1] >= minY && p[0] >= zone.l && p[0] <= zone.r, mode); }
+});
 test('kort navn er højst 8 tegn', () => { for (const mode of B.MODES) for (const colors of B.COLORS) assert.ok(B.shortName({ mode, colors }).length <= 8); });
 
 console.log(failed ? `${failed} af ${n + failed} tests fejlede` : `✓ beams: alle ${n} tests bestået`);

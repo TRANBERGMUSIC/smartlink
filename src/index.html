@@ -180,6 +180,7 @@
       </div>
       <button class="ghost small" id="animTapBtn" data-i18n="anim.tap" data-i18n-title="anim.tapTip"></button>
       <label class="pv-zoom"><span data-i18n="pv.zoom"></span> <input type="range" id="viewZoom" min="30" max="300" value="100"><output id="viewZoomOut"></output></label>
+      <button class="ghost small pv-wide" id="pvWide" data-i18n="pv.wide"></button>
       <label class="pv-zone"><span data-i18n="pv.zone"></span> <input type="range" id="zoneLive" min="0" max="100" value="0"><output id="zoneLiveOut"></output></label>
     </div>
     <div class="panel patpanel">
@@ -453,7 +454,8 @@
     <div class="fx-modes" id="fxModes"></div>
     <h2 class="dz-h" data-i18n="fx.colors"></h2>
     <div class="seg wide" id="fxColors"></div>
-    <div class="row fx-cpick"><label class="small"><span data-i18n="fx.c1"></span> <input type="color" id="fxC1"></label><label class="small"><span data-i18n="fx.c2"></span> <input type="color" id="fxC2"></label></div>
+    <div class="fx-pal" id="fxPal"></div>
+    <div class="row fx-presets" id="fxPresets"></div>
     <div class="sliders fx-sliders" id="fxSliders"></div>
     <p class="hint fx-warn" data-i18n="fx.safety"></p>
     <h2 class="dz-h" data-i18n="fx.sd"></h2>
