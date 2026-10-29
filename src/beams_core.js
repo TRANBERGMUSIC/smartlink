@@ -8,7 +8,7 @@
   const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const MODES = ['fan', 'sweep', 'cross', 'wave', 'cone', 'chase', 'chaos', 'sky', 'net'];
   const COLORS = ['rainbow', 'flow', 'palette', 'paletteFlow', 'white'];
-  const DEF = { mode: 'cross', beams: 8, spread: 1.5, height: 0.45, amp: 0.25, frames: 48, fps: 25, dwell: 8, colors: 'rainbow', c1: [255, 0, 60], c2: [0, 120, 255], palette: [[0, 255, 0], [255, 0, 0]], seed: 7, zone: null, minY: null };
+  const DEF = { mode: 'cross', beams: 8, spread: 1.5, height: 0.45, amp: 0.25, frames: 48, fps: 25, dwell: 8, colors: 'rainbow', c1: [255, 0, 60], c2: [0, 120, 255], palette: [[0, 255, 0], [255, 0, 0]], split: 'alt', seed: 7, zone: null, minY: null };
 
   function hsv(h, s = 1, v = 1) { h = ((h % 1) + 1) % 1; const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s); const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6]; return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]; }
   // farve til stråle i af n på tidspunkt t (0..1)
@@ -16,7 +16,9 @@
     switch (o.colors) {
       case 'flow': return hsv(i / Math.max(1, n) + t);
       case 'palette': case 'paletteFlow': { // egne farver i den rækkefølge man har valgt (fx grøn, rød, grøn, rød …); "skiftende" ruller dem hen over strålerne
-        const P = o.palette && o.palette.length ? o.palette : [o.c1, o.c2], k = o.colors === 'paletteFlow' ? Math.floor(t * P.length * 2) : 0; return P[(i + k) % P.length].slice();
+        const P = o.palette && o.palette.length ? o.palette : [o.c1, o.c2], k = o.colors === 'paletteFlow' ? Math.floor(t * P.length * 2) : 0;
+        const j = o.split === 'block' ? Math.min(P.length - 1, Math.floor(i * P.length / Math.max(1, n))) : i; // blokke: halv/halv, tredjedele, kvarte … (i stedet for skiftevis)
+        return P[(j + k) % P.length].slice();
       }
       case 'two': return i % 2 ? o.c2.slice() : o.c1.slice();
       case 'one': return o.c1.slice();

@@ -1134,3 +1134,4 @@ html.th-apple #fxColors, #fxColors { flex-wrap: wrap; }
 .cal-zr { border: 1px solid rgba(255,178,60,.45); background: rgba(255,178,60,.07); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
 .cal-zr.ok { border-color: rgba(49,243,172,.4); background: rgba(49,243,172,.06); } .cal-zr p { margin: 0; font-size: 12px; line-height: 1.5; } .cal-zr .chk { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
 .cal-zr .chk { height: auto !important; line-height: 1.4; } .cal-zr .chk input { margin-top: 2px; flex: none; }
+.fx-splitrow { gap: 10px; align-items: center; flex-wrap: nowrap !important; } .fx-splitrow .seg { flex: 1; } .fx-splitrow .seg button { flex: 1; white-space: nowrap; font-size: 12.5px; }

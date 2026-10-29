@@ -1682,7 +1682,7 @@ function computeFrame(now) {
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
   if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
     // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
-    const line = -1 + 2 * zoneEff() + 0.03, edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
+    const line = -1 + 2 * zoneEff() + (cfg.zoneGap ?? 0.06), edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
     const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
     const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
     const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
@@ -2289,6 +2289,7 @@ function animTap() { // tryk hver gang laserens animation starter forfra → app
   if (animTaps.length < 3) { toast(t('anim.tapMore', { n: 3 - animTaps.length })); return; }
   const T = (animTaps[animTaps.length - 1] - animTaps[0]) / (animTaps.length - 1) / 1000, measured = fr.length / T;
   const ptsAvg = fr.reduce((a, f) => a + (f.xy ? f.xy.length / 2 : 0), 0) / fr.length, d = decodedFrame(), fd = d ? d.fps : fpsFrac(st.fps) * 100;
+  cfg.animPat = cfg.animPat || {}; cfg.animPat[st.pattern] = Math.round(measured / Math.max(1, fd) * 1000) / 1000; // pr. mønster: LIVE følger netop dette mønster 1:1
   if (measured < fd * 0.97 && ptsAvg > 0) { cfg.kpps = Math.round(measured * ptsAvg / 100) / 10; cfg.animScale = 1; } else { cfg.kpps = 0; cfg.animScale = Math.round(measured / Math.max(1, fd) * 1000) / 1000; }
   saveCfg(); if (typeof syncAnimUI === 'function') syncAnimUI(); toast(t('anim.synced', { f: measured.toFixed(1), k: cfg.kpps || '–' }));
 }
@@ -2311,7 +2312,7 @@ function previewTick(now) {
     // samme tempo som laseren: valgt fps (justérbar), men aldrig hurtigere end scannerne kan tegne frames med så mange punkter
     if (pvPat !== st.pattern) { pvPat = st.pattern; pvFrame = 0; } // laseren starter animationen forfra ved mønsterskift
     const curF = fr[Math.floor(pvFrame) % fr.length], pts = curF && curF.xy ? curF.xy.length / 2 : 0;
-    const dd = decodedFrame(); let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (cfg.animScale || 1); if (pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts); // præcis den fps kanal 3 giver
+    const dd = decodedFrame(); const apr = cfg.animPat && cfg.animPat[st.pattern]; let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (apr || cfg.animScale || 1); if (!apr && pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts); // målt for dette mønster går forud for det generelle // præcis den fps kanal 3 giver
     if (!st.freeze) pvFrame += (Math.min(250, now - pvLast) / 1000) * fps; pvLast = now;
     const rawLine = (vertical, rx, ry, len, col, lw) => { // streg i rå laser-koordinater tegnet ind i boksen
       const [ax, ay] = rawToApp(rx, ry); const [px, py] = boxPt(B, ax, ay); const hl = len * B.upl;
@@ -3060,6 +3061,7 @@ bindSetting('universe', 'universe', (v) => clamp(+v | 0, 0, 32767));
 bindSetting('address', 'address', (v) => clamp(+v | 0, 1, 479));
 bindSetting('rate', 'rate', (v) => clamp(+v | 0, 10, 44));
 bindSetting('zone', 'zone', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%'));
+if (cfg.zoneGap == null) cfg.zoneGap = 0.06; bindSetting('zoneGap', 'zoneGap', (v) => v / 100, (v) => v + '%');
 bindSetting('zoneSide', 'zoneSide');
 bindSetting('autoUniverse', 'autoUniverse');
 bindSetting('dmxMode', 'dmxMode');

@@ -11,7 +11,7 @@ if (!Array.isArray(FX.palette) || !FX.palette.length) FX.palette = [[0, 255, 0],
 if (FX.colors === 'two' || FX.colors === 'one') FX.colors = 'palette';
 // effektens indstillinger + sikkerhed: laserens projektionszone og sikkerhedslinjen (intet under den)
 const fxOpts = (extra) => ({ ...FX, zone: typeof prof === 'function' ? prof().zone : null, minY: typeof safetyLine === 'function' ? safetyLine() : null, ...extra });
-const FX_PRESETS = [['Grøn + rød', [[0, 255, 0], [255, 0, 0]]], ['Rød + hvid + blå', [[255, 0, 0], [255, 255, 255], [0, 60, 255]]], ['Grøn', [[0, 255, 0]]], ['Cyan + magenta', [[0, 255, 255], [255, 0, 255]]], ['Varm', [[255, 40, 0], [255, 160, 0], [255, 230, 0]]], ['Is', [[0, 120, 255], [0, 255, 255], [255, 255, 255]]]];
+const FX_PRESETS = [['Halv/halv grøn-rød', [[0, 255, 0], [255, 0, 0]], 'block'], ['Kvarte', [[0, 255, 0], [255, 0, 0], [0, 80, 255], [255, 200, 0]], 'block'], ['Tredjedele', [[255, 0, 0], [255, 255, 255], [0, 80, 255]], 'block'], ['Grøn + rød', [[0, 255, 0], [255, 0, 0]]], ['Rød + hvid + blå', [[255, 0, 0], [255, 255, 255], [0, 60, 255]]], ['Grøn', [[0, 255, 0]]], ['Cyan + magenta', [[0, 255, 255], [255, 0, 255]]], ['Varm', [[255, 40, 0], [255, 160, 0], [255, 230, 0]]], ['Is', [[0, 120, 255], [0, 255, 255], [255, 255, 255]]]];
 const fxHex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
 const FX_SLIDERS = [['beams', 2, 16, 1, (v) => v], ['spread', 20, 195, 100, (v) => Math.round(v * 100) + '%'], ['height', -20, 95, 100, (v) => Math.round(v * 100)], ['amp', 0, 90, 100, (v) => Math.round(v * 100) + '%'],
   ['frames', 12, 120, 1, (v) => v], ['fps', 10, 60, 1, (v) => v], ['dwell', 2, 20, 1, (v) => v]];
@@ -83,7 +83,8 @@ function fxRender() {
     w.querySelector('button').onclick = () => { if (FX.palette.length > 1) { FX.palette.splice(i, 1); fxSave(); fxRender(); } }; pal.appendChild(w); });
   const add = document.createElement('button'); add.className = 'ghost small'; add.textContent = t('fx.addColor'); add.onclick = () => { if (FX.palette.length < 12) { FX.palette.push([255, 255, 255]); FX.colors = /^palette/.test(FX.colors) ? FX.colors : 'palette'; fxSave(); fxRender(); } }; pal.appendChild(add);
   const pr = $('#fxPresets'); pr.innerHTML = '';
-  for (const [name, cols] of FX_PRESETS) { const b = document.createElement('button'); b.className = 'ghost small fx-pre'; b.innerHTML = cols.map((c) => `<i style="background:${fxHex(c)}"></i>`).join('') + `<span>${name}</span>`; b.onclick = () => { FX.palette = cols.map((c) => c.slice()); FX.colors = 'palette'; fxSave(); fxRender(); }; pr.appendChild(b); }
+  for (const [name, cols, split] of FX_PRESETS) { const b = document.createElement('button'); b.className = 'ghost small fx-pre'; b.innerHTML = cols.map((c) => `<i style="background:${fxHex(c)}"></i>`).join('') + `<span>${name}</span>`; b.onclick = () => { FX.palette = cols.map((c) => c.slice()); FX.colors = 'palette'; FX.split = split || 'alt'; fxSave(); fxRender(); }; pr.appendChild(b); }
+  const sp = $('#fxSplit'); sp.innerHTML = ''; for (const k of ['alt', 'block']) { const b = document.createElement('button'); b.textContent = t('fx.split.' + k); b.classList.toggle('active', (FX.split || 'alt') === k); b.onclick = () => { FX.split = k; if (!/^palette/.test(FX.colors)) FX.colors = 'palette'; fxSave(); fxRender(); }; sp.appendChild(b); }
   const sl = $('#fxSliders'); sl.innerHTML = '';
   for (const [k, lo, hi, div, fmt] of FX_SLIDERS) {
     const lab = document.createElement('label'); lab.innerHTML = `<span>${t('fx.p.' + k)}</span><input type="range" min="${lo}" max="${hi}" value="${Math.round(FX[k] * div)}"><output></output>`;

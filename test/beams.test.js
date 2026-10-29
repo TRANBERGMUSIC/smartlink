@@ -20,6 +20,10 @@ test('effekt → optimeret → ILDA: sikker, inden for punktbudget ved 20 kpps o
   const back = I.read(I.write(frames, { format: 5 }).buffer); assert.strictEqual(back.length, 24);
 });
 test('egne farver: grøn og rød skiftes pr. stråle', () => { const b = B.frame({ mode: 'fan', colors: 'palette', palette: [[0, 255, 0], [255, 0, 0]] }, 0).beams; assert.deepStrictEqual(b[0].c, [0, 255, 0]); assert.deepStrictEqual(b[1].c, [255, 0, 0]); assert.deepStrictEqual(b[2].c, [0, 255, 0]); });
+test('blokke: halv/halv og kvarte', () => {
+  const h = B.frame({ mode: 'fan', beams: 8, colors: 'palette', split: 'block', palette: [[0, 255, 0], [255, 0, 0]] }, 0).beams.map((b) => b.c[0] ? 'R' : 'G').join(''); assert.strictEqual(h, 'GGGGRRRR');
+  const q = B.frame({ mode: 'fan', beams: 8, colors: 'palette', split: 'block', palette: [[1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0]] }, 0).beams.map((b) => b.c[0]).join(''); assert.strictEqual(q, '11223344');
+});
 test('sikkerhed: intet under sikkerhedslinjen eller uden for zonen', () => {
   const zone = { l: -0.8, r: 0.7, b: -1, t: 0.9 }, minY = -0.2;
   for (const mode of B.MODES) for (let fi = 0; fi < 48; fi += 3) { const f = B.frame({ mode, zone, minY, height: -0.6, amp: 0.9, spread: 1.95 }, fi);
