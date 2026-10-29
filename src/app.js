@@ -2037,6 +2037,7 @@ function renderPatPages() {
   pb.textContent = t('pat.presets'); pb.className = patPage === 'presets' ? 'active' : '';
   pb.onclick = () => { patPage = 'presets'; renderPatPages(); renderPatterns(); };
   $('#patPages').prepend(pb);
+  if (fxPool().length) { const xb = document.createElement('button'); xb.textContent = t('pat.fx'); xb.className = patPage === 'fx' ? 'active' : ''; xb.onclick = () => { patPage = 'fx'; renderPatPages(); renderPatterns(); }; pb.after(xb); }
   const fb = document.createElement('button');
   fb.textContent = '★'; fb.title = t('pat.favs');
   fb.className = patPage === -1 ? 'active' : '';
@@ -2049,7 +2050,8 @@ function renderPatterns() {
   const g = $('#patGrid'); g.innerHTML = ''; g.scrollTop = 0; g.classList.remove('presets');
   if (patPage === 'presets') { renderPresets(g); return; }
   let list = [];
-  if (patPage === -1) list = [...favs].sort((a, b) => a - b);
+  if (patPage === 'fx') list = fxPool();
+  else if (patPage === -1) list = [...favs].sort((a, b) => a - b);
   else for (let n = patPage * PAGE + 1; n <= Math.min(cfg.patCount, patPage * PAGE + PAGE); n++) list.push(n);
   if (!list.length) { g.innerHTML = `<p class="hint">${t('pat.noFavs')}</p>`; return; }
   for (const n of list) {
@@ -2130,6 +2132,7 @@ function syncZoneUI() {
   const o = $('#zone').parentElement.querySelector('output'); if (o) o.textContent = txt;
 }
 $('#zoneLive').addEventListener('input', (e) => { cfg.zone = e.target.value / 100; saveCfg(); syncZoneUI(); });
+{ const ps = () => $$('#autoPool button').forEach((b) => b.classList.toggle('active', b.dataset.p === (cfg.autoPool || 'mix'))); $$('#autoPool button').forEach((b) => { b.onclick = () => { cfg.autoPool = b.dataset.p; saveCfg(); ps(); }; }); ps(); }
 { const wb = $('#pvWide'); if (wb) { const pz = document.querySelector('.pv-zone'); if (pz && pz.parentElement) pz.parentElement.insertBefore(wb, pz); const sync = () => { wb.classList.toggle('active', cfg.wideX !== false); wb.title = t('pv.wideTip'); }; wb.onclick = () => { cfg.wideX = cfg.wideX === false; saveCfg(); sync(); if (typeof sendNow === 'function') sendNow(); }; sync(); } }
 $('#zone').addEventListener('input', syncZoneUI);
 
@@ -2699,10 +2702,34 @@ function tickBeatClock() {}
 function onBeat() { pulseEnv = 1; flashBeat(); }
 function pick(arr, not) { const a = arr.filter((x) => x !== not); return a.length ? a[Math.floor(Math.random() * a.length)] : arr[0]; }
 // reason: 'kick' (bas-slag), 'snare' (lille variation), 'drop' (stort skift)
+// stråle-effekter på laseren: dem der er lavet i Effekter-fanen (SD-pakken) og som findes i mønstermappen; ellers 150–176 hvis de findes
+function fxPool() {
+  const out = new Set(), isFx = (p) => p.fx || (p.doc && p.doc.frames && p.doc.frames[0] && p.doc.frames[0].layers && p.doc.frames[0].layers[0] && p.doc.frames[0].layers[0].name === 'Stråler');
+  try { if (typeof vecPkg !== 'undefined') for (const p of vecPkg) if (isFx(p) && patAvail.has(p.slot)) out.add(p.slot); } catch (e) {}
+  if (!out.size) for (let n = 150; n <= 176; n++) if (patAvail.has(n)) out.add(n);
+  return [...out].sort((a, b) => a - b);
+}
+let lastFx = 0;
+function autoFx(reason) { // musikken vælger en stråle-effekt: egne farver, fuld størrelse, fart efter energien, strobe på drop
+  const pool = fxPool(); if (!pool.length) return false;
+  const n = pick(pool, lastFx); lastFx = n;
+  Object.assign(st, structuredClone(PRESET_BASE), { size: 1, color: { mode: 'orig', rgb: st.color.rgb }, fps: clamp(0.3 + music.energy * 0.45 + (reason === 'drop' ? 0.15 : 0), 0.2, 0.95) });
+  st.pattern = n; activeScene = -1;
+  if (reason === 'drop') { st.strobe = 0.3; setTimeout(() => { if (st.pattern === n) { st.strobe = 0; saveLook(); } }, 1500); }
+  st.posX = 0; st.posY = 0; st.freeze = false;
+  saveLook(); syncLookUI(); renderScenes(); $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
+  recordHook((reason === 'drop' ? '⚡ ' : '') + (patNames[n] || '#' + n)); return true;
+}
 function autoChange(reason = 'kick') {
   if (showPlaying && !$('#record').checked) return; // et kørende show bestemmer selv
+  const ap = cfg.autoPool || 'mix', onFx = fxPool().includes(st.pattern);
+  if (ap !== 'presets') {
+    if (reason === 'snare') { if (onFx) { st.fps = clamp(0.3 + music.energy * 0.5 + (Math.random() - 0.5) * 0.1, 0.2, 0.95); saveLook(); return; } }
+    else if ((ap === 'beams' || Math.random() < 0.8) && autoFx(reason)) return;
+  }
   const filled = scenes.map((s, i) => (s ? i : -1)).filter((i) => i >= 0);
-  const pool = favs.size ? [...favs] : patAvail.size ? [...patAvail] : Array.from({ length: cfg.patCount }, (_, i) => i + 1);
+  const fxs_ = new Set(fxPool()), noFx = (a) => { const b = a.filter((n) => !fxs_.has(n)); return b.length ? b : a; };
+  const pool = noFx(favs.size ? [...favs] : patAvail.size ? [...patAvail] : Array.from({ length: cfg.patCount }, (_, i) => i + 1));
   const parts = [];
   if (reason === 'snare') {
     // lille variation: farve eller rotation, ikke nyt mønster

@@ -97,7 +97,7 @@ function fxRender() {
 const fxMsg = (s, kind) => { const el = $('#fxMsg'); el.textContent = s || ''; el.className = 'vec-msg ' + (kind || ''); };
 const fxOwn = (n) => vecPkg.some((p) => p.slot === n);
 const fxTaken = (n) => typeof patAvail !== 'undefined' && patAvail.has(n) && !fxOwn(n);
-function fxPush(o, slot, name) { vecPkg = vecPkg.filter((p) => p.slot !== slot); vecPkg.push({ slot, name, fps: o.fps, doc: BeamFX.toDoc(fxOpts(o)) }); }
+function fxPush(o, slot, name) { vecPkg = vecPkg.filter((p) => p.slot !== slot); vecPkg.push({ slot, name, fps: o.fps, fx: true, doc: BeamFX.toDoc(fxOpts(o)) }); }
 function fxAdd() {
   const slot = clamp(+$('#fxSlot').value | 0, 1, 255); if (fxTaken(slot)) { fxMsg(t('fx.taken', { n: slot }), 'bad'); return; }
   const name = ($('#fxName').value || BeamFX.shortName(FX)).toUpperCase().slice(0, 8);

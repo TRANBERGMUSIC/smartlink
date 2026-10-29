@@ -2,6 +2,7 @@
 const I18N = {
   da: {
     'pv.wide': '↔ Fuld bredde', 'pv.wideTip': 'Når sikkerhedszonen begrænser højden, skrumpes kun højden – bredden bliver som på størrelses-slideren (laseren har egen X- og Y-størrelse). Slås fra hvis mønstre ikke må strækkes.',
+    'auto.pool': 'Musikken vælger', 'auto.pBeams': 'Stråler', 'auto.pMix': 'Mest stråler', 'auto.pPresets': 'Presets', 'pat.fx': 'Stråler',
     'tab.fx': 'Effekter', 'fx.title': 'Stråle-effekter', 'fx.vAir': 'I luften', 'fx.vFlat': 'Punkter', 'fx.modes': 'Effekt', 'fx.colors': 'Farver', 'fx.c1': 'Farve 1', 'fx.c2': 'Farve 2',
     'fx.m.fan': 'Vifte', 'fx.m.sweep': 'Sweep', 'fx.m.cross': 'Kryds', 'fx.m.wave': 'Bølge', 'fx.m.cone': 'Kegle', 'fx.m.chase': 'Jagt', 'fx.m.chaos': 'Kaos', 'fx.m.sky': 'Flade', 'fx.m.net': 'Net',
     'fx.c.rainbow': 'Regnbue', 'fx.c.flow': 'Flydende', 'fx.c.palette': 'Egne farver', 'fx.c.paletteFlow': 'Egne, skiftende', 'fx.c.white': 'Hvid', 'fx.addColor': '+ Farve', 'fx.del': 'Fjern farve', 'fx.zoneLbl': 'Sikkerhedszone – publikum, ingen stråler her',
@@ -110,6 +111,7 @@ const I18N = {
   },
   en: {
     'pv.wide': '↔ Full width', 'pv.wideTip': 'When the safety zone limits the height, only the height shrinks – the width follows the size slider (the laser has separate X and Y size). Turn off if patterns must not stretch.',
+    'auto.pool': 'Music picks', 'auto.pBeams': 'Beams', 'auto.pMix': 'Mostly beams', 'auto.pPresets': 'Presets', 'pat.fx': 'Beams',
     'tab.fx': 'Effects', 'fx.title': 'Beam effects', 'fx.vAir': 'In the air', 'fx.vFlat': 'Points', 'fx.modes': 'Effect', 'fx.colors': 'Colours', 'fx.c1': 'Colour 1', 'fx.c2': 'Colour 2',
     'fx.m.fan': 'Fan', 'fx.m.sweep': 'Sweep', 'fx.m.cross': 'Cross', 'fx.m.wave': 'Wave', 'fx.m.cone': 'Cone', 'fx.m.chase': 'Chase', 'fx.m.chaos': 'Chaos', 'fx.m.sky': 'Sheet', 'fx.m.net': 'Net',
     'fx.c.rainbow': 'Rainbow', 'fx.c.flow': 'Flowing', 'fx.c.palette': 'My colours', 'fx.c.paletteFlow': 'My colours, shifting', 'fx.c.white': 'White', 'fx.addColor': '+ Colour', 'fx.del': 'Remove colour', 'fx.zoneLbl': 'Safety zone – audience, no beams here',
