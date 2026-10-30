@@ -45,6 +45,7 @@ if (!cfg.v37) { cfg.posFmt = 's'; cfg.yFlip = false; cfg.v37 = true; store.set('
 if (!(cfg.scan >= 0 && cfg.scan <= 3)) cfg.scan = 0;
 let master = store.get('master', 0.5);
 let blackout = true; // laseren starter altid SLUKKET
+let autoMute = false; // auto: stille passage → laseren usynlig (ikke slukket), kommer tilbage med det samme
 let holdMute = false; // "hold"-blackout fra Wolfmix: laseren er usynlig mens knappen holdes, men stadig tændt (kommer tilbage ved slip)
 let patNames = store.get('patNames', {});   // { "12": "Tunnel" }
 let patFlip = new Set(store.get('patFlip', [])); // mønstre der skal vendes 180° (kun laseren – appen viser filen som den er)
@@ -1599,7 +1600,7 @@ function computeFrame(now) {
   const live = autoMode === 'mic' && micStream;
   const bassP = live ? music.bass : 0, hatP = live ? music.hi : 0;
   const calm = live && music.breakdown ? 0.55 : 1;
-  if (live) rotAcc += hatKick * 6 * (st.rotSpeed >= 0 ? 1 : -1);
+  // (ingen hi-hat-ryk i rotationen længere – auto drejer aldrig mønstrene)
 
   // mønsteret holdes inden for laserens område: jo større mønster, jo mindre kan det flyttes
   // glat overgang når brugeren trækker/skubber (ellers hopper laseren)
@@ -1632,7 +1633,7 @@ function computeFrame(now) {
   const liveStrobe = live && dropEnv > 0.6 ? 0.35 : 0;
   const bright = live ? clamp(0.55 + 0.45 * Math.max(music.energy, bassP), 0.3, 1) : 1;
 
-  const on = !blackout && !holdMute;
+  const on = !blackout && !holdMute && !autoMute;
   // skærm-koordinater (0..1) inkl. hvor brugeren har flyttet mønsteret hen; laser-koordinater (-1..1, Y vendt)
   x = clamp(x + sm.x / 2, 0, 1); y = clamp(y + sm.y / 2, 0, 1);
   const lx = (x - 0.5) * 2, ly = (y - 0.5) * 2 * YF();
@@ -2694,7 +2695,7 @@ async function setAuto(m) {
   }
   if (m === 'mic' && !(await startMic())) { m = 'off'; }
   if (m === 'off' && autoMode !== 'off') { setPattern(0); }      // musik fra → laseren viser intet, klar til nyt
-  autoMode = m;
+  autoMode = m; if (m !== 'mic') autoMute = false;
   if (m !== 'mic' && !micTesting) stopMic();
   $$('#autoSeg button').forEach((b) => b.classList.toggle('active', b.dataset.auto === m));
   $('#autoSeg').closest('.panel').classList.toggle('laser-mic', m === 'laser');
@@ -2712,52 +2713,64 @@ function fxPool() {
   if (!out.size) for (let n = 150; n <= 176; n++) if (patAvail.has(n)) out.add(n);
   return [...out].sort((a, b) => a - b);
 }
-let lastFx = 0;
-function autoFx(reason) { // musikken vælger en stråle-effekt: egne farver, fuld størrelse, fart efter energien, strobe på drop
-  const pool = fxPool(); if (!pool.length) return false;
-  const n = pick(pool, lastFx); lastFx = n;
-  Object.assign(st, structuredClone(PRESET_BASE), { size: 1, color: { mode: 'orig', rgb: st.color.rgb }, fps: clamp(0.3 + music.energy * 0.45 + (reason === 'drop' ? 0.15 : 0), 0.2, 0.95) });
-  st.pattern = n; activeScene = -1;
-  if (reason === 'drop') { st.strobe = 0.3; setTimeout(() => { if (st.pattern === n) { st.strobe = 0; saveLook(); } }, 1500); }
-  st.posX = 0; st.posY = 0; st.freeze = false;
-  saveLook(); syncLookUI(); renderScenes(); $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
-  recordHook((reason === 'drop' ? '⚡ ' : '') + (patNames[n] || '#' + n)); return true;
+// ---------- auto-instruktør: læser musikken som sektioner og vælger looks med omtanke ----------
+// Sektioner: stille (laseren skjules) · rolig/breakdown · normal · høj energi. Skift sker på fraser (4/8 takter), ikke tilfældigt pr. slag.
+// Laseren drejer aldrig i auto: mønstret peger lige ud lige over sikkerhedszonen og bevæger sig højst fra side til side.
+const dir = { hist: [], theme: 0, colorStep: 0, section: 'normal', lastChange: 0, sinceChange: 0, silentSince: 0 };
+const FX_TIER = { VIFTE: 'low', BOLGE: 'low', KEGLE: 'low', FLADE: 'mid', SWEEP: 'mid', NET: 'mid', KRYDS: 'high', JAGT: 'high', KAOS: 'high' };
+// farvetemaer (hver = 2–3 farver der passer sammen); breakdown bruger altid et koldt tema
+const THEMES = [[[0, 255, 60], [255, 0, 40]], [[0, 120, 255], [0, 255, 255]], [[255, 0, 160], [0, 90, 255]], [[255, 40, 0], [255, 190, 0]], [[0, 255, 60], [0, 120, 255]], [[255, 0, 40], [255, 255, 255]], [[170, 0, 255], [255, 0, 120]], [[255, 255, 255], [0, 160, 255]]];
+const COOL = [[0, 90, 255], [0, 200, 255], [120, 0, 255]];
+function fxPool() {
+  const out = new Set(), isFx = (p) => p.fx || (p.doc && p.doc.frames && p.doc.frames[0] && p.doc.frames[0].layers && p.doc.frames[0].layers[0] && p.doc.frames[0].layers[0].name === 'Stråler');
+  try { if (typeof vecPkg !== 'undefined') for (const p of vecPkg) if (isFx(p) && patAvail.has(p.slot)) out.add(p.slot); } catch (e) {}
+  if (!out.size) for (let n = 150; n <= 176; n++) if (patAvail.has(n)) out.add(n);
+  return [...out].sort((a, b) => a - b);
 }
-function autoChange(reason = 'kick') {
+function fxTierOf(n) { // effektens energi-niveau ud fra navnet i SD-pakken (VIFTE…, KAOS…)
+  let name = patNames[n] || ''; try { const p = typeof vecPkg !== 'undefined' && vecPkg.find((q) => q.slot === n); if (p) name = p.name; } catch (e) {}
+  const k = Object.keys(FX_TIER).find((x) => name.toUpperCase().startsWith(x)); return k ? FX_TIER[k] : 'mid';
+}
+function energyTier() { return music.breakdown ? 'low' : music.energy > 0.72 ? 'high' : music.energy > 0.42 ? 'mid' : 'low'; }
+function pickFresh(list) { // undgå de sidst brugte (op til 5), ellers tilfældig
+  const fresh = list.filter((n) => !dir.hist.includes(n)), pool = fresh.length ? fresh : list.filter((n) => n !== st.pattern);
+  const n = (pool.length ? pool : list)[Math.floor(Math.random() * (pool.length ? pool : list).length)]; dir.hist.push(n); if (dir.hist.length > Math.min(5, Math.max(1, list.length - 1))) dir.hist.shift(); return n;
+}
+function autoColor(kind) { // 'orig' = mønstrets egne farver, ellers en farve fra temaet
+  if (kind === 'orig') return { mode: 'orig', rgb: st.color.rgb };
+  const T = dir.section === 'break' ? COOL : THEMES[dir.theme % THEMES.length]; dir.colorStep = (dir.colorStep + 1) % T.length; return { mode: 'rgb', rgb: T[dir.colorStep].slice() };
+}
+// lige ud: mønstret står lavt (lige over zonen – laseren løfter det selv præcis nok op), drejer ikke og bevæger sig kun vandret
+function autoPose(tier, reason) {
+  Object.assign(st, { rotSpeed: 0, rotAngle: 0, freeze: false, posX: 0, posY: cfg.zone > 0 && cfg.dmxMode === 'pro' ? -1 : 0, pulse: 0, strobe: 0 });
+  const sweep = tier === 'high' ? 0.55 : tier === 'mid' ? 0.35 : 0;
+  if (sweep && Math.random() < (reason === 'drop' ? 0.8 : 0.45)) Object.assign(st, { move: 'sweep', moveAmt: sweep, moveSpeed: tier === 'high' ? 0.45 : 0.25 }); else st.move = 'none';
+  st.size = tier === 'low' ? 0.75 : 0.9;
+  st.fps = clamp(0.3 + music.energy * 0.45 + (reason === 'drop' ? 0.15 : 0), 0.2, 0.95);
+}
+function autoChange(reason = 'phrase') {
   if (showPlaying && !$('#record').checked) return; // et kørende show bestemmer selv
-  const ap = cfg.autoPool || 'mix', onFx = fxPool().includes(st.pattern);
-  if (ap !== 'presets') {
-    if (reason === 'snare') { if (onFx) { st.fps = clamp(0.3 + music.energy * 0.5 + (Math.random() - 0.5) * 0.1, 0.2, 0.95); saveLook(); return; } }
-    else if ((ap === 'beams' || Math.random() < 0.8) && autoFx(reason)) return;
-  }
-  const filled = scenes.map((s, i) => (s ? i : -1)).filter((i) => i >= 0);
-  const fxs_ = new Set(fxPool()), noFx = (a) => { const b = a.filter((n) => !fxs_.has(n)); return b.length ? b : a; };
-  const pool = noFx(favs.size ? [...favs] : patAvail.size ? [...patAvail] : Array.from({ length: cfg.patCount }, (_, i) => i + 1));
-  const parts = [];
-  if (reason === 'snare') {
-    // lille variation: farve eller rotation, ikke nyt mønster
-    if (!st.colorCycle) { music.hue = (music.hue + 0.13 + Math.random() * 0.2) % 1; st.color = { mode: 'rgb', rgb: hsv(music.hue, 1, 1) }; }
-    if (Math.random() < 0.5) st.rotSpeed = (Math.random() < 0.5 ? -1 : 1) * (0.1 + Math.random() * 0.4);
-    saveLook(); syncLookUI(); return;
-  }
-  // Auto aktiverer færdige ting: dine scener og presets (hele looks), ikke løse indstillinger
-  const wild = music.energy > 0.6 || reason === 'drop';
-  const presetIdx = PRESETS.map((p, i) => i).filter((i) => { const l = PRESETS[i].l; const w = (l.move && l.move !== 'none') || Math.abs(l.rotSpeed || 0) > 0.3 || l.strobe || l.colorCycle; return wild ? w : !l.strobe; });
-  const useScene = filled.length && Math.random() < (filled.length >= 3 ? 0.5 : 0.25);
-  if (useScene) { const i = pick(filled, activeScene); recallScene(i); parts.push(scenes[i].name); }
-  else {
-    const i = pick(presetIdx.length ? presetIdx : PRESETS.map((_, k) => k), lastAutoPreset); lastAutoPreset = i;
-    const p = PRESETS[i]; Object.assign(st, structuredClone(PRESET_BASE), structuredClone(p.l));
-    // mønster: presettets eget, men byt til en favorit/indlæst hvis presettets ikke findes på kortet
-    st.pattern = patAvail.size && !patAvail.has(p.pat) ? pick(pool, st.pattern) : p.pat;
-    if (reason === 'drop') { st.strobe = Math.max(st.strobe, 0.3); st.size = 1; st.pulse = Math.max(st.pulse, 0.7); }
-    parts.push(presetName(p, i));
-    activeScene = -1;
-  }
-  st.posX = 0; st.posY = 0; st.freeze = false;
-  saveLook(); syncLookUI(); renderScenes();
-  if (parts.length) recordHook((reason === 'drop' ? '⚡ ' : '') + parts.join(' · '));
+  const now = performance.now(), tier = reason === 'break' ? 'low' : reason === 'drop' ? 'high' : energyTier();
+  // kun farveskift (mellem mønsterskiftene): næste farve i temaet – effekter med egne farver får dem af og til tilbage
+  if (reason === 'color') { const own = fxPool().includes(st.pattern) && Math.random() < 0.35; st.color = autoColor(own ? 'orig' : 'theme'); st.colorCycle = false; saveLook(); syncLookUI(); return; }
+  if (reason === 'drop' || reason === 'return') dir.theme = (dir.theme + 1 + Math.floor(Math.random() * (THEMES.length - 1))) % THEMES.length; // nyt tema ved drop
+  dir.section = reason === 'break' ? 'break' : tier;
+  const ap = cfg.autoPool || 'mix', fx = fxPool(), fxs_ = new Set(fx);
+  const others = (favs.size ? [...favs] : [...patAvail]).filter((n) => !fxs_.has(n)); const othersOk = others.length ? others : patAvail.size ? [...patAvail] : Array.from({ length: Math.min(28, cfg.patCount) }, (_, i) => i + 1);
+  const useFx = fx.length && ap !== 'presets' && (ap === 'beams' || reason === 'drop' || Math.random() < 0.8);
+  let n;
+  if (useFx) { const want = fx.filter((m) => fxTierOf(m) === tier); n = pickFresh(want.length >= 2 ? want : fx); }
+  else n = pickFresh(othersOk);
+  st.pattern = n; activeScene = -1; autoPose(tier, reason);
+  // farver: drop/høj energi = temaets farver eller effektens egne; breakdown = koldt; mønstre uden egne farver får temaet
+  st.colorCycle = false; st.color = useFx && reason !== 'break' && Math.random() < 0.55 ? autoColor('orig') : autoColor('theme');
+  if (reason === 'drop') { st.strobe = 0.3; setTimeout(() => { if (st.pattern === n) { st.strobe = 0; saveLook(); } }, 1200); }
+  dir.lastChange = now; dir.sinceChange = 0;
+  saveLook(); syncLookUI(); renderScenes(); $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
+  recordHook((reason === 'drop' ? '⚡ ' : reason === 'break' ? '☾ ' : '') + (patNames[n] || '#' + n));
 }
+// hvor mange slag mellem mønsterskift: en frase = 16 slag (4 takter); høj energi skifter hver 8., rolig hver 32.
+function phraseLen() { const t_ = energyTier(); return t_ === 'high' ? 8 : t_ === 'mid' ? 16 : 32; }
 
 function tap() { onBeat(); }
 
@@ -2807,7 +2820,8 @@ function musicTick(now) {
   levelSmooth = Math.max(db, levelSmooth - 1.5);
   const loud = clamp((db + 55) / 45, 0, 1);
   music.energy = music.energy * 0.97 + loud * 0.03;
-  music.silent = levelSmooth < -50;
+  if (db > -60) music.dbAvg = (music.dbAvg ?? db) * 0.997 + db * 0.003; // lydniveauet i rummet over ~2 s – stille måles i forhold til det
+  music.silent = levelSmooth < Math.max(-50, (music.dbAvg ?? -30) - 22);
   // breakdown = der har ikke været bas i >1,5 s, men der er stadig lyd
   const wasBreak = music.breakdown;
   music.breakdown = !music.silent && now - music.lastKick > 1500;
@@ -2816,8 +2830,14 @@ function musicTick(now) {
   $('#level').classList.toggle('loud', loud > 0.85);
   $('#levelDb').textContent = levelSmooth < -59 ? '—' : Math.round(levelSmooth) + ' dB';
   $('#bandB').style.height = music.bass * 100 + '%'; $('#bandM').style.height = music.mid * 100 + '%'; $('#bandH').style.height = music.hi * 100 + '%';
-  if (!kick && !snare && !hat) return;
   const active = autoMode === 'mic' && !(showPlaying && !$('#record').checked);
+  // stille punkter: musikken stopper → laseren skjules efter 0,7 s og kommer tilbage med et nyt look i samme øjeblik lyden gør
+  if (active) {
+    if (music.silent) { if (!dir.silentSince) dir.silentSince = now; else if (!autoMute && now - dir.silentSince > 700) { autoMute = true; sendNow(); } }
+    else { dir.silentSince = 0; if (autoMute) { autoMute = false; autoChange('return'); sendNow(); } }
+    if (!wasBreak && music.breakdown && !music.silent && now - dir.lastChange > 3000) autoChange('break'); // breakdown: roligt, koldt look
+  } else if (autoMute) { autoMute = false; }
+  if (!kick && !snare && !hat) return;
   if (kick && now - music.lastKick > 140) {
     const gap = now - music.lastKick; music.lastKick = now; music.kickCount++;
     if (gap > 250 && gap < 1500) { intervals.push(gap); if (intervals.length > 8) intervals.shift(); }
@@ -2826,14 +2846,12 @@ function musicTick(now) {
     if (active) {
       sendNow();
       if (wasBreak) onDrop(now);                                  // bassen er tilbage efter en pause → DROP
-      else if (music.kickCount % pickEvery() === 0) autoChange('kick');
+      else { dir.sinceChange++; if (dir.sinceChange >= phraseLen()) autoChange('phrase'); else if (dir.sinceChange % 8 === 0) autoChange('color'); } // skift på fraser, farve hver 2. takt
     }
   }
-  if (snare && now - music.lastSnare > 160) { music.lastSnare = now; if (active && !wasBreak && Math.random() < 0.35) autoChange('snare'); }
+  if (snare && now - music.lastSnare > 160) { music.lastSnare = now; } // lilletromme: ingen tilfældige skift (det gjorde auto hovedløs)
   if (hat && now - music.lastHat > 90) { music.lastHat = now; hatKick = 1; }
 }
-// hvor ofte skifter vi mønster på kick? afhænger af energien: vildt = hvert 2. slag, roligt = hvert 8.
-function pickEvery() { return music.energy > 0.75 ? 2 : music.energy > 0.45 ? 4 : 8; }
 function onDrop(now) {
   if (now - music.lastDrop < 2000) return;
   music.lastDrop = now; dropEnv = 1;
