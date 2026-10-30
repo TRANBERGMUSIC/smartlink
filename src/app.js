@@ -1689,7 +1689,7 @@ function computeFrame(now) {
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
   if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
     // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
-    const line = -1 + 2 * zoneEff() + (cfg.zoneGap ?? 0.18) + ((cfg.patLift || {})[st.pattern] || 0), edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
+    const pbz = patBox(st.pattern), line = -1 + 2 * zoneEff() + (cfg.zoneEdge || 0) + (cfg.zoneGap ?? 0.18) + ((cfg.patLift || {})[st.pattern] || 0) + (pbz.hy < 0.12 ? 0.12 : 0) /* tynde/lige mønstre forsvinder helt hvis de rammer kanten → ekstra løft */, edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
     const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
     const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
     const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
@@ -2297,7 +2297,7 @@ function animTap() { // tryk hver gang laserens animation starter forfra → app
   const T = (animTaps[animTaps.length - 1] - animTaps[0]) / (animTaps.length - 1) / 1000, measured = fr.length / T;
   const ptsAvg = fr.reduce((a, f) => a + (f.xy ? f.xy.length / 2 : 0), 0) / fr.length, d = decodedFrame(), fd = d ? d.fps : fpsFrac(st.fps) * 100;
   cfg.animPat = cfg.animPat || {}; cfg.animPat[st.pattern] = Math.round(measured / Math.max(1, fd) * 1000) / 1000; // pr. mønster: LIVE følger netop dette mønster 1:1
-  if (measured < fd * 0.97 && ptsAvg > 0) { cfg.kpps = Math.round(measured * ptsAvg / 100) / 10; cfg.animScale = 1; } else { cfg.kpps = 0; cfg.animScale = Math.round(measured / Math.max(1, fd) * 1000) / 1000; }
+  if (measured < fd * 0.97 && ptsAvg > 0) { cfg.kpps = Math.round(measured * ptsAvg / 100) / 10; cfg.animScale = 1; } else { cfg.animScale = Math.round(measured / Math.max(1, fd) * 1000) / 1000; } // målt langsommere = scannerne bremser (kpps); hurtigere = tempo-faktor
   saveCfg(); if (typeof syncAnimUI === 'function') syncAnimUI(); toast(t('anim.synced', { f: measured.toFixed(1), k: cfg.kpps || '–' }));
 }
 function previewTick(now) {
@@ -2319,7 +2319,7 @@ function previewTick(now) {
     // samme tempo som laseren: valgt fps (justérbar), men aldrig hurtigere end scannerne kan tegne frames med så mange punkter
     if (pvPat !== st.pattern) { pvPat = st.pattern; pvFrame = 0; } // laseren starter animationen forfra ved mønsterskift
     const curF = fr[Math.floor(pvFrame) % fr.length], pts = curF && curF.xy ? curF.xy.length / 2 : 0;
-    const dd = decodedFrame(); const apr = cfg.animPat && cfg.animPat[st.pattern]; let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (apr || cfg.animScale || 1); if (!apr && pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts); // målt for dette mønster går forud for det generelle // præcis den fps kanal 3 giver
+    const dd = decodedFrame(); const apr = cfg.animPat && cfg.animPat[st.pattern]; let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (apr || cfg.animScale || 1); if (!apr && pts > 0) fps = Math.min(fps, (cfg.kpps || 20) * 1000 / pts); // laseren kan ikke tegne hurtigere end scannerne (standard 20 kpps fra SD) – så LIVE heller ikke // målt for dette mønster går forud for det generelle // præcis den fps kanal 3 giver
     if (!st.freeze) pvFrame += (Math.min(250, now - pvLast) / 1000) * fps; pvLast = now;
     const rawLine = (vertical, rx, ry, len, col, lw) => { // streg i rå laser-koordinater tegnet ind i boksen
       const [ax, ay] = rawToApp(rx, ry); const [px, py] = boxPt(B, ax, ay); const hl = len * B.upl;
@@ -3090,6 +3090,13 @@ bindSetting('universe', 'universe', (v) => clamp(+v | 0, 0, 32767));
 bindSetting('address', 'address', (v) => clamp(+v | 0, 1, 479));
 bindSetting('rate', 'rate', (v) => clamp(+v | 0, 10, 44));
 bindSetting('zone', 'zone', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%'));
+// zone-kant: laseren tegner sin streg-mønster præcis dér, hvor appen tror zonen slutter. Ses stregen ikke, trykkes ▲ indtil den lige netop er synlig → Gem.
+{ let ze = null; const line0 = () => -1 + 2 * zoneEff(), paint = () => { $('#zeVal').textContent = ze ? t('ze.val', { v: Math.round((ze.y - line0()) * 100) }) : ''; };
+  const go = () => { con.pos = [cfg.ctrX || 0, clamp(ze.y, -1, 1)]; sendNow(); paint(); };
+  $('#zeStart').onclick = () => { if (!(cfg.zone > 0)) { modal(t('pv.zoneFirst'), null); return; } ze = { y: line0() + (cfg.zoneEdge || 0), pat: st.pattern, size: st.size }; setPattern(cfg.linePattern || 112, true); st.size = 0.6; $('#zeBox').hidden = false; go(); };
+  $('#zeUp').onclick = () => { if (ze) { ze.y += 0.02; go(); } }; $('#zeDown').onclick = () => { if (ze) { ze.y -= 0.02; go(); } };
+  const end = (save) => { if (!ze) return; if (save) { cfg.zoneEdge = Math.round((ze.y - line0()) * 1000) / 1000; saveCfg(); toast(t('ze.saved', { v: Math.round(cfg.zoneEdge * 100) })); } con.pos = null; setPattern(ze.pat, true); st.size = ze.size; ze = null; $('#zeBox').hidden = true; sendNow(); paint(); };
+  $('#zeSave').onclick = () => end(true); $('#zeCancel').onclick = () => end(false); }
 if (cfg.zoneGap == null || (cfg.zoneGap === 0.06 && !cfg.mig3010gap)) cfg.zoneGap = 0.18; cfg.mig3010gap = true; // 30/10: tæt på zonen kom mønstrene slet ikke frem → mere luft som standard bindSetting('zoneGap', 'zoneGap', (v) => v / 100, (v) => v + '%');
 bindSetting('zoneSide', 'zoneSide');
 bindSetting('autoUniverse', 'autoUniverse');
