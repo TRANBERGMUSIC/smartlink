@@ -539,9 +539,19 @@ ipcMain.handle('update-install', async (_e, url) => {
     await new Promise((res, rej) => execFile('/usr/bin/ditto', [newApp, staged], (err, so, se) => (err ? rej(new Error('kopiering: ' + (se || err.message))) : res())));
     try { execFile('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', staged], () => {}); } catch (_) {}
     try { fs.rmSync(oldPath, { recursive: true, force: true }); } catch (_) {}
-    fs.renameSync(appPath, oldPath); log('gammel → ' + oldPath);
-    fs.renameSync(staged, finalPath); log('ny → ' + finalPath);
     const { spawn } = require('child_process');
+    try { fs.renameSync(appPath, oldPath); log('gammel → ' + oldPath); }
+    catch (e) {
+      // macOS (Appadministration / beskyttet mappe som Overførsler) må ikke ændre den installerede app → læg den nye ved siden af med versionsnummer og start den
+      log('kan ikke flytte den gamle app (' + e.code + ') – lægger den nye ved siden af');
+      const ver = (/\/v?(\d+\.\d+\.\d+)\//.exec(url) || [])[1] || 'ny', side = path.join(dir, found.replace(/\.app$/, '') + ' ' + ver + '.app');
+      try { fs.rmSync(side, { recursive: true, force: true }); } catch (_) {}
+      fs.renameSync(staged, side); log('ny → ' + side);
+      spawn('/bin/sh', ['-c', `sleep 1; /usr/bin/open "${side}"`], { detached: true, stdio: 'ignore' }).unref();
+      log('genstarter (side om side)'); setTimeout(() => app.quit(), 400);
+      return { ok: true, side };
+    }
+    fs.renameSync(staged, finalPath); log('ny → ' + finalPath);
     spawn('/bin/sh', ['-c', `sleep 1; /usr/bin/open "${finalPath}"; sleep 8; rm -rf "${oldPath}"`], { detached: true, stdio: 'ignore' }).unref();
     log('genstarter'); setTimeout(() => app.quit(), 400);
     return { ok: true };
