@@ -2756,7 +2756,7 @@ function autoPose(tier, reason) {
 }
 function autoChange(reason = 'phrase') {
   if (showPlaying && !$('#record').checked) return; // et kørende show bestemmer selv
-  const now = performance.now(), tier = reason === 'break' ? 'low' : reason === 'drop' ? 'high' : energyTier();
+  const now = performance.now(), tier = reason === 'break' ? 'low' : reason === 'drop' || reason === 'strobe' ? 'high' : energyTier();
   // kun farveskift (mellem mønsterskiftene): næste farve i temaet – effekter med egne farver får dem af og til tilbage
   if (reason === 'color') { const own = fxPool().includes(st.pattern) && Math.random() < 0.15; st.color = autoColor(own ? 'orig' : 'theme'); st.colorCycle = false; saveLook(); syncLookUI(); return; }
   if (reason === 'drop' || reason === 'return') dir.theme = (dir.theme + 1 + Math.floor(Math.random() * (THEMES.length - 1))) % THEMES.length; // nyt tema ved drop
@@ -2852,6 +2852,7 @@ function musicTick(now) {
     if (active) {
       sendNow();
       if (wasBreak) onDrop(now);                                  // bassen er tilbage efter en pause → DROP
+      else if (strobeHold) { dir.strobeN = (dir.strobeN || 0) + 1; autoChange(dir.strobeN % 2 ? 'color' : 'strobe'); } // strobe holdes: nyt mønster hvert 2. slag og ny farve imellem
       else { dir.sinceChange++; if (dir.sinceChange >= phraseLen()) autoChange('phrase'); else if (dir.sinceChange % 4 === 0) autoChange('color'); } // skift på fraser, farve hver takt
     }
   }
