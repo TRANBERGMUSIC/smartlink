@@ -1627,7 +1627,9 @@ function computeFrame(now) {
   const pulseAmt = Math.max(st.pulse * pulseEnv, bassP * 0.55) * 0.6;
   // størrelse i app-enheder (1 = fylder det kalibrerede område) → laserens egen skala
   const calScale = clamp(Math.min(cfg.cal.sx, cfg.cal.sy), 0.05, 1);
-  let sizeApp = clamp(sm.size * calm * (1 - pulseAmt) * (1 + dropEnv * 0.25), 0, 1);
+  // musikstyring: højden står stille (aldrig større, aldrig små mønstre) – musikken lever kun i bredden (X), som pumper bredere på basslagene
+  let sizeApp = live ? clamp(sm.size, 0, 1) : clamp(sm.size * calm * (1 - pulseAmt) * (1 + dropEnv * 0.25), 0, 1);
+  const sizeX0 = live ? clamp(sm.size * (0.82 + 0.18 * Math.max(bassP, pulseEnv, dropEnv)), 0, 1) : null;
   const size = clamp(sizeApp * calScale, 0.02, 1);
   const sizeVal = (1 - size) * 255;
   // farve
@@ -1683,7 +1685,7 @@ function computeFrame(now) {
     sendX = clamp(con.pos[0], -1, 1); sendY = clamp(con.pos[1], -1, 1);
     if (cfg.lim && cfg.lim.on) [axc, ayc] = sentToApp(sendX, sendY);
   }
-  let sizeAppX = null; // egen bredde (kun Pro Mode over sikkerhedszonen – se nedenfor)
+  let sizeAppX = sizeX0; // egen bredde (kun Pro Mode over sikkerhedszonen – se nedenfor)
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
   if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
     // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
@@ -1697,8 +1699,8 @@ function computeFrame(now) {
     // (kun når mønstret ikke drejer – et strakt mønster der drejer kunne ellers nå ned i zonen)
     const wideOk = cfg.wideX !== false && !rot && Math.abs(s_) < 0.01;
     let frX = fr_;
-    if (wideOk) { if (fr_ > wantW) { sizeAppX = Math.min(sizeApp, toApp(wantW)); frX = patHalfSent(sizeAppX); } else sizeAppX = sizeApp; if (fr_ > wantH) { sizeApp = Math.min(sizeApp, toApp(wantH)); fr_ = patHalfSent(sizeApp); } }
-    else { if (fr_ > want) { sizeApp = Math.min(sizeApp, toApp(want)); fr_ = patHalfSent(sizeApp); } frX = fr_; }
+    if (wideOk) { const bx = sizeX0 ?? sizeApp; sizeAppX = Math.min(bx, toApp(wantW)); frX = patHalfSent(sizeAppX); if (fr_ > wantH) { sizeApp = Math.min(sizeApp, toApp(wantH)); fr_ = patHalfSent(sizeApp); } }
+    else { if (fr_ > want) { sizeApp = Math.min(sizeApp, toApp(want)); fr_ = patHalfSent(sizeApp); } frX = fr_; sizeAppX = null; }
     const hw = ux * frX, hh = uy * fr_;
     sendX = clamp(sendX, -edge + hw, Math.max(-edge + hw, edge - hw)); sendY = clamp(sendY, Math.min(edge, line + hh), Math.max(line + hh, edge - hh)); [axc, ayc] = sentToApp(sendX, sendY);
   }
@@ -2723,7 +2725,7 @@ function fxPool() {
 const dir = { hist: [], theme: 0, colorStep: 0, section: 'normal', lastChange: 0, sinceChange: 0, silentSince: 0 };
 const FX_TIER = { VIFTE: 'low', BOLGE: 'low', KEGLE: 'low', FLADE: 'mid', SWEEP: 'mid', NET: 'mid', KRYDS: 'high', JAGT: 'high', KAOS: 'high' };
 // farvetemaer (hver = 2–3 farver der passer sammen); breakdown bruger altid et koldt tema
-const THEMES = [[[0, 255, 60], [255, 0, 40]], [[0, 120, 255], [0, 255, 255]], [[255, 0, 160], [0, 90, 255]], [[255, 40, 0], [255, 190, 0]], [[0, 255, 60], [0, 120, 255]], [[255, 0, 40], [255, 255, 255]], [[170, 0, 255], [255, 0, 120]], [[255, 255, 255], [0, 160, 255]]];
+const THEMES = [[[255, 0, 0]], [[255, 200, 0]], [[0, 255, 0]], [[0, 80, 255]], [[255, 0, 0], [255, 200, 0]], [[0, 255, 60], [255, 0, 40]], [[0, 120, 255], [0, 255, 255]], [[255, 0, 160], [0, 90, 255]], [[255, 40, 0], [255, 190, 0]], [[0, 255, 60], [0, 120, 255]], [[255, 0, 40], [255, 255, 255]], [[170, 0, 255], [255, 0, 120]], [[255, 255, 255], [0, 160, 255]]];
 const COOL = [[0, 90, 255], [0, 200, 255], [120, 0, 255]];
 function fxPool() {
   const out = new Set(), isFx = (p) => p.fx || (p.doc && p.doc.frames && p.doc.frames[0] && p.doc.frames[0].layers && p.doc.frames[0].layers[0] && p.doc.frames[0].layers[0].name === 'Stråler');
@@ -2749,14 +2751,14 @@ function autoPose(tier, reason) {
   Object.assign(st, { rotSpeed: 0, rotAngle: 0, freeze: false, posX: 0, posY: cfg.zone > 0 && cfg.dmxMode === 'pro' ? -1 : 0, pulse: 0, strobe: 0 });
   const sweep = tier === 'high' ? 0.55 : tier === 'mid' ? 0.35 : 0;
   if (sweep && Math.random() < (reason === 'drop' ? 0.8 : 0.45)) Object.assign(st, { move: 'sweep', moveAmt: sweep, moveSpeed: tier === 'high' ? 0.45 : 0.25 }); else st.move = 'none';
-  st.size = tier === 'low' ? 0.75 : 0.9;
+  st.size = 1; // altid så bredt som muligt – højden passes til zonen af laser-motoren
   st.fps = clamp(0.3 + music.energy * 0.45 + (reason === 'drop' ? 0.15 : 0), 0.2, 0.95);
 }
 function autoChange(reason = 'phrase') {
   if (showPlaying && !$('#record').checked) return; // et kørende show bestemmer selv
   const now = performance.now(), tier = reason === 'break' ? 'low' : reason === 'drop' ? 'high' : energyTier();
   // kun farveskift (mellem mønsterskiftene): næste farve i temaet – effekter med egne farver får dem af og til tilbage
-  if (reason === 'color') { const own = fxPool().includes(st.pattern) && Math.random() < 0.35; st.color = autoColor(own ? 'orig' : 'theme'); st.colorCycle = false; saveLook(); syncLookUI(); return; }
+  if (reason === 'color') { const own = fxPool().includes(st.pattern) && Math.random() < 0.15; st.color = autoColor(own ? 'orig' : 'theme'); st.colorCycle = false; saveLook(); syncLookUI(); return; }
   if (reason === 'drop' || reason === 'return') dir.theme = (dir.theme + 1 + Math.floor(Math.random() * (THEMES.length - 1))) % THEMES.length; // nyt tema ved drop
   dir.section = reason === 'break' ? 'break' : tier;
   const ap = cfg.autoPool || 'mix', fx = fxPool(), fxs_ = new Set(fx);
@@ -2767,14 +2769,14 @@ function autoChange(reason = 'phrase') {
   else n = pickFresh(othersOk);
   st.pattern = n; activeScene = -1; autoPose(tier, reason);
   // farver: drop/høj energi = temaets farver eller effektens egne; breakdown = koldt; mønstre uden egne farver får temaet
-  st.colorCycle = false; st.color = useFx && reason !== 'break' && Math.random() < 0.55 ? autoColor('orig') : autoColor('theme');
+  st.colorCycle = false; st.color = useFx && reason !== 'break' && Math.random() < 0.2 ? autoColor('orig') : autoColor('theme'); // mest ensfarvede streger (fx kun røde eller gule), regnbuen kun nogle gange
   if (reason === 'drop') { st.strobe = 0.3; setTimeout(() => { if (st.pattern === n) { st.strobe = 0; saveLook(); } }, 1200); }
   dir.lastChange = now; dir.sinceChange = 0;
   saveLook(); syncLookUI(); renderScenes(); $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
   recordHook((reason === 'drop' ? '⚡ ' : reason === 'break' ? '☾ ' : '') + (patNames[n] || '#' + n));
 }
 // hvor mange slag mellem mønsterskift: en frase = 16 slag (4 takter); høj energi skifter hver 8., rolig hver 32.
-function phraseLen() { const t_ = energyTier(); return t_ === 'high' ? 8 : t_ === 'mid' ? 16 : 32; }
+function phraseLen() { const t_ = energyTier(); return t_ === 'high' ? 4 : t_ === 'mid' ? 8 : 16; } // 1 takt ved høj energi, 2 ved mellem, 4 ved rolig
 
 function tap() { onBeat(); }
 
@@ -2850,7 +2852,7 @@ function musicTick(now) {
     if (active) {
       sendNow();
       if (wasBreak) onDrop(now);                                  // bassen er tilbage efter en pause → DROP
-      else { dir.sinceChange++; if (dir.sinceChange >= phraseLen()) autoChange('phrase'); else if (dir.sinceChange % 8 === 0) autoChange('color'); } // skift på fraser, farve hver 2. takt
+      else { dir.sinceChange++; if (dir.sinceChange >= phraseLen()) autoChange('phrase'); else if (dir.sinceChange % 4 === 0) autoChange('color'); } // skift på fraser, farve hver takt
     }
   }
   if (snare && now - music.lastSnare > 160) { music.lastSnare = now; } // lilletromme: ingen tilfældige skift (det gjorde auto hovedløs)
