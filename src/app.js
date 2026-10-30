@@ -45,6 +45,10 @@ if (!cfg.v37) { cfg.posFmt = 's'; cfg.yFlip = false; cfg.v37 = true; store.set('
 if (!(cfg.scan >= 0 && cfg.scan <= 3)) cfg.scan = 0;
 let master = store.get('master', 0.5);
 let blackout = true; // laseren starter altid SLUKKET
+let strobeHold = false; // strobe-knap holdes nede
+const musicLive = () => autoMode === 'mic' && !!micStream;
+// strobe i takt: laseren er kun synlig et øjeblik på hvert basslag og hi-hat
+function strobeGate() { if (!strobeHold || !musicLive()) return true; const n = performance.now(); return n - music.lastKick < 70 || n - music.lastHat < 45; }
 let autoMute = false; // auto: stille passage → laseren usynlig (ikke slukket), kommer tilbage med det samme
 let holdMute = false; // "hold"-blackout fra Wolfmix: laseren er usynlig mens knappen holdes, men stadig tændt (kommer tilbage ved slip)
 let patNames = store.get('patNames', {});   // { "12": "Tunnel" }
@@ -1633,7 +1637,7 @@ function computeFrame(now) {
   const liveStrobe = live && dropEnv > 0.6 ? 0.35 : 0;
   const bright = live ? clamp(0.55 + 0.45 * Math.max(music.energy, bassP), 0.3, 1) : 1;
 
-  const on = !blackout && !holdMute && !autoMute;
+  const on = !blackout && !holdMute && !autoMute && strobeGate();
   // skærm-koordinater (0..1) inkl. hvor brugeren har flyttet mønsteret hen; laser-koordinater (-1..1, Y vendt)
   x = clamp(x + sm.x / 2, 0, 1); y = clamp(y + sm.y / 2, 0, 1);
   const lx = (x - 0.5) * 2, ly = (y - 0.5) * 2 * YF();
@@ -2842,7 +2846,7 @@ function musicTick(now) {
     const gap = now - music.lastKick; music.lastKick = now; music.kickCount++;
     if (gap > 250 && gap < 1500) { intervals.push(gap); if (intervals.length > 8) intervals.shift(); }
     if (intervals.length >= 3) { const so = [...intervals].sort((a, b) => a - b); bpm = 60000 / so[so.length >> 1]; }
-    pulseEnv = 1; flashBeat();
+    pulseEnv = 1; flashBeat(); if (strobeHold) { sendNow(); setTimeout(sendNow, 75); }
     if (active) {
       sendNow();
       if (wasBreak) onDrop(now);                                  // bassen er tilbage efter en pause → DROP
@@ -2850,7 +2854,7 @@ function musicTick(now) {
     }
   }
   if (snare && now - music.lastSnare > 160) { music.lastSnare = now; } // lilletromme: ingen tilfældige skift (det gjorde auto hovedløs)
-  if (hat && now - music.lastHat > 90) { music.lastHat = now; hatKick = 1; }
+  if (hat && now - music.lastHat > 90) { music.lastHat = now; hatKick = 1; if (strobeHold) { sendNow(); setTimeout(sendNow, 50); } }
 }
 function onDrop(now) {
   if (now - music.lastDrop < 2000) return;

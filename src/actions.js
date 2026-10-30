@@ -35,7 +35,17 @@ const SL_ACTIONS = (() => {
   add('move.next', 'act.moveNext', 'trigger', () => { st.move = MOVES[(MOVES.indexOf(st.move) + 1) % MOVES.length]; activeScene = -1; look(); }, 'look');
   add('move.none', 'act.moveNone', 'trigger', () => { st.move = 'none'; activeScene = -1; look(); }, 'look');
   add('pattern.set', 'act.patSet', 'trigger', (n) => { n = n | 0; if (n >= 1 && n <= 255) setPattern(n); }, 'look'); // mønster-nr. vælges pr. knap (onPressArg)
-  let blindPrev = null; const blind = (on) => { if (on && !blindPrev) { blindPrev = { color: structuredClone(st.color), cc: st.colorCycle, strobe: st.strobe, master }; st.colorCycle = false; st.strobe = 0; setColor({ mode: 'rgb', rgb: [255, 255, 255] }); setMaster(1); } else if (!on && blindPrev) { const b = blindPrev; blindPrev = null; setColor(b.color); st.colorCycle = b.cc; st.strobe = b.strobe; setMaster(b.master); } look(); };
+  // blinder: langsomme, brede stråler i hvidt ved 50 % lysstyrke (mønstret holdes over sikkerhedszonen af laser-motoren) – slip = som før
+  let blindPrev = null; const blind = (on) => {
+    if (on && !blindPrev) {
+      blindPrev = { pattern: st.pattern, color: structuredClone(st.color), cc: st.colorCycle, strobe: st.strobe, master, fps: st.fps, move: st.move, rotSpeed: st.rotSpeed, rotAngle: st.rotAngle, posY: st.posY, size: st.size };
+      const fx = typeof fxPool === 'function' ? fxPool() : [], calm = fx.filter((n) => typeof fxTierOf === 'function' && fxTierOf(n) === 'low');
+      if (fx.length) st.pattern = (calm.length ? calm : fx)[0];
+      Object.assign(st, { colorCycle: false, strobe: 0, fps: 0.15, move: 'none', rotSpeed: 0, rotAngle: 0, size: 1, posY: cfg.zone > 0 && cfg.dmxMode === 'pro' ? -1 : st.posY });
+      setColor({ mode: 'rgb', rgb: [255, 255, 255] }); setMaster(0.5);
+    } else if (!on && blindPrev) { const b = blindPrev; blindPrev = null; Object.assign(st, { pattern: b.pattern, colorCycle: b.cc, strobe: b.strobe, fps: b.fps, move: b.move, rotSpeed: b.rotSpeed, rotAngle: b.rotAngle, posY: b.posY, size: b.size }); setColor(b.color); setMaster(b.master); }
+    look();
+  };
   add('blinder.toggle', 'act.blinderToggle', 'trigger', () => blind(!blindPrev), 'look');
   add('strobe.toggle', 'act.strobe', 'trigger', () => { st.strobe = st.strobe > 0 ? 0 : 0.6; look(); }, 'look');
   add('pos.center', 'act.center', 'trigger', () => { setPos('posX', 0); setPos('posY', 0); }, 'look');
@@ -43,7 +53,8 @@ const SL_ACTIONS = (() => {
   // ---- hold (virker kun mens knappen holdes nede; slip = tilbage som før) ----
   add('hold.blank', 'act.holdBlank', 'hold', (down) => { holdMute = !!down; }, 'hold'); // usynlig, IKKE slukket – ingen ny bekræftelse ved slip
   add('hold.blinder', 'act.holdBlinder', 'hold', (down) => blind(!!down), 'hold'); // fuldt hvidt lys, fuld lysstyrke mens holdt
-  let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; st.strobe = 0.85; } else if (strobePrev != null) { st.strobe = strobePrev; strobePrev = null; } look(); }, 'hold');
+  // strobe mens knappen holdes: med musikstyring blinker laseren på basslag og hi-hats (i takt), ellers laserens egen strobe
+  let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; strobeHold = true; st.strobe = musicLive() ? 0 : 0.85; } else if (strobePrev != null) { strobeHold = false; st.strobe = strobePrev; strobePrev = null; } look(); }, 'hold');
   let sizePrev = null; add('hold.full', 'act.holdFull', 'hold', (down) => { if (down) { if (sizePrev == null) sizePrev = st.size; setSize(1); } else if (sizePrev != null) { setSize(sizePrev); sizePrev = null; } }, 'hold');
   let masterPrev = null; add('hold.bright', 'act.holdBright', 'hold', (down) => { if (down) { if (masterPrev == null) masterPrev = master; setMaster(1); } else if (masterPrev != null) { setMaster(masterPrev); masterPrev = null; } }, 'hold');
   add('hold.smoke', 'act.holdSmoke', 'hold', (down) => { if (typeof wolfSmoke === 'function') wolfSmoke(!!down); }, 'hold'); // røg mens knappen holdes (via Wolfmix)
