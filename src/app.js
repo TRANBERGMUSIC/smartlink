@@ -1689,7 +1689,7 @@ function computeFrame(now) {
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
   if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
     // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
-    const line = -1 + 2 * zoneEff() + (cfg.zoneGap ?? 0.18), edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
+    const line = -1 + 2 * zoneEff() + (cfg.zoneGap ?? 0.18) + ((cfg.patLift || {})[st.pattern] || 0), edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
     const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
     const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
     const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
@@ -2447,6 +2447,7 @@ function openPatPop(n, anchor) {
   $('#ppFav').classList.toggle('on', favs.has(n)); $('#ppFlip').classList.toggle('on', patFlip.has(n)); $('#ppMirror').classList.toggle('on', !!(patMirror[n] && patMirror[n].y)); $('#ppMirrorX').classList.toggle('on', !!(patMirror[n] && patMirror[n].x));
   $('#ppMirror').disabled = !patAvail.has(n); $('#ppMirrorX').disabled = !patAvail.has(n); $('#ppDelete').disabled = !patAvail.has(n); $('#ppQuad').disabled = !patAvail.has(n); $('#ppQuad').classList.toggle('on', !!mirrorSlots[n]);
   const key = Object.keys(keymap).find((k) => keymap[k] === n); $('#ppKey').value = key ? key.toUpperCase() : '';
+  $('#ppLift').value = Math.round(((cfg.patLift || {})[n] || 0) * 100);
   $('#ppLine').classList.toggle('on', cfg.linePattern === n);
   const cv = $('#ppThumb'); const [g, W, H] = sizeCanvas(cv); g.clearRect(0, 0, W, H); const fr = patData.get(n); if (fr && fr.length) drawIlda(g, W, H, firstVisible(fr), { glow: 1.1, ...mirrorOpts(n) });
   // placér ved siden af flisen, inden for vinduet
@@ -2467,6 +2468,9 @@ $('#ppMirrorX').onclick = () => mirrorPatternFile(ppN, 'x');
 $('#ppQuad').onclick = () => makeMirrorCopies(ppN);
 $('#ppKey').addEventListener('input', (e) => { const k = e.target.value.trim().toLowerCase(); for (const kk of Object.keys(keymap)) if (keymap[kk] === ppN) delete keymap[kk]; if (k) keymap[k] = ppN; store.set('keymap', keymap); renderKeyboard(); e.target.value = k.toUpperCase(); });
 $('#ppLine').onclick = () => { cfg.linePattern = ppN; $('#linePattern').value = ppN; saveCfg(); $('#ppLine').classList.add('on'); };
+$('#ppLift').addEventListener('change', (e) => { const v = clamp(+e.target.value || 0, 0, 80); cfg.patLift = cfg.patLift || {}; if (v) cfg.patLift[ppN] = v / 100; else delete cfg.patLift[ppN]; e.target.value = v; saveCfg(); sendNow(); });
+// 30/10: 181–183 lå for tæt på zonen og kom ikke frem → løftet lidt fra start (kan ændres med højreklik på mønstret)
+if (!cfg.mig3010lift) { cfg.patLift = Object.assign({ 181: 0.15, 182: 0.15, 183: 0.15 }, cfg.patLift || {}); cfg.mig3010lift = true; saveCfg(); }
 $('#ppShow').onclick = () => { setPattern(ppN); closePatPop(); };
 $('#ppDelete').onclick = async () => { const ok = await modal(t('pat.deleteConfirm', { n: ppN }), null); if (ok === null) return; await window.laser.patDelete(ppN); patAvail.delete(ppN); patData.delete(ppN); favs.delete(ppN); store.set('favs', [...favs]); closePatPop(); renderPatterns(); renderKeyboard(); };
 async function editPattern(n, anchor) { openPatPop(n, anchor || $(`.pat[data-n="${n}"]`) || document.body); }
