@@ -29,7 +29,11 @@ const SL_ACTIONS = (() => {
   add('preset.random', 'act.random', 'trigger', () => randomPreset(), 'look');
   for (let i = 0; i < 12; i++) add('preset.' + (i + 1), 'act.preset', 'trigger', () => { if (PRESETS[i]) applyPreset(i); }, 'preset');
   for (let i = 0; i < 9; i++) add('scene.' + (i + 1), 'act.scene', 'trigger', () => { if (scenes[i]) recallScene(i); }, 'scene');
-  add('color.orig', 'act.colorOrig', 'trigger', () => setColor({ mode: 'orig', rgb: st.color.rgb }), 'look');
+  add('color.orig', 'act.colorOrig', 'trigger', () => { colorLock = true; setColor({ mode: 'orig', rgb: st.color.rgb }); }, 'look');
+  // faste farver på en knap: farven låses, så auto og strobe ikke skifter den – "Farve: auto" giver farven fri igen
+  for (const [k, rgb] of [['white', [255, 255, 255]], ['red', [255, 0, 0]], ['green', [0, 255, 0]], ['blue', [0, 60, 255]], ['yellow', [255, 200, 0]], ['cyan', [0, 255, 255]], ['magenta', [255, 0, 200]], ['orange', [255, 90, 0]]])
+    add('color.' + k, 'act.color.' + k, 'trigger', () => { colorLock = true; setColor({ mode: 'rgb', rgb: rgb.slice() }); }, 'look');
+  add('color.auto', 'act.color.auto', 'trigger', () => { colorLock = false; if (typeof autoChange === 'function' && autoMode === 'mic') autoChange('color'); }, 'look');
   add('color.next', 'act.colorNext', 'trigger', () => { const sw = SWATCHES.filter((s) => s.rgb); const cur = st.color.mode === 'rgb' ? sw.findIndex((s) => s.rgb.join() === st.color.rgb.join()) : -1; const n = sw[(cur + 1) % sw.length]; if (n) setColor({ mode: 'rgb', rgb: n.rgb.slice() }); }, 'look');
   add('color.cycle', 'act.colorCycle', 'trigger', () => { st.colorCycle = !st.colorCycle; $('#colorCycle').checked = st.colorCycle; look(); }, 'look');
   add('move.next', 'act.moveNext', 'trigger', () => { st.move = MOVES[(MOVES.indexOf(st.move) + 1) % MOVES.length]; activeScene = -1; look(); }, 'look');

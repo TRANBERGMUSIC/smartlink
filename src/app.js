@@ -45,6 +45,7 @@ if (!cfg.v37) { cfg.posFmt = 's'; cfg.yFlip = false; cfg.v37 = true; store.set('
 if (!(cfg.scan >= 0 && cfg.scan <= 3)) cfg.scan = 0;
 let master = store.get('master', 0.5);
 let blackout = true; // laseren starter altid SLUKKET
+let colorLock = false; // farve valgt på en knap → auto/strobe skifter den ikke, før 'Farve: auto' trykkes
 let strobeHold = false; // strobe-knap holdes nede
 const musicLive = () => autoMode === 'mic' && !!micStream;
 // strobe i takt: laseren er kun synlig et øjeblik på hvert basslag og hi-hat
@@ -2767,6 +2768,7 @@ function autoChange(reason = 'phrase') {
   if (showPlaying && !$('#record').checked) return; // et kørende show bestemmer selv
   const now = performance.now(), tier = reason === 'break' ? 'low' : reason === 'drop' || reason === 'strobe' ? 'high' : energyTier();
   // kun farveskift (mellem mønsterskiftene): næste farve i temaet – effekter med egne farver får dem af og til tilbage
+  if (reason === 'color' && colorLock) return;
   if (reason === 'color') { const own = fxPool().includes(st.pattern) && Math.random() < 0.15; st.color = autoColor(own ? 'orig' : 'theme'); st.colorCycle = false; saveLook(); syncLookUI(); return; }
   if (reason === 'drop' || reason === 'return') dir.theme = (dir.theme + 1 + Math.floor(Math.random() * (THEMES.length - 1))) % THEMES.length; // nyt tema ved drop
   dir.section = reason === 'break' ? 'break' : tier;
@@ -2778,7 +2780,8 @@ function autoChange(reason = 'phrase') {
   else n = pickFresh(othersOk);
   st.pattern = n; activeScene = -1; autoPose(tier, reason);
   // farver: drop/høj energi = temaets farver eller effektens egne; breakdown = koldt; mønstre uden egne farver får temaet
-  st.colorCycle = false; st.color = useFx && reason !== 'break' && Math.random() < 0.2 ? autoColor('orig') : autoColor('theme'); // mest ensfarvede streger (fx kun røde eller gule), regnbuen kun nogle gange
+  const keepCol = colorLock ? structuredClone(st.color) : null;
+  st.colorCycle = false; st.color = keepCol || (useFx && reason !== 'break' && Math.random() < 0.2 ? autoColor('orig') : autoColor('theme')); // mest ensfarvede streger (fx kun røde eller gule), regnbuen kun nogle gange
   if (reason === 'drop') { st.strobe = 0.3; setTimeout(() => { if (st.pattern === n) { st.strobe = 0; saveLook(); } }, 1200); }
   dir.lastChange = now; dir.sinceChange = 0;
   saveLook(); syncLookUI(); renderScenes(); $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));
