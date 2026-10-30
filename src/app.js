@@ -2144,6 +2144,7 @@ function syncZoneUI() {
   const o = $('#zone').parentElement.querySelector('output'); if (o) o.textContent = txt;
 }
 $('#zoneLive').addEventListener('input', (e) => { cfg.zone = e.target.value / 100; saveCfg(); syncZoneUI(); });
+if (window.laser.onPowerResume) window.laser.onPowerResume(() => { startSending(); sendNow(); }); // vågnet fra dvale → DMX til laseren igen med det samme
 { const ps = () => $$('#autoPool button').forEach((b) => b.classList.toggle('active', b.dataset.p === (cfg.autoPool || 'mix'))); $$('#autoPool button').forEach((b) => { b.onclick = () => { cfg.autoPool = b.dataset.p; saveCfg(); ps(); }; }); ps(); }
 { const wb = $('#pvWide'); if (wb) { const pz = document.querySelector('.pv-zone'); if (pz && pz.parentElement) pz.parentElement.insertBefore(wb, pz); const sync = () => { wb.classList.toggle('active', cfg.wideX !== false); wb.title = t('pv.wideTip'); }; wb.onclick = () => { cfg.wideX = cfg.wideX === false; saveCfg(); sync(); if (typeof sendNow === 'function') sendNow(); }; sync(); } }
 $('#zone').addEventListener('input', syncZoneUI);

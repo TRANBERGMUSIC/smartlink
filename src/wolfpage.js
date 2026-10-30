@@ -167,6 +167,10 @@ function wmiApplyImport(triggers, signals) { const r = WolfMidi.importMonitor(wm
     if (ty === 'note' && v > 0) setTimeout(() => wmiHandle(WolfMidi.toBytes('note', ch, nr, 0), t('wmidi.simSrc')), 150); // knap slippes igen
   };
   wolfSmokeUI();
+  // efter dvale/skærmlås: hent MIDI-adgangen på ny (CoreMIDI kan have mistet MIDIMATE) – og prøv igen hvert 5. sek. hvis den forsvinder
+  const reMidi = () => { WMI.err = null; wmiInit().then(wmiStatus); };
+  if (window.laser.onPowerResume) window.laser.onPowerResume(() => setTimeout(reMidi, 1500));
+  let hadIn = false; setInterval(() => { const n = wmiInputs().length; if (n) hadIn = true; else if (hadIn) reMidi(); }, 5000);
   { const sb = $('#smokeBtn'); if (sb) { // hold = røg; slippes musen et andet sted eller mister vinduet fokus, slukkes røgen
     sb.addEventListener('pointerdown', (e) => { e.preventDefault(); wolfSmoke(true); }); const off = () => { if (wolfSmokeOn) wolfSmoke(false); };
     window.addEventListener('pointerup', off); window.addEventListener('blur', off); } }

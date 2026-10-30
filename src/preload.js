@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('laser', {
   outShutter: (open) => ipcRenderer.send('out-shutter', open),
   outClose: () => ipcRenderer.invoke('out-close'),
   onOutStatus: (fn) => ipcRenderer.on('out-status', (_e, s) => fn(s)),
+  onPowerResume: (fn) => ipcRenderer.on('power-resume', () => fn()),
   saveSdPackage: (title, files, table) => ipcRenderer.invoke('save-sd-package', { title, files, table }),
   artnetNodes: () => ipcRenderer.invoke('artnet-nodes'),
   usbFind: () => ipcRenderer.invoke('usb-find'),

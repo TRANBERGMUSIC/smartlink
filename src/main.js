@@ -559,6 +559,11 @@ ipcMain.handle('update-install', async (_e, url) => {
 });
 
 app.whenReady().then(() => {
+  // computeren må ikke falde i søvn mens SmartLink kører – ellers stopper DMX til laseren og Wolfmix-knapperne gør intet
+  try { const { powerSaveBlocker, powerMonitor } = require('electron'); powerSaveBlocker.start('prevent-app-suspension');
+    powerMonitor.on('resume', () => { try { win && win.webContents.send('power-resume'); } catch (_) {} }); // vågnet alligevel (låg lukket uden strøm) → genopret MIDI og DMX
+    powerMonitor.on('unlock-screen', () => { try { win && win.webContents.send('power-resume'); } catch (_) {} });
+  } catch (_) {}
   try { const me = path.resolve(app.getPath('exe'), '..', '..', '..'); const old = me + '.old'; if (fs.existsSync(old)) fs.rmSync(old, { recursive: true, force: true }); } catch (_) {}
   // fjern karantæne-mærket på den installerede app, så macOS ikke kører den fra en midlertidig kopi næste gang
   try { const me = path.resolve(app.getPath('exe'), '..', '..', '..'); if (me.endsWith('.app') && !me.includes('/AppTranslocation/')) execFile('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', me], () => {}); } catch (_) {}
