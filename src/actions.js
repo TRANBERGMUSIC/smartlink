@@ -41,7 +41,7 @@ const SL_ACTIONS = (() => {
       blindPrev = { pattern: st.pattern, color: structuredClone(st.color), cc: st.colorCycle, strobe: st.strobe, master, fps: st.fps, move: st.move, rotSpeed: st.rotSpeed, rotAngle: st.rotAngle, posY: st.posY, size: st.size };
       const fx = typeof fxPool === 'function' ? fxPool() : [], calm = fx.filter((n) => typeof fxTierOf === 'function' && fxTierOf(n) === 'low');
       if (fx.length) st.pattern = (calm.length ? calm : fx)[0];
-      Object.assign(st, { colorCycle: false, strobe: 0, fps: 0.15, move: 'none', rotSpeed: 0, rotAngle: 0, size: 1, posY: cfg.zone > 0 && cfg.dmxMode === 'pro' ? -1 : st.posY });
+      rotAcc = 0; Object.assign(st, { colorCycle: false, strobe: 0, fps: 0.15, move: 'none', rotSpeed: 0, rotAngle: 0, size: 1, posY: cfg.zone > 0 && cfg.dmxMode === 'pro' ? -1 : st.posY });
       setColor({ mode: 'rgb', rgb: [255, 255, 255] }); setMaster(0.5);
     } else if (!on && blindPrev) { const b = blindPrev; blindPrev = null; Object.assign(st, { pattern: b.pattern, colorCycle: b.cc, strobe: b.strobe, fps: b.fps, move: b.move, rotSpeed: b.rotSpeed, rotAngle: b.rotAngle, posY: b.posY, size: b.size }); setColor(b.color); setMaster(b.master); }
     look();

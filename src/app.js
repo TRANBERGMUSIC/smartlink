@@ -2297,7 +2297,7 @@ function animTap() { // tryk hver gang laserens animation starter forfra → app
   const T = (animTaps[animTaps.length - 1] - animTaps[0]) / (animTaps.length - 1) / 1000, measured = fr.length / T;
   const ptsAvg = fr.reduce((a, f) => a + (f.xy ? f.xy.length / 2 : 0), 0) / fr.length, d = decodedFrame(), fd = d ? d.fps : fpsFrac(st.fps) * 100;
   cfg.animPat = cfg.animPat || {}; cfg.animPat[st.pattern] = Math.round(measured / Math.max(1, fd) * 1000) / 1000; // pr. mønster: LIVE følger netop dette mønster 1:1
-  if (measured < fd * 0.97 && ptsAvg > 0) { cfg.kpps = Math.round(measured * ptsAvg / 100) / 10; cfg.animScale = 1; } else { cfg.animScale = Math.round(measured / Math.max(1, fd) * 1000) / 1000; } // målt langsommere = scannerne bremser (kpps); hurtigere = tempo-faktor
+  cfg.kpps = 0; cfg.animScale = Math.round(measured / Math.max(1, fd) * 1000) / 1000; // ét målt mønster sætter tempoet for alle (målt mønster følger sit eget præcist)
   saveCfg(); if (typeof syncAnimUI === 'function') syncAnimUI(); toast(t('anim.synced', { f: measured.toFixed(1), k: cfg.kpps || '–' }));
 }
 function previewTick(now) {
@@ -2319,7 +2319,7 @@ function previewTick(now) {
     // samme tempo som laseren: valgt fps (justérbar), men aldrig hurtigere end scannerne kan tegne frames med så mange punkter
     if (pvPat !== st.pattern) { pvPat = st.pattern; pvFrame = 0; } // laseren starter animationen forfra ved mønsterskift
     const curF = fr[Math.floor(pvFrame) % fr.length], pts = curF && curF.xy ? curF.xy.length / 2 : 0;
-    const dd = decodedFrame(); const apr = cfg.animPat && cfg.animPat[st.pattern]; let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (apr || cfg.animScale || 1); if (!apr && pts > 0) fps = Math.min(fps, (cfg.kpps || 20) * 1000 / pts); // laseren kan ikke tegne hurtigere end scannerne (standard 20 kpps fra SD) – så LIVE heller ikke // målt for dette mønster går forud for det generelle // præcis den fps kanal 3 giver
+    const dd = decodedFrame(); const apr = cfg.animPat && cfg.animPat[st.pattern]; let fps = (dd ? dd.fps : fpsFrac(st.fps) * 100) * (apr || cfg.animScale || 1); if (!apr && pts > 0 && cfg.kpps) fps = Math.min(fps, cfg.kpps * 1000 / pts); // kun hvis scanhastigheden er sat i hånden // målt for dette mønster går forud for det generelle // præcis den fps kanal 3 giver
     if (!st.freeze) pvFrame += (Math.min(250, now - pvLast) / 1000) * fps; pvLast = now;
     const rawLine = (vertical, rx, ry, len, col, lw) => { // streg i rå laser-koordinater tegnet ind i boksen
       const [ax, ay] = rawToApp(rx, ry); const [px, py] = boxPt(B, ax, ay); const hl = len * B.upl;
@@ -2752,6 +2752,7 @@ function autoColor(kind) { // 'orig' = mønstrets egne farver, ellers en farve f
 }
 // lige ud: mønstret står lavt (lige over zonen – laseren løfter det selv præcis nok op), drejer ikke og bevæger sig kun vandret
 function autoPose(tier, reason) {
+  rotAcc = 0; // ellers bliver mønstret stående skævt fra en tidligere rotation
   Object.assign(st, { rotSpeed: 0, rotAngle: 0, freeze: false, posX: 0, posY: cfg.zone > 0 && cfg.dmxMode === 'pro' ? -1 : 0, pulse: 0, strobe: 0 });
   const sweep = tier === 'high' ? 0.55 : tier === 'mid' ? 0.35 : 0;
   if (sweep && Math.random() < (reason === 'drop' ? 0.8 : 0.45)) Object.assign(st, { move: 'sweep', moveAmt: sweep, moveSpeed: tier === 'high' ? 0.45 : 0.25 }); else st.move = 'none';
