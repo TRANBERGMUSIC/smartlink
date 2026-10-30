@@ -399,6 +399,7 @@ function calAct(k) {
     if (!w0) return res(t('csn.needW0'));
     const vis = S_.filter((p) => !p.off && p.cm > 0), off = S_.filter((p) => p.off); P.sizeCurve[m] = vis.map((p) => [p.dmx, clamp(p.cm / w0, 0.001, 1.5)]); if (P.sizeCurve[m].length < 2) P.sizeCurve[m].push([m === 'pro' ? 255 : 127, P.sizeCurve[m][0][1]]);
     P.dmxMinVisible[m] = off.length ? Math.min(...off.map((p) => p.dmx)) : m === 'pro' ? 256 : 128; for (const p of S_) p.frac = p.off ? null : p.cm / w0;
+    if (vis.length >= 3) cfg.sizeCurveMeasured = true; // målt kurve → ingen ekstra sikkerhedsmargin på højden
     saveCfg(); const lim = ShowNET.sizeLimits(P, m); return res(t('csn.sizeNow', { min: Math.round(lim.min * 1000) / 10, d: P.dmxMinVisible[m] }));
   }
   if (k === 'fitrot') {
@@ -1693,7 +1694,9 @@ function computeFrame(now) {
     const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
     const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
     const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
-    const wantH = availH / 2 / Math.max(0.01, uy), wantW = availW / 2 / Math.max(0.01, ux), want = Math.min(wantH, wantW);
+    // laserens størrelseskurve er ikke målt endnu → regn med at mønstret kan være op til 30 % højere end beregnet (sizeSafety), så det aldrig når zonen
+    const kS = (cfg.sizeCurveMeasured ? 1 : (cfg.sizeSafety ?? 1.3));
+    const wantH = availH / 2 / Math.max(0.01, uy * kS), wantW = availW / 2 / Math.max(0.01, ux), want = Math.min(wantH, wantW);
     const l = ShowNET.sizeLimits(profFor('pro'), 'pro'), top_ = Math.max(l.min, Math.min(l.max, cfg.sizeMax ?? 1)), toApp = (w) => clamp((w - l.min) / Math.max(1e-6, top_ - l.min), 0, 1);
     // fuld bredde: Pro Mode har egen størrelse for X og Y (kanal 10/11). Begrænser zonen kun højden, skrumpes kun Y – bredden bliver som på slideren.
     // (kun når mønstret ikke drejer – et strakt mønster der drejer kunne ellers nå ned i zonen)
@@ -1701,7 +1704,7 @@ function computeFrame(now) {
     let frX = fr_;
     if (wideOk) { const bx = sizeX0 ?? sizeApp; sizeAppX = Math.min(bx, toApp(wantW)); frX = patHalfSent(sizeAppX); if (fr_ > wantH) { sizeApp = Math.min(sizeApp, toApp(wantH)); fr_ = patHalfSent(sizeApp); } }
     else { if (fr_ > want) { sizeApp = Math.min(sizeApp, toApp(want)); fr_ = patHalfSent(sizeApp); } frX = fr_; sizeAppX = null; }
-    const hw = ux * frX, hh = uy * fr_;
+    const hw = ux * frX, hh = uy * fr_ * kS;
     sendX = clamp(sendX, -edge + hw, Math.max(-edge + hw, edge - hw)); sendY = clamp(sendY, Math.min(edge, line + hh), Math.max(line + hh, edge - hh)); [axc, ayc] = sentToApp(sendX, sendY);
   }
 
