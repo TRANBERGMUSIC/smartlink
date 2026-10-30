@@ -128,7 +128,7 @@ function wcSelect(key) {
   if (WC.sel === key && WC.listen) { WC.listen = false; } else { WC.sel = key; WC.listen = !wcLayout()[key]; } // ikke forbundet → lyt med det samme
   wcRefresh();
 }
-const WC_DEFAULT_FN = { strobe: 'hold.strobe', blinder: 'hold.blinder', speed: 'auto.toggleMusic', blackout: 'hold.blank', bpmtap: 'tap' }; // pultens egne knapper får den oplagte funktion
+const WC_DEFAULT_FN = { strobe: 'hold.strobe', blinder: 'hold.blinder', speed: 'auto.toggleMusic', blackout: 'hold.blank', bpmtap: 'tap', smoke: 'hold.smoke' }; // pultens egne knapper får den oplagte funktion
 function wcLink(key, sigId) { const def = WC_DEFAULT_FN[key], b0 = wmiState.bindings[sigId]; if (def && SL_ACTIONS.byId[def] && !(b0 && (b0.onPress || b0.onChange))) WolfMidi.bind(wmiState, sigId, 'onPress', def); wcLayout()[key] = sigId; WC.listen = false; wmiSave(true); wcRefresh(); wcLight(key, 'flash'); }
 // kaldes fra wmiHandle FØR handlinger køres: lytter vi, forbindes signalet og der udføres intet
 function wcIntercept(ev) {

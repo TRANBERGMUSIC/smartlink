@@ -46,6 +46,8 @@ const SL_ACTIONS = (() => {
   let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; st.strobe = 0.85; } else if (strobePrev != null) { st.strobe = strobePrev; strobePrev = null; } look(); }, 'hold');
   let sizePrev = null; add('hold.full', 'act.holdFull', 'hold', (down) => { if (down) { if (sizePrev == null) sizePrev = st.size; setSize(1); } else if (sizePrev != null) { setSize(sizePrev); sizePrev = null; } }, 'hold');
   let masterPrev = null; add('hold.bright', 'act.holdBright', 'hold', (down) => { if (down) { if (masterPrev == null) masterPrev = master; setMaster(1); } else if (masterPrev != null) { setMaster(masterPrev); masterPrev = null; } }, 'hold');
+  add('hold.smoke', 'act.holdSmoke', 'hold', (down) => { if (typeof wolfSmoke === 'function') wolfSmoke(!!down); }, 'hold'); // røg mens knappen holdes (via Wolfmix)
+  add('smoke.toggle', 'act.smokeToggle', 'trigger', () => { if (typeof wolfSmoke === 'function') wolfSmoke(!wolfSmokeOn); }, 'wolfmix');
   add('wolfmix.preset', 'act.wolfPreset', 'trigger', () => { if (typeof wolfSendPreset === 'function') wolfSendPreset(); }, 'wolfmix');
 
   // ---- trinløse (continuous, 0…1) – samme funktioner som DMX-ind bruger (wmRun i app.js) ----

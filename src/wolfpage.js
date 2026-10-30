@@ -47,6 +47,32 @@ function sendNote(channel, note, velocity = 127) {
   const o = wmiOutput(); if (!o) return false; const on = WolfMidi.toBytes('note', channel, note, Math.max(1, velocity)), off = WolfMidi.toBytes('note', channel, note, 0);
   o.send(on); o.send(off, performance.now() + 80); return true;
 }
+// røg gennem Wolfmix: appen sender MIDI til Wolfmix (MIDIMATE OUT → Wolfmix MIDI IN). Wolfmix tager imod MIDI på presets og gruppe-dimmere,
+// så røgmaskinen lægges i sin egen gruppe (CC → gruppe-dimmer = mængde) eller i et preset (Note). Tryk = tænd, slip = sluk.
+const WOLF_SMOKE_DEF = { type: 'cc', channel: 1, num: 20, level: 100, offNum: 21 };
+function wolfSmokeCfg() { return Object.assign({}, WOLF_SMOKE_DEF, wmiState.smoke || {}); }
+let wolfSmokeOn = false;
+function wolfSmoke(on) {
+  const c = wolfSmokeCfg(), o = wmiOutput(); wolfSmokeOn = !!on; document.body.classList.toggle('smoke-on', wolfSmokeOn); const sb = $('#smokeBtn'); if (sb) sb.classList.toggle('on', wolfSmokeOn);
+  if (!o) { if (on) toast(t('wmidi.noOut')); return false; }
+  const ch = clamp(c.channel | 0, 1, 16);
+  try {
+    if (c.type === 'note') { // preset: én note tænder (røg-preset), en anden slukker (preset uden røg)
+      const n = on ? c.num : c.offNum; o.send(WolfMidi.toBytes('note', ch, clamp(n | 0, 0, 127), 127)); o.send(WolfMidi.toBytes('note', ch, clamp(n | 0, 0, 127), 0), performance.now() + 80);
+    } else o.send(WolfMidi.toBytes('cc', ch, clamp(c.num | 0, 0, 127), on ? Math.round(clamp(c.level, 0, 100) * 1.27) : 0));
+    return true;
+  } catch (e) { return false; }
+}
+function wolfSmokeUI() {
+  const box = $('#wsmoke'); if (!box) return; const c = wolfSmokeCfg();
+  box.innerHTML = `<b>${t('smk.title')}</b><select data-s="type"><option value="cc">CC → ${t('smk.group')}</option><option value="note">Note → ${t('smk.preset')}</option></select>
+    <label>${t('smk.ch')} <input type="number" min="1" max="16" data-s="channel" value="${c.channel}"></label><label>${c.type === 'note' ? t('smk.noteOn') : 'CC'} <input type="number" min="0" max="127" data-s="num" value="${c.num}"></label>
+    ${c.type === 'note' ? `<label>${t('smk.noteOff')} <input type="number" min="0" max="127" data-s="offNum" value="${c.offNum}"></label>` : `<label>${t('smk.level')} <input type="number" min="1" max="100" data-s="level" value="${c.level}">%</label>`}
+    <button class="ghost small" data-s="test">${t('smk.test')}</button><span class="hint">${t('smk.hint')}</span>`;
+  box.querySelector('[data-s=type]').value = c.type;
+  box.querySelectorAll('select[data-s], input[data-s]').forEach((el) => { el.onchange = () => { const v = el.tagName === 'SELECT' ? el.value : +el.value; wmiState.smoke = { ...wolfSmokeCfg(), [el.dataset.s]: v }; wmiSave(true); wolfSmokeUI(); }; });
+  const tb = box.querySelector('[data-s=test]'); tb.onpointerdown = () => wolfSmoke(true); tb.onpointerup = tb.onpointerleave = () => { if (wolfSmokeOn) wolfSmoke(false); };
+}
 function wolfSendPreset() { const c = wmiState.out; if (!sendNote(c.channel, c.note, c.velocity)) toast(t('wmidi.noOut')); }
 
 // ---------- Lær ----------
@@ -140,5 +166,9 @@ function wmiApplyImport(triggers, signals) { const r = WolfMidi.importMonitor(wm
     wmiHandle(WolfMidi.toBytes(ty, ch, nr, v), t('wmidi.simSrc'));
     if (ty === 'note' && v > 0) setTimeout(() => wmiHandle(WolfMidi.toBytes('note', ch, nr, 0), t('wmidi.simSrc')), 150); // knap slippes igen
   };
+  wolfSmokeUI();
+  { const sb = $('#smokeBtn'); if (sb) { // hold = røg; slippes musen et andet sted eller mister vinduet fokus, slukkes røgen
+    sb.addEventListener('pointerdown', (e) => { e.preventDefault(); wolfSmoke(true); }); const off = () => { if (wolfSmokeOn) wolfSmoke(false); };
+    window.addEventListener('pointerup', off); window.addEventListener('blur', off); } }
   wmiRender(); setInterval(() => { wmiTick(); wmiStatus(); }, 1000); wmiInit().then(wmiDebugDump); window.laser.appVersion().then((v) => { WMI.version = v; }).catch(() => {});
 })();
