@@ -1687,7 +1687,7 @@ function computeFrame(now) {
   // lydstyret + sikkerhedszone: mønstret skrumpes og løftes så det altid ligger i området OVER zonen
   if (cfg.dmxMode === 'pro' && !con.pos && !special && !raw.on && !measure && !camCal.active && zoneEff() > 0 && (cfg.zoneSide || 'bottom') === 'bottom') { // gælder ALTID (manuel og lydstyret): intet må komme ned i zonen
     // hele mønstret – også når det drejer – skal ligge over zonen og inden for feltets kanter; ellers skrumpes det
-    const line = -1 + 2 * zoneEff() + (cfg.zoneGap ?? 0.06), edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
+    const line = -1 + 2 * zoneEff() + (cfg.zoneGap ?? 0.18), edge = 0.98, pb = patBox(st.pattern), a_ = (ang || 0) * Math.PI / 180, c_ = Math.abs(Math.cos(a_)), s_ = Math.abs(Math.sin(a_));
     const rot = Math.abs(st.rotSpeed) > 0.02 ? Math.hypot(pb.hx, pb.hy) : 0; // drejer det rundt, skal hele cirklen kunne være der
     const ux = rot || pb.hx * c_ + pb.hy * s_, uy = rot || pb.hx * s_ + pb.hy * c_; // halv bredde/højde pr. størrelses-enhed
     const availH = edge - line, availW = 2 * edge; let fr_ = patHalfSent(sizeApp);
@@ -3083,7 +3083,7 @@ bindSetting('universe', 'universe', (v) => clamp(+v | 0, 0, 32767));
 bindSetting('address', 'address', (v) => clamp(+v | 0, 1, 479));
 bindSetting('rate', 'rate', (v) => clamp(+v | 0, 10, 44));
 bindSetting('zone', 'zone', (v) => v / 100, (v) => (v == 0 ? t('v.off') : v + '%'));
-if (cfg.zoneGap == null) cfg.zoneGap = 0.06; bindSetting('zoneGap', 'zoneGap', (v) => v / 100, (v) => v + '%');
+if (cfg.zoneGap == null || (cfg.zoneGap === 0.06 && !cfg.mig3010gap)) cfg.zoneGap = 0.18; cfg.mig3010gap = true; // 30/10: tæt på zonen kom mønstrene slet ikke frem → mere luft som standard bindSetting('zoneGap', 'zoneGap', (v) => v / 100, (v) => v + '%');
 bindSetting('zoneSide', 'zoneSide');
 bindSetting('autoUniverse', 'autoUniverse');
 bindSetting('dmxMode', 'dmxMode');
