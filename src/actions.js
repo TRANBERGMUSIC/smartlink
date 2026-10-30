@@ -51,14 +51,19 @@ const SL_ACTIONS = (() => {
     look();
   };
   add('blinder.toggle', 'act.blinderToggle', 'trigger', () => blind(!blindPrev), 'look');
-  add('strobe.toggle', 'act.strobe', 'trigger', () => { st.strobe = st.strobe > 0 ? 0 : 0.6; look(); }, 'look');
+  add('strobe.toggle', 'act.strobe', 'trigger', () => { const on = !(st.strobe > 0); st.strobe = on ? 0.6 : 0; strobeWhite(on); look(); }, 'look');
   add('pos.center', 'act.center', 'trigger', () => { setPos('posX', 0); setPos('posY', 0); }, 'look');
   add('look.reset', 'act.reset', 'trigger', () => $('#resetLook').click(), 'look');
   // ---- hold (virker kun mens knappen holdes nede; slip = tilbage som før) ----
   add('hold.blank', 'act.holdBlank', 'hold', (down) => { holdMute = !!down; }, 'hold'); // usynlig, IKKE slukket – ingen ny bekræftelse ved slip
   add('hold.blinder', 'act.holdBlinder', 'hold', (down) => blind(!!down), 'hold'); // fuldt hvidt lys, fuld lysstyrke mens holdt
   // strobe mens knappen holdes: med musikstyring blinker laseren på basslag og hi-hats (i takt), ellers laserens egen strobe
-  let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; strobeHold = true; st.strobe = musicLive() ? 0 : 0.85; } else if (strobePrev != null) { strobeHold = false; st.strobe = strobePrev; strobePrev = null; } look(); }, 'hold');
+  // strobe er altid hvid; når den slippes/slås fra, kommer farven (og farvelåsen) tilbage som før
+  let strobeCol = null; const strobeWhite = (on) => {
+    if (on && !strobeCol) { strobeCol = { color: structuredClone(st.color), cc: st.colorCycle, lock: colorLock }; colorLock = true; setColor({ mode: 'rgb', rgb: [255, 255, 255] }); }
+    else if (!on && strobeCol) { const c = strobeCol; strobeCol = null; setColor(c.color); st.colorCycle = c.cc; colorLock = c.lock; }
+  };
+  let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; strobeHold = true; st.strobe = musicLive() ? 0 : 0.85; strobeWhite(true); } else if (strobePrev != null) { strobeHold = false; st.strobe = strobePrev; strobePrev = null; strobeWhite(false); } look(); }, 'hold');
   let sizePrev = null; add('hold.full', 'act.holdFull', 'hold', (down) => { if (down) { if (sizePrev == null) sizePrev = st.size; setSize(1); } else if (sizePrev != null) { setSize(sizePrev); sizePrev = null; } }, 'hold');
   let masterPrev = null; add('hold.bright', 'act.holdBright', 'hold', (down) => { if (down) { if (masterPrev == null) masterPrev = master; setMaster(1); } else if (masterPrev != null) { setMaster(masterPrev); masterPrev = null; } }, 'hold');
   add('hold.smoke', 'act.holdSmoke', 'hold', (down) => { if (typeof wolfSmoke === 'function') wolfSmoke(!!down); }, 'hold'); // røg mens knappen holdes (via Wolfmix)
