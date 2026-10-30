@@ -8,7 +8,7 @@
   const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const MODES = ['fan', 'sweep', 'cross', 'wave', 'cone', 'chase', 'chaos', 'sky', 'net'];
   const COLORS = ['rainbow', 'flow', 'palette', 'paletteFlow', 'white'];
-  const DEF = { mode: 'cross', beams: 8, spread: 1.5, height: 0.45, amp: 0.25, frames: 48, fps: 25, dwell: 8, colors: 'rainbow', c1: [255, 0, 60], c2: [0, 120, 255], palette: [[0, 255, 0], [255, 0, 0]], split: 'alt', seed: 7, zone: null, minY: null };
+  const DEF = { mode: 'cross', beams: 10, spread: 1.95, height: 0.45, amp: 0.12, frames: 48, fps: 25, dwell: 8, colors: 'rainbow', c1: [255, 0, 60], c2: [0, 120, 255], palette: [[0, 255, 0], [255, 0, 0]], split: 'alt', seed: 7, zone: null, minY: null };
 
   function hsv(h, s = 1, v = 1) { h = ((h % 1) + 1) % 1; const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s); const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6]; return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]; }
   // farve til stråle i af n på tidspunkt t (0..1)
@@ -34,10 +34,10 @@
     const o = { ...DEF, ...opts }, n = clamp(o.beams | 0, 1, 24), F = Math.max(1, o.frames | 0), t = (fi % F) / F, w = clamp(o.spread, 0.05, 1.95), y0 = clamp(o.height, -0.9, 0.95), A = o.amp;
     const beams = [], lines = [], put = (x, y, c) => beams.push({ x: clamp(x, -1, 1), y: clamp(y, -1, 1), c });
     switch (o.mode) {
-      case 'fan': { const k = 0.55 + 0.45 * Math.sin(TAU * t); for (let i = 0; i < n; i++) put(spreadX(i, n, w * k), y0, colorFor(o, i, n, t)); break; }
-      case 'sweep': { const ww = w * 0.35, c = Math.sin(TAU * t) * (1 - ww / 2 - 0.02); for (let i = 0; i < n; i++) put(spreadX(i, n, ww, c), y0 + A * 0.3 * Math.cos(TAU * t), colorFor(o, i, n, t)); break; }
+      case 'fan': { const k = 0.8 + 0.2 * Math.sin(TAU * t); for (let i = 0; i < n; i++) put(spreadX(i, n, w * k), y0, colorFor(o, i, n, t)); break; }
+      case 'sweep': { const ww = w * 0.55, c = Math.sin(TAU * t) * (1 - ww / 2 - 0.02); for (let i = 0; i < n; i++) put(spreadX(i, n, ww, c), y0 + A * 0.3 * Math.cos(TAU * t), colorFor(o, i, n, t)); break; }
       case 'cross': { // to vifter der krydser hinanden – "laser-net" i luften
-        const h = Math.ceil(n / 2), ww = w * 0.5, s = Math.sin(TAU * t) * (1 - ww / 2) * 0.9;
+        const h = Math.ceil(n / 2), ww = w * 0.8, s = Math.sin(TAU * t) * Math.max(0.12, 1 - ww / 2) * 0.95; // brede vifter, så mange stråler fylder hele bredden
         for (let i = 0; i < h; i++) put(spreadX(i, h, ww, -s), y0 + A * Math.sin(TAU * (t + i / h)) * 0.5, colorFor(o, i, n, t));
         for (let i = 0; i < n - h; i++) put(spreadX(i, n - h, ww, s), y0 + A * Math.sin(TAU * (t + 0.5 + i / h)) * 0.5, colorFor(o, h + i, n, t));
         break;

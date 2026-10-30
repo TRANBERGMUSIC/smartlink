@@ -7,6 +7,7 @@
 const FX = Object.assign({}, BeamFX.DEF, { slot: 150, view: 'air' }, store.get('fxCfg', {}));
 const fxs = { fi: 0, last: 0, stats: null, statT: 0, thumbs: [] };
 const fxSave = () => store.set('fxCfg', FX);
+if (!FX.migWide) { if (FX.spread <= 1.5) FX.spread = 1.95; if (FX.amp >= 0.25) FX.amp = 0.12; if (FX.beams === 8) FX.beams = 10; FX.migWide = true; } // 30/10: bredere stråler, mindre op/ned
 if (!Array.isArray(FX.palette) || !FX.palette.length) FX.palette = [[0, 255, 0], [255, 0, 0]];
 if (FX.colors === 'two' || FX.colors === 'one') FX.colors = 'palette';
 // effektens indstillinger + sikkerhed: laserens projektionszone og sikkerhedslinjen (intet under den)
