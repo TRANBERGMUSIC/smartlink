@@ -2769,7 +2769,7 @@ function autoChange(reason = 'phrase') {
   const now = performance.now(), tier = reason === 'break' ? 'low' : reason === 'drop' || reason === 'strobe' ? 'high' : energyTier();
   // kun farveskift (mellem mønsterskiftene): næste farve i temaet – effekter med egne farver får dem af og til tilbage
   if (reason === 'color' && colorLock) return;
-  if (reason === 'color') { const own = fxPool().includes(st.pattern) && Math.random() < 0.15; st.color = autoColor(own ? 'orig' : 'theme'); st.colorCycle = false; saveLook(); syncLookUI(); return; }
+  if (reason === 'color') { const isOrig = st.color.mode === 'orig', own = isOrig ? Math.random() > 0.3 : Math.random() < 0.65; st.color = autoColor(own ? 'orig' : 'theme'); /* normalt regnbue, en gang imellem et farveskift (og så tilbage) */ st.colorCycle = false; saveLook(); syncLookUI(); return; }
   if (reason === 'drop' || reason === 'return') dir.theme = (dir.theme + 1 + Math.floor(Math.random() * (THEMES.length - 1))) % THEMES.length; // nyt tema ved drop
   dir.section = reason === 'break' ? 'break' : tier;
   const ap = cfg.autoPool || 'mix', fx = fxPool(), fxs_ = new Set(fx);
@@ -2781,7 +2781,7 @@ function autoChange(reason = 'phrase') {
   st.pattern = n; activeScene = -1; autoPose(tier, reason);
   // farver: drop/høj energi = temaets farver eller effektens egne; breakdown = koldt; mønstre uden egne farver får temaet
   const keepCol = colorLock ? structuredClone(st.color) : null;
-  st.colorCycle = false; st.color = keepCol || (useFx && reason !== 'break' && Math.random() < 0.2 ? autoColor('orig') : autoColor('theme')); // mest ensfarvede streger (fx kun røde eller gule), regnbuen kun nogle gange
+  st.colorCycle = false; st.color = keepCol || (reason !== 'break' && Math.random() < 0.7 ? autoColor('orig') : autoColor('theme')); // mest regnbue (mønstrenes egne farver), nogle gange ensfarvet; regnbuen kun nogle gange
   if (reason === 'drop') { st.strobe = 0.3; setTimeout(() => { if (st.pattern === n) { st.strobe = 0; saveLook(); } }, 1200); }
   dir.lastChange = now; dir.sinceChange = 0;
   saveLook(); syncLookUI(); renderScenes(); $$('.pat').forEach((p) => p.classList.toggle('active', +p.dataset.n === n));

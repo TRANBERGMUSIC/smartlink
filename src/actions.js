@@ -58,10 +58,10 @@ const SL_ACTIONS = (() => {
   add('hold.blank', 'act.holdBlank', 'hold', (down) => { holdMute = !!down; }, 'hold'); // usynlig, IKKE slukket – ingen ny bekræftelse ved slip
   add('hold.blinder', 'act.holdBlinder', 'hold', (down) => blind(!!down), 'hold'); // fuldt hvidt lys, fuld lysstyrke mens holdt
   // strobe mens knappen holdes: med musikstyring blinker laseren på basslag og hi-hats (i takt), ellers laserens egen strobe
-  // strobe er altid hvid; når den slippes/slås fra, kommer farven (og farvelåsen) tilbage som før
+  // strobe er altid hvid; når den slippes/slås fra, bliver det regnbue igen
   let strobeCol = null; const strobeWhite = (on) => {
     if (on && !strobeCol) { strobeCol = { color: structuredClone(st.color), cc: st.colorCycle, lock: colorLock }; colorLock = true; setColor({ mode: 'rgb', rgb: [255, 255, 255] }); }
-    else if (!on && strobeCol) { const c = strobeCol; strobeCol = null; setColor(c.color); st.colorCycle = c.cc; colorLock = c.lock; }
+    else if (!on && strobeCol) { const c = strobeCol; strobeCol = null; setColor({ mode: 'orig', rgb: st.color.rgb }); colorLock = c.lock; } // slået fra → regnbue (mønstrenes egne farver) igen
   };
   let strobePrev = null; add('hold.strobe', 'act.holdStrobe', 'hold', (down) => { if (down) { if (strobePrev == null) strobePrev = st.strobe; strobeHold = true; st.strobe = musicLive() ? 0 : 0.85; strobeWhite(true); } else if (strobePrev != null) { strobeHold = false; st.strobe = strobePrev; strobePrev = null; strobeWhite(false); } look(); }, 'hold');
   let sizePrev = null; add('hold.full', 'act.holdFull', 'hold', (down) => { if (down) { if (sizePrev == null) sizePrev = st.size; setSize(1); } else if (sizePrev != null) { setSize(sizePrev); sizePrev = null; } }, 'hold');
